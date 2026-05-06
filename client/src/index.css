@@ -1,0 +1,66 @@
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Pretendard', sans-serif;
+  line-height: 1.5;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #1a1a1a;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+h1 {
+  font-size: 2.2rem;
+  margin-bottom: 0.25rem;
+}
+
+.card {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ok {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.error {
+  color: #f87171;
+  font-weight: 600;
+}
+
+small {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #1a1a1a;
+    background-color: #f7f7f7;
+  }
+  .card {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.08);
+  }
+  small {
+    color: rgba(0, 0, 0, 0.55);
+  }
+}

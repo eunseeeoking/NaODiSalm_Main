@@ -1,0 +1,23 @@
+// Prisma 스키마 - 단일 소스 오브 트루스
+// 변경 후 실행: npm run prisma:migrate -- --name <마이그레이션_이름>
+//              npm run prisma:generate
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 예시 모델 — 도메인이 추가되면 여기에 model 을 계속 추가하면 된다.
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
