@@ -6,7 +6,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getHello('은석')
+    getHello('테스트')
       .then((data) => setMessage(data.message))
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -23,7 +23,7 @@ export default function App() {
         ) : (
           <p className="ok">서버 응답: {message}</p>
         )}
-        <small>호출: getHello('은석') → GET /api/greeting/hello?name=은석</small>
+        <small>호출: getHello('테스트') → GET /api/greeting/hello?name=테스트</small>
       </section>
     </main>
   );
