@@ -1,9 +1,19 @@
 // Prisma 스키마 - 단일 소스 오브 트루스
-// 변경 후 실행: npm run prisma:migrate -- --name <마이그레이션_이름>
-//              npm run prisma:generate
+//
+// ─────────────── 명명 규칙 ───────────────
+//   테이블:   t_{name}        (Prisma model 의 @@map 으로 매핑)
+//   프로시저: p_{name}
+//   뷰:      view_{name}      (Prisma 가 직접 관리하지 않으므로 raw SQL 마이그레이션)
+//
+// 컬럼은 DB 측 snake_case, TypeScript 측 camelCase 로 @map 매핑한다.
+// 변경 후 실행:
+//   npx prisma migrate dev --name <마이그레이션_이름>
+//   npx prisma generate
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // views: View 모델 정의 활성화 (Prisma 5.x preview)
+  previewFeatures = ["views"]
 }
 
 datasource db {
@@ -11,13 +21,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 예시 모델 — 도메인이 추가되면 여기에 model 을 계속 추가하면 된다.
+/// 사용자 (t_user)
+/// - email 유니크
+/// - 소프트 삭제: deleted_at 가 NULL 이 아닌 행은 삭제된 것으로 간주
+/// - login_fail_count: 로그인 연속 실패 횟수 (성공 시 0 으로 리셋)
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             Int       @id @default(autoincrement())
+  email          String    @unique
+  password       String    /// bcrypt 해시값 (절대 평문 저장 금지)
+  name           String?
+  phone          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  deletedAt      DateTime? @map("deleted_at")
+  loginFailCount Int       @default(0) @map("login_fail_count")
 
-  @@map("users")
+  @@map("t_user")
 }

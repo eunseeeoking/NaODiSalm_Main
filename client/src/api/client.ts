@@ -19,14 +19,22 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   query?: Record<string, string | number | boolean | undefined>;
 }
 
+/**
+ * 호출 베이스 URL.
+ * - 개발: '' (Vite 프록시가 /api 를 :4000 으로 보냄)
+ * - 외부 노출(빌드): VITE_API_BASE_URL 로 cloudflared HTTPS URL 지정
+ */
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+
 function buildUrl(path: string, query?: RequestOptions['query']): string {
-  if (!query) return path;
+  const base = API_BASE + path;
+  if (!query) return base;
   const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined) usp.append(k, String(v));
   }
   const qs = usp.toString();
-  return qs ? `${path}?${qs}` : path;
+  return qs ? `${base}?${qs}` : base;
 }
 
 export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T> {

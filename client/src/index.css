@@ -51,6 +51,75 @@ small {
   color: rgba(255, 255, 255, 0.55);
 }
 
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.field label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.field input {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font: inherit;
+}
+
+.field input:focus {
+  outline: 2px solid #4ade80;
+  outline-offset: 1px;
+}
+
+button[type="submit"], button[type="button"] {
+  padding: 0.55rem 1.1rem;
+  border: 0;
+  border-radius: 8px;
+  background: #4ade80;
+  color: #052e16;
+  font-weight: 700;
+  cursor: pointer;
+  font: inherit;
+}
+
+button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.kv dt {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.9rem;
+}
+
+.kv dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+@media (prefers-color-scheme: light) {
+  .field input {
+    border-color: rgba(0, 0, 0, 0.15);
+    background: #fff;
+  }
+  .kv dt {
+    color: rgba(0, 0, 0, 0.55);
+  }
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #1a1a1a;

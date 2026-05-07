@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { getHello } from './api/greeting';
+import { Login } from './pages/Login';
 
 export default function App() {
   const [message, setMessage] = useState<string>('로딩 중...');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getHello('테스트')
+    getHello('test')
       .then((data) => setMessage(data.message))
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -16,6 +17,8 @@ export default function App() {
       <h1>2026 MOLIT Contest</h1>
       <p>Vite + React + TypeScript &amp; Express 모노레포 스타터</p>
 
+      <Login />
+
       <section className="card">
         <h2>서버 통신 테스트</h2>
         {error ? (
@@ -23,7 +26,7 @@ export default function App() {
         ) : (
           <p className="ok">서버 응답: {message}</p>
         )}
-        <small>호출: getHello('테스트') → GET /api/greeting/hello?name=테스트</small>
+        <small>호출: getHello('test') → GET /api/greeting/hello?name=test</small>
       </section>
     </main>
   );
