@@ -3,16 +3,10 @@
 // ─────────────── 명명 규칙 ───────────────
 //   테이블:   t_{name}        (Prisma model 의 @@map 으로 매핑)
 //   프로시저: p_{name}
-//   뷰:      view_{name}      (Prisma 가 직접 관리하지 않으므로 raw SQL 마이그레이션)
-//
-// 컬럼은 DB 측 snake_case, TypeScript 측 camelCase 로 @map 매핑한다.
-// 변경 후 실행:
-//   npx prisma migrate dev --name <마이그레이션_이름>
-//   npx prisma generate
+//   뷰:      view_{name}      (raw SQL 마이그레이션)
 
 generator client {
   provider        = "prisma-client-js"
-  // views: View 모델 정의 활성화 (Prisma 5.x preview)
   previewFeatures = ["views"]
 }
 
@@ -22,9 +16,6 @@ datasource db {
 }
 
 /// 사용자 (t_user)
-/// - email 유니크
-/// - 소프트 삭제: deleted_at 가 NULL 이 아닌 행은 삭제된 것으로 간주
-/// - login_fail_count: 로그인 연속 실패 횟수 (성공 시 0 으로 리셋)
 model User {
   id             Int       @id @default(autoincrement())
   email          String    @unique
@@ -35,5 +26,31 @@ model User {
   deletedAt      DateTime? @map("deleted_at")
   loginFailCount Int       @default(0) @map("login_fail_count")
 
+  tokens UserToken[]
+
   @@map("t_user")
+}
+
+/// 세션 토큰 (t_user_token)
+///  - 한 행 = 한 세션 = 한 디바이스
+///  - refresh_token_hash 는 SHA-256 결과만 저장 (평문 저장 금지)
+///  - access_token_hash 는 가장 최근 발급/재발급된 access 토큰의 해시 (감사용)
+///  - refresh 회전 시 기존 행에 revoked_at 기록 후 새 행 생성
+model UserToken {
+  id                Int       @id @default(autoincrement())
+  userId            Int       @map("user_id")
+  refreshTokenHash  String    @unique @map("refresh_token_hash")
+  accessTokenHash   String?   @map("access_token_hash")
+  accessExpiresAt   DateTime? @map("access_expires_at")
+  refreshExpiresAt  DateTime  @map("refresh_expires_at")
+  rememberMe        Boolean   @default(false) @map("remember_me")
+  userAgent         String?   @map("user_agent") @db.VarChar(255)
+  ipAddress         String?   @map("ip_address") @db.VarChar(64)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  revokedAt         DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("t_user_token")
 }

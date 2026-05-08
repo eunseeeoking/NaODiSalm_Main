@@ -104,22 +104,28 @@ export async function hardDeleteUser(id: number): Promise<SafeUser> {
 }
 
 // ─── 로그인 ────────────────────────────────────────────────────
+const LOCK_THRESHOLD = Number(process.env.LOGIN_LOCK_THRESHOLD) || 5;
+
 export type LoginResult =
   | { ok: true; user: SafeUser }
-  | { ok: false; reason: 'NOT_FOUND' | 'INVALID_PASSWORD' };
+  | { ok: false; reason: 'NOT_FOUND' | 'INVALID_PASSWORD' | 'LOCKED' };
 
 /**
  * 이메일/비밀번호 검증
+ *  - 잠긴 계정(loginFailCount >= LOCK_THRESHOLD): 비밀번호 검사 없이 LOCKED 반환
  *  - 성공: login_fail_count 를 0 으로 리셋, 사용자 정보 반환
- *  - 실패(존재): login_fail_count +1
- *  - 실패(미존재): 사용자 열거 회피 위해 동일 응답 시간/형식 유지
+ *  - 실패(존재): login_fail_count +1, 임계치에 도달하면 다음부터 LOCKED
+ *  - 실패(미존재): 사용자 열거 회피 위해 dummy bcrypt compare 로 응답 시간 유지
  */
 export async function verifyLogin(email: string, password: string): Promise<LoginResult> {
   const user = await prisma.user.findFirst({ where: { email, ...NOT_DELETED } });
   if (!user) {
-    // 타이밍 공격 회피: dummy compare 로 응답 시간을 비슷하게
     await bcrypt.compare(password, '$2a$10$invalidhashinvalidhashinvalidhashin');
     return { ok: false, reason: 'NOT_FOUND' };
+  }
+
+  if (user.loginFailCount >= LOCK_THRESHOLD) {
+    return { ok: false, reason: 'LOCKED' };
   }
 
   const matched = await bcrypt.compare(password, user.password);
