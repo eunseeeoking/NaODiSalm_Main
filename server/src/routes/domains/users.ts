@@ -41,11 +41,11 @@ usersRouter.get('/:id', async (req, res, next) => {
 // POST /api/users  body: { email, name?, phone? }
 usersRouter.post('/', async (req, res, next) => {
   try {
-    const { email, name, phone } = req.body ?? {};
+    const { email, name, phone, password} = req.body ?? {};
     if (typeof email !== 'string') {
       return res.status(400).json({ error: 'email is required' });
     }
-    const user = await createUser({ email, name, phone });
+    const user = await createUser({ email, name, phone, password });
     res.status(201).json(user);
   } catch (e) {
     next(e);

@@ -25,11 +25,11 @@ if (!JWT_SECRET) {
 }
 
 export interface AccessTokenPayload {
-  sub: number; // userId
+  sub: string; // userId
   jti: string; // 토큰 식별자 (감사용)
 }
 
-export function signAccessToken(userId: number): {
+export function signAccessToken(userId: string): {
   token: string;
   jti: string;
   expiresAt: Date;
