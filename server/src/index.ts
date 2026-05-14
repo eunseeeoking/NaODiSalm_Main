@@ -38,7 +38,10 @@ app.use(
       // server-to-server, curl, 같은 출처 → origin 없음
       if (!origin) return cb(null, true);
       if (isAllowedOrigin(origin)) return cb(null, true);
-      cb(new Error(`CORS: origin not allowed (${origin})`));
+      // 거절은 에러가 아니라 단순히 ACAO 헤더 미발행 (브라우저가 차단)
+      // → 우리 서버 로그에는 남기지 않고, 응답도 500 이 되지 않음
+      console.warn(`[cors] origin not allowed: ${origin}`);
+      cb(null, false);
     },
     credentials: true,
   }),
