@@ -30,7 +30,12 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   }
   try {
     const payload = verifyAccessToken(token);
-    req.user = { id: payload.sub };
+    // JWT sub 는 string — 경계에서 number 로 변환 (DB id 가 number)
+    const id = Number(payload.sub);
+    if (!Number.isFinite(id)) {
+      return res.status(401).json({ error: 'invalid token subject' });
+    }
+    req.user = { id };
     return next();
   } catch {
     return res.status(401).json({ error: 'invalid or expired access token' });

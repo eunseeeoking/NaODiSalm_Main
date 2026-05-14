@@ -32,7 +32,8 @@ export async function createSession(
   rememberMe: boolean,
   meta: SessionMeta = {},
 ): Promise<IssuedTokens> {
-  const access = signAccessToken(userId);
+  // JWT sub 는 표준상 string — DB 의 number id 를 경계에서 변환
+  const access = signAccessToken(String(userId));
   const refresh = generateRefreshToken();
   const refreshExpiresAt = new Date(Date.now() + refreshTtlMs(rememberMe));
 
@@ -82,7 +83,7 @@ export async function rotateSession(
       data: { revokedAt: new Date() },
     });
 
-    const access = signAccessToken(old.userId);
+    const access = signAccessToken(String(old.userId));
     const refresh = generateRefreshToken();
     const refreshExpiresAt = new Date(
       Date.now() + refreshTtlMs(old.rememberMe),
