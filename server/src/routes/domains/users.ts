@@ -2,7 +2,6 @@ import { Router } from 'express';
 import {
   findAllUsers,
   findUserById,
-  createUser,
   updateUser,
   deleteUser,
   incrementLoginFailCount,
@@ -11,12 +10,13 @@ import {
 
 /**
  * users 도메인 라우터  (테이블: t_user)
- * - 마운트 위치: /api/users
- * - DB 접근은 repository 함수에 위임 (Prisma API 직접 호출 금지)
+ *  - 마운트: /api/users  (requireAuth 적용됨 — routes/api.ts 참고)
+ *  - 사용자 "생성" 은 POST /api/auth/signup 에서만 수행한다.
+ *    → 비밀번호 정책/잠금/감사 흐름이 한 곳에서 일관되게 처리되도록.
  */
 export const usersRouter = Router();
 
-// GET /api/users   — 소프트 삭제되지 않은 사용자 목록
+// GET /api/users  — 소프트 삭제되지 않은 사용자 목록
 usersRouter.get('/', async (_req, res, next) => {
   try {
     res.json(await findAllUsers());
@@ -38,21 +38,7 @@ usersRouter.get('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/users  body: { email, name?, phone? }
-usersRouter.post('/', async (req, res, next) => {
-  try {
-    const { email, name, phone } = req.body ?? {};
-    if (typeof email !== 'string') {
-      return res.status(400).json({ error: 'email is required' });
-    }
-    const user = await createUser({ email, name, phone });
-    res.status(201).json(user);
-  } catch (e) {
-    next(e);
-  }
-});
-
-// PATCH /api/users/:id
+// PATCH /api/users/:id  — password 는 별도 엔드포인트(추후) 에서만 변경
 usersRouter.patch('/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -64,7 +50,7 @@ usersRouter.patch('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/users/:id   — 소프트 삭제 (deleted_at 세팅)
+// DELETE /api/users/:id  — 소프트 삭제 (deleted_at 세팅, email 에 'del_' prefix)
 usersRouter.delete('/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -76,7 +62,7 @@ usersRouter.delete('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/users/:id/login-fail   — 로그인 실패 카운트 +1
+// POST /api/users/:id/login-fail   — 로그인 실패 카운트 +1 (관리자/테스트용)
 usersRouter.post('/:id/login-fail', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -87,7 +73,7 @@ usersRouter.post('/:id/login-fail', async (req, res, next) => {
   }
 });
 
-// POST /api/users/:id/login-success   — 로그인 실패 카운트 0 으로 리셋
+// POST /api/users/:id/login-success  — 로그인 실패 카운트 0 으로 리셋
 usersRouter.post('/:id/login-success', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
