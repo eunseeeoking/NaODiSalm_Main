@@ -10,9 +10,16 @@ import {
   revokeByRefresh,
 } from '../../services/repositories/tokenRepository';
 import { requireAuth, type AuthedRequest } from '../../middleware/requireAuth';
+import {
+  REFRESH_COOKIE,
+  clearAuthCookies,
+  setAuthCookies,
+} from '../../services/auth/cookies';
 
 /**
  * 인증 도메인 라우터  (/api/auth)
+ *
+ * 모든 토큰은 httpOnly 쿠키로만 주고받는다 — 응답 본문에는 토큰 노출 X.
  */
 export const authRouter = Router();
 
@@ -61,48 +68,50 @@ authRouter.post('/login', async (req, res, next) => {
       Boolean(rememberMe),
       clientMeta(req),
     );
+    setAuthCookies(res, tokens);
 
-    res.json({
-      user: result.user,
-      ...tokens,
-    });
+    // 응답 본문에는 사용자 정보만 — 토큰은 쿠키로만 전송
+    res.json({ user: result.user });
   } catch (e) {
     next(e);
   }
 });
 
-// POST /api/auth/refresh   body: { refreshToken }
+// POST /api/auth/refresh   (body 없음 — refresh 는 쿠키에서 읽음)
 authRouter.post('/refresh', async (req, res, next) => {
   try {
-    const { refreshToken } = req.body ?? {};
-    if (typeof refreshToken !== 'string') {
-      return res.status(400).json({ error: 'refreshToken is required' });
+    const refreshToken = req.cookies?.[REFRESH_COOKIE];
+    if (typeof refreshToken !== 'string' || !refreshToken) {
+      return res.status(401).json({ error: 'no refresh token' });
     }
 
     const tokens = await rotateSession(refreshToken, clientMeta(req));
     if (!tokens) {
+      clearAuthCookies(res);
       return res.status(401).json({ error: 'invalid or expired refresh token' });
     }
-    res.json(tokens);
-  } catch (e) {
-    next(e);
-  }
-});
-
-// POST /api/auth/logout   body: { refreshToken }
-authRouter.post('/logout', async (req, res, next) => {
-  try {
-    const { refreshToken } = req.body ?? {};
-    if (typeof refreshToken === 'string') {
-      await revokeByRefresh(refreshToken);
-    }
+    setAuthCookies(res, tokens);
     res.status(204).send();
   } catch (e) {
     next(e);
   }
 });
 
-// GET /api/auth/me   (보호됨)
+// POST /api/auth/logout
+authRouter.post('/logout', async (req, res, next) => {
+  try {
+    const refreshToken = req.cookies?.[REFRESH_COOKIE];
+    if (typeof refreshToken === 'string') {
+      await revokeByRefresh(refreshToken);
+    }
+    clearAuthCookies(res);
+    res.status(204).send();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// GET /api/auth/me   (보호됨, 쿠키 자동 인증)
 authRouter.get('/me', requireAuth, async (req: AuthedRequest, res, next) => {
   try {
     const id = req.user!.id;

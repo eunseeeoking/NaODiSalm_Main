@@ -1,16 +1,49 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { healthRouter } from './routes/health';
 import { apiRouter } from './routes/api';
 import { disconnectDb } from './services/db';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
-const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+
+// 쉼표로 여러 origin 지정 가능 — Vercel preview URL 포함시키려면
+// CORS_ORIGIN=https://prod.vercel.app,https://*.vercel.app
+const ALLOWED_ORIGINS = (
+  process.env.CORS_ORIGIN ?? 'http://localhost:5173'
+)
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(origin: string): boolean {
+  return ALLOWED_ORIGINS.some((pattern) => {
+    if (pattern === origin) return true;
+    // *.vercel.app 같은 와일드카드 prefix 지원
+    if (pattern.startsWith('https://*.')) {
+      const suffix = pattern.slice('https://*'.length);
+      return origin.startsWith('https://') && origin.endsWith(suffix);
+    }
+    return false;
+  });
+}
 
 // Middlewares
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+app.set('trust proxy', 1); // Render/Vercel 같은 프록시 뒤에서 req.ip / secure 정확히 인식
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // server-to-server, curl, 같은 출처 → origin 없음
+      if (!origin) return cb(null, true);
+      if (isAllowedOrigin(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin not allowed (${origin})`));
+    },
+    credentials: true,
+  }),
+);
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

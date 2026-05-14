@@ -1,0 +1,29 @@
+# Render 배포 명세 (Infrastructure as Code)
+# - 대시보드에서 직접 만들어도 되고, 이 파일을 GitHub 에 푸시하면 Blueprint 로 자동 인식
+# - https://dashboard.render.com → New → Blueprint → 본 레포 선택
+
+services:
+  - type: web
+    name: molit-server
+    runtime: node
+    plan: free
+    region: singapore # 한국에서 latency 가장 낮은 무료 리전
+    rootDir: . # 모노레포 루트에서 워크스페이스 install
+    buildCommand: |
+      npm install --include=dev
+      npm --workspace server run deploy:db
+      npm --workspace server run build
+    startCommand: npm --workspace server run start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # 대시보드에서 직접 입력 (TiDB 연결 문자열)
+      - key: JWT_SECRET
+        generateValue: true # Render 가 안전한 랜덤값 자동 생성
+      - key: CORS_ORIGIN
+        sync: false # Vercel 배포 후 그 URL 입력
+      - key: LOGIN_LOCK_THRESHOLD
+        value: "5"

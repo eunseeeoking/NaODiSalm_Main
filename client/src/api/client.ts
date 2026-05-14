@@ -1,10 +1,8 @@
-import { tokenStorage } from './tokenStorage';
-
 /**
  * 클라이언트 측 공용 fetch 래퍼.
- *  - Authorization: Bearer <accessToken> 자동 첨부
+ *  - credentials: 'include' — httpOnly 쿠키 자동 전송 (브라우저가 알아서 처리)
  *  - 401 응답 시 1회에 한해 /api/auth/refresh 시도 → 성공하면 원 요청 재시도
- *  - refresh 동시 호출 방지: refreshing 프로미스를 공유
+ *  - JS 에서는 토큰을 절대 만지지 않는다 (XSS 방어)
  */
 
 export class ApiError extends Error {
@@ -19,8 +17,6 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
   json?: unknown;
   /** ?key=value 자동 직렬화 */
   query?: Record<string, string | number | boolean | undefined>;
-  /** true 면 Authorization 헤더를 첨부하지 않음 (login/signup 등) */
-  skipAuth?: boolean;
   /** 내부용 — 재귀 방지 */
   _retried?: boolean;
 }
@@ -43,34 +39,17 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
 let refreshing: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
-  const refreshToken = tokenStorage.getRefresh();
-  if (!refreshToken) return false;
-
   if (!refreshing) {
     refreshing = (async () => {
       try {
         const res = await fetch(API_BASE + '/api/auth/refresh', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
+          credentials: 'include',
         });
-        if (!res.ok) {
-          tokenStorage.clear();
-          return false;
-        }
-        const data = (await res.json()) as {
-          accessToken: string;
-          refreshToken: string;
-          accessExpiresAt: string;
-          refreshExpiresAt: string;
-        };
-        tokenStorage.set(data);
-        return true;
+        return res.ok; // 204 또는 200 모두 truthy
       } catch {
-        tokenStorage.clear();
         return false;
       } finally {
-        // 즉시 null 로 풀어 다음 401 부터 재시도 가능하게
         setTimeout(() => {
           refreshing = null;
         }, 0);
@@ -83,15 +62,13 @@ async function tryRefresh(): Promise<boolean> {
 /* ─── 본 fetch ─────────────────────────────────────────────── */
 
 export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const { json, query, headers, skipAuth, _retried, ...rest } = opts;
-
-  const accessToken = skipAuth ? null : tokenStorage.getAccess();
+  const { json, query, headers, _retried, ...rest } = opts;
 
   const init: RequestInit = {
+    credentials: 'include', // 모든 요청에 쿠키 자동 동봉
     ...rest,
     headers: {
       ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...headers,
     },
     ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
@@ -99,11 +76,10 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
 
   const res = await fetch(buildUrl(path, query), init);
 
-  // 401 → refresh 시도 (단, refresh 자체나 login/signup 은 제외)
+  // 401 → refresh 시도 (단, refresh/login/signup 은 자기 자신 재귀 방지)
   if (
     res.status === 401 &&
     !_retried &&
-    !skipAuth &&
     !path.startsWith('/api/auth/refresh') &&
     !path.startsWith('/api/auth/login') &&
     !path.startsWith('/api/auth/signup')
