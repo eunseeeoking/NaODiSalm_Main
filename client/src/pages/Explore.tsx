@@ -1,0 +1,93 @@
+/**
+ * 기존 메인 화면 (시군구 선택 → 단지 마커 → 클릭 시 상세 카드)
+ *  - 원래 App.tsx 의 내용을 그대로 옮긴 페이지
+ *  - 새 메인은 RecommendationPage(/) — Depth 2 지역 추천
+ *  - 이 페이지는 /explore 로 보존 (원시 데이터 탐색용)
+ */
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { fetchMe, logout, AuthUser } from '../api/auth';
+import { fetchComplexes, type ComplexMarker } from '../api/realty';
+import { KakaoMap } from '../components/KakaoMap';
+import { Sidebar } from '../components/Sidebar';
+import { ComplexDetailCard } from '../components/ComplexDetailCard';
+
+export function ExplorePage() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [bootChecked, setBootChecked] = useState(false);
+  const [markers, setMarkers] = useState<ComplexMarker[]>([]);
+  const [selected, setSelected] = useState<ComplexMarker | null>(null);
+  const [sigunguCode, setSigunguCode] = useState<string>('11680'); // 강남구 기본
+
+  useEffect(() => {
+    fetchMe()
+      .then(setUser)
+      .catch(() => {})
+      .finally(() => setBootChecked(true));
+  }, []);
+
+  // 시군구 변경 시 마커 다시 로드
+  useEffect(() => {
+    fetchComplexes({ sigunguCode })
+      .then(setMarkers)
+      .catch((e) => {
+        console.error('[markers]', e);
+        setMarkers([]);
+      });
+  }, [sigunguCode]);
+
+  async function onLogout() {
+    await logout();
+    setUser(null);
+  }
+
+  if (!bootChecked) {
+    return (
+      <div className="app-loading">
+        <p>세션 확인 중...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-layout">
+      <Sidebar
+        user={user}
+        onLogin={setUser}
+        onLogout={onLogout}
+        sigunguCode={sigunguCode}
+        onSigunguChange={setSigunguCode}
+      />
+      <main className="map-area">
+        {/* 상단 좌측 — 추천 페이지로 돌아가는 링크 */}
+        <Link
+          to="/"
+          style={{
+            position: 'absolute',
+            top: '1rem',
+            left: '1rem',
+            zIndex: 10,
+            padding: '0.5rem 0.9rem',
+            background: '#fff',
+            border: '1px solid #e5e7eb',
+            borderRadius: 8,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+            color: '#1a73e8',
+            fontWeight: 600,
+            fontSize: '0.85rem',
+            textDecoration: 'none',
+          }}
+        >
+          ← 지역 추천으로
+        </Link>
+        <KakaoMap markers={markers} onMarkerClick={setSelected} />
+        {selected && (
+          <ComplexDetailCard
+            marker={selected}
+            onClose={() => setSelected(null)}
+          />
+        )}
+      </main>
+    </div>
+  );
+}

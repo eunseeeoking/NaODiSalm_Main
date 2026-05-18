@@ -1,3 +1,8 @@
+/* ─── Tailwind directives (preflight 비활성 — 기존 CSS 와 공존) ─── */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ─── 전역 리셋 ─────────────────────────────────────────────── */
 * {
   box-sizing: border-box;
@@ -327,3 +332,150 @@ small {
 
 .kv dt { color: #6b7280; font-size: 0.9rem; }
 .kv dd { margin: 0; word-break: break-all; }
+
+/* ─── 사이드바 시군구 선택 ─────────────────────────────────── */
+.sidebar-section {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+}
+
+.sigungu-select {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+
+.sigungu-select:focus {
+  outline: 2px solid #1a73e8;
+  outline-offset: -1px;
+}
+
+/* ─── 단지 상세 카드 ───────────────────────────────────────── */
+.detail-card {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: min(420px, calc(100vw - 360px));
+  max-height: calc(100vh - 2rem);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem 1.1rem 0.8rem;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.detail-header h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.detail-sub {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.close-btn {
+  background: transparent;
+  border: 0;
+  color: #6b7280;
+  font-size: 1.2rem;
+  padding: 0.2rem 0.4rem;
+  margin: -0.2rem -0.4rem 0 0;
+}
+
+.detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.summary-item {
+  text-align: center;
+}
+
+.summary-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.summary-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1a73e8;
+  margin-top: 0.15rem;
+}
+
+.summary-sub {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-top: 0.1rem;
+}
+
+.detail-section {
+  padding: 0.85rem 1.1rem;
+  overflow-y: auto;
+}
+
+.detail-section + .detail-section {
+  border-top: 1px solid #f1f2f4;
+}
+
+.detail-section h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.detail-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 0.4rem 0.3rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.detail-table td {
+  padding: 0.4rem 0.3rem;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+
+.detail-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.muted { color: #9ca3af; font-size: 0.85rem; }
+.detail-loading { padding: 1rem 1.1rem; color: #6b7280; }

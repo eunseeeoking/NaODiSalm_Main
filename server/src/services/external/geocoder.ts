@@ -1,0 +1,92 @@
+/**
+ * Kakao Local API — 주소/키워드 → 좌표 변환.
+ *  - REST API 키 사용 (JavaScript 키와 다름)
+ *  - Daily quota: 300,000 호출
+ */
+
+const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
+const DEBUG = process.env.KAKAO_DEBUG === '1';
+if (!KAKAO_REST_API_KEY) {
+  console.warn('[geocoder] KAKAO_REST_API_KEY is not set');
+}
+
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+interface KakaoSearchResp {
+  documents?: Array<{ x: string; y: string; address_name?: string }>;
+}
+
+/** 주소 → 좌표. 미발견 시 null */
+export async function geocodeAddress(addr: string): Promise<LatLng | null> {
+  if (!KAKAO_REST_API_KEY || !addr) return null;
+
+  const url = new URL('https://dapi.kakao.com/v2/local/search/address.json');
+  url.searchParams.set('query', addr);
+
+  const res = await fetch(url, {
+    headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` },
+  });
+  if (!res.ok) {
+    if (DEBUG) {
+      const body = await res.text().catch(() => '');
+      console.warn(`[geocoder] address ${res.status} for "${addr}": ${body.slice(0, 200)}`);
+    }
+    return null;
+  }
+
+  const data = (await res.json()) as KakaoSearchResp;
+  const first = data.documents?.[0];
+  if (DEBUG && !first) console.log(`[geocoder] address miss: "${addr}"`);
+  if (!first) return null;
+  return { lat: parseFloat(first.y), lng: parseFloat(first.x) };
+}
+
+/** 키워드(단지명 + 동) → 좌표. 주소 변환 실패 시 fallback. */
+export async function geocodeKeyword(keyword: string): Promise<LatLng | null> {
+  if (!KAKAO_REST_API_KEY || !keyword) return null;
+
+  const url = new URL('https://dapi.kakao.com/v2/local/search/keyword.json');
+  url.searchParams.set('query', keyword);
+  url.searchParams.set('size', '1');
+
+  const res = await fetch(url, {
+    headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` },
+  });
+  if (!res.ok) {
+    if (DEBUG) {
+      const body = await res.text().catch(() => '');
+      console.warn(`[geocoder] keyword ${res.status} for "${keyword}": ${body.slice(0, 200)}`);
+    }
+    return null;
+  }
+
+  const data = (await res.json()) as KakaoSearchResp;
+  const first = data.documents?.[0];
+  if (DEBUG && !first) console.log(`[geocoder] keyword miss: "${keyword}"`);
+  if (!first) return null;
+  return { lat: parseFloat(first.y), lng: parseFloat(first.x) };
+}
+
+/** 주소 → 키워드 순으로 시도 */
+export async function geocodeFlexible(opts: {
+  roadAddr?: string | null;
+  jibunAddr?: string | null;
+  keyword?: string | null;
+}): Promise<LatLng | null> {
+  if (opts.roadAddr) {
+    const r = await geocodeAddress(opts.roadAddr);
+    if (r) return r;
+  }
+  if (opts.jibunAddr) {
+    const r = await geocodeAddress(opts.jibunAddr);
+    if (r) return r;
+  }
+  if (opts.keyword) {
+    const r = await geocodeKeyword(opts.keyword);
+    if (r) return r;
+  }
+  return null;
+}

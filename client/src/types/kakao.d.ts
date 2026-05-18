@@ -1,7 +1,6 @@
 /**
  * Kakao 지도 JavaScript API 최소 ambient 타입.
  *  - 정식 @types 가 없어 직접 선언 (필요한 멤버만 점진적으로 추가)
- *  - sdk.js 가 window.kakao 를 주입한다
  */
 declare global {
   interface Window {
@@ -17,17 +16,15 @@ declare global {
       getLng(): number;
     }
 
+    class LatLngBounds {
+      constructor();
+      extend(latlng: LatLng): void;
+      isEmpty(): boolean;
+    }
+
     interface MapOptions {
       center: LatLng;
       level?: number;
-      mapTypeId?: unknown;
-      draggable?: boolean;
-      scrollwheel?: boolean;
-      disableDoubleClick?: boolean;
-      disableDoubleClickZoom?: boolean;
-      projectionId?: string;
-      tileAnimation?: boolean;
-      keyboardShortcuts?: boolean;
     }
 
     class Map {
@@ -36,13 +33,99 @@ declare global {
       getCenter(): LatLng;
       setLevel(level: number): void;
       getLevel(): number;
+      setBounds(bounds: LatLngBounds): void;
       relayout(): void;
     }
 
     class Marker {
-      constructor(opts: { position: LatLng; map?: Map; title?: string });
+      constructor(opts: {
+        position: LatLng;
+        title?: string;
+        clickable?: boolean;
+        zIndex?: number;
+      });
       setMap(map: Map | null): void;
       setPosition(latlng: LatLng): void;
+      getPosition(): LatLng;
+      setZIndex(zIndex: number): void;
+    }
+
+    namespace event {
+      function addListener(target: unknown, type: string, handler: (...args: unknown[]) => void): void;
+      function removeListener(target: unknown, type: string, handler: (...args: unknown[]) => void): void;
+    }
+
+    namespace MarkerClusterer {
+      // namespace placeholder for nested types
+    }
+
+    // ─── services 라이브러리 (Places, Geocoder 등) ────────────
+    namespace services {
+      type Status = 'OK' | 'ZERO_RESULT' | 'ERROR';
+
+      interface PlaceSearchResultItem {
+        id: string;
+        place_name: string;
+        category_name?: string;
+        address_name: string;
+        road_address_name?: string;
+        x: string; // 경도(lng) — 문자열로 반환됨
+        y: string; // 위도(lat)
+        phone?: string;
+        place_url?: string;
+      }
+
+      interface KeywordSearchOptions {
+        page?: number;
+        size?: number;
+        location?: LatLng;
+        radius?: number;
+        bounds?: LatLngBounds;
+      }
+
+      class Places {
+        constructor(map?: Map);
+        keywordSearch(
+          keyword: string,
+          callback: (result: PlaceSearchResultItem[], status: Status) => void,
+          options?: KeywordSearchOptions,
+        ): void;
+      }
+
+      interface GeocoderAddressResult {
+        address_name: string;
+        x: string;
+        y: string;
+      }
+
+      class Geocoder {
+        addressSearch(
+          address: string,
+          callback: (result: GeocoderAddressResult[], status: Status) => void,
+        ): void;
+      }
+    }
+  }
+
+  namespace kakao.maps.MarkerClusterer {
+    interface Options {
+      map: kakao.maps.Map;
+      markers?: kakao.maps.Marker[];
+      gridSize?: number;
+      minLevel?: number;
+      minClusterSize?: number;
+      averageCenter?: boolean;
+      disableClickZoom?: boolean;
+    }
+  }
+
+  namespace kakao.maps {
+    class MarkerClusterer {
+      constructor(options: MarkerClusterer.Options);
+      addMarkers(markers: Marker[], skipRender?: boolean): void;
+      removeMarkers(markers: Marker[], skipRender?: boolean): void;
+      clear(): void;
+      redraw(): void;
     }
   }
 }

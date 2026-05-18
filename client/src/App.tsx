@@ -1,40 +1,22 @@
-import { useEffect, useState } from 'react';
-import { fetchMe, logout, AuthUser } from './api/auth';
-import { KakaoMap } from './components/KakaoMap';
-import { Sidebar } from './components/Sidebar';
+/**
+ * 라우트 컨테이너
+ *
+ *  /          → Depth 2 · 지역 추천 (메인)
+ *  /explore   → 기존 시군구별 매물 탐색 (원본 데이터 둘러보기)
+ *  *          → / 로 리다이렉트
+ *
+ *  ※ 인증 상태는 현재 각 페이지가 직접 fetchMe 호출 — 추후 useAuthStore 로 통합 예정
+ */
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { RecommendationPage } from './pages/Recommendation';
+import { ExplorePage } from './pages/Explore';
 
 export default function App() {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [bootChecked, setBootChecked] = useState(false);
-
-  useEffect(() => {
-    fetchMe()
-      .then(setUser)
-      .catch(() => {
-        /* 비로그인 상태 — Sidebar 가 로그인 버튼 노출 */
-      })
-      .finally(() => setBootChecked(true));
-  }, []);
-
-  async function onLogout() {
-    await logout();
-    setUser(null);
-  }
-
-  if (!bootChecked) {
-    return (
-      <div className="app-loading">
-        <p>세션 확인 중...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="app-layout">
-      <Sidebar user={user} onLogin={setUser} onLogout={onLogout} />
-      <main className="map-area">
-        <KakaoMap />
-      </main>
-    </div>
+    <Routes>
+      <Route path="/" element={<RecommendationPage />} />
+      <Route path="/explore" element={<ExplorePage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
