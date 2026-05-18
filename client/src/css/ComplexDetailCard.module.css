@@ -1,0 +1,130 @@
+/**
+ * ComplexDetailCard 전용 스타일
+ *  - 카드 / 헤더 / 요약 3열 / 본문 섹션 (매매·전월세 테이블) / 로딩
+ *  - ExplorePage 에서 지도 위 오버레이 카드로 사용
+ */
+
+/* ─── 카드 컨테이너 ─── */
+.card {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: min(420px, calc(100vw - 360px));
+  max-height: calc(100vh - 2rem);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+
+/* ─── 헤더 ─── */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem 1.1rem 0.8rem;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.title {
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.closeBtn {
+  background: transparent;
+  border: 0;
+  color: #6b7280;
+  font-size: 1.2rem;
+  padding: 0.2rem 0.4rem;
+  margin: -0.2rem -0.4rem 0 0;
+}
+
+/* ─── 요약 (3열 그리드) ─── */
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.summaryItem {
+  text-align: center;
+}
+
+.summaryLabel {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.summaryValue {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1a73e8;
+  margin-top: 0.15rem;
+}
+
+.summarySub {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-top: 0.1rem;
+}
+
+/* ─── 본문 섹션 (매매·전월세) ─── */
+.section {
+  padding: 0.85rem 1.1rem;
+  overflow-y: auto;
+}
+
+.section + .section {
+  border-top: 1px solid #f1f2f4;
+}
+
+.sectionTitle {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+/* ─── 테이블 ─── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.table th {
+  text-align: left;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 0.4rem 0.3rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table td {
+  padding: 0.4rem 0.3rem;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ─── 로딩 ─── */
+.loading {
+  padding: 1rem 1.1rem;
+  color: #6b7280;
+}

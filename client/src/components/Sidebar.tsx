@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AuthUser } from '../api/auth';
 import { Login } from '../pages/Login';
+import s from '../css/Sidebar.module.css';
 
 interface SidebarProps {
   user: AuthUser | null;
@@ -49,51 +50,58 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="sidebar" role="navigation">
-        <header className="sidebar-header">
-          <h1>스마트 직세권</h1>
-          <p>K-MaaS 기반 주거선택</p>
+      <aside className={s.sidebar} role="navigation">
+        <header className={s.header}>
+          <h1 className={s.headerTitle}>스마트 직세권</h1>
+          <p className={s.headerSubtitle}>K-MaaS 기반 주거선택</p>
         </header>
 
-        <div className="sidebar-section">
-          <label className="field-label">지역 선택</label>
+        <div className={s.section}>
+          <label className={s.fieldLabel}>지역 선택</label>
           <select
-            className="sigungu-select"
+            className={s.sigunguSelect}
             value={sigunguCode}
             onChange={(e) => onSigunguChange(e.target.value)}
           >
-            {SEOUL_SIGUNGU.map((s) => (
-              <option key={s.code} value={s.code}>
-                서울 {s.name}
+            {SEOUL_SIGUNGU.map((it) => (
+              <option key={it.code} value={it.code}>
+                서울 {it.name}
               </option>
             ))}
           </select>
         </div>
 
-        <div className="sidebar-search">
-          <input type="search" placeholder="단지명 검색 (준비 중)" disabled />
+        <div className={s.search}>
+          <input
+            type="search"
+            className={s.searchInput}
+            placeholder="단지명 검색 (준비 중)"
+            disabled
+          />
         </div>
 
-        <nav className="sidebar-nav">
-          <button type="button" className="nav-item">📊 가성비 분석</button>
-          <button type="button" className="nav-item">📈 투자 수익 (AI)</button>
-          <button type="button" className="nav-item">🚗 통근 시뮬레이션</button>
-          <button type="button" className="nav-item">⭐ 즐겨찾기</button>
+        <nav className={s.nav}>
+          <button type="button" className={s.navItem}>📊 가성비 분석</button>
+          <button type="button" className={s.navItem}>📈 투자 수익 (AI)</button>
+          <button type="button" className={s.navItem}>🚗 통근 시뮬레이션</button>
+          <button type="button" className={s.navItem}>⭐ 즐겨찾기</button>
         </nav>
 
-        <div className="sidebar-footer">
+        <div className={s.footer}>
           {user ? (
-            <div className="user-block">
-              <div className="user-info">
-                <div className="user-name">{user.name ?? user.email}</div>
-                <div className="user-email">{user.email}</div>
+            <div className={s.userBlock}>
+              <div className={s.userInfo}>
+                <div className={s.userName}>{user.name ?? user.email}</div>
+                <div className={s.userEmail}>{user.email}</div>
               </div>
-              <button type="button" onClick={onLogout}>로그아웃</button>
+              <button type="button" className={s.logoutBtn} onClick={onLogout}>
+                로그아웃
+              </button>
             </div>
           ) : (
             <button
               type="button"
-              className="login-btn"
+              className={s.loginBtn}
               onClick={() => setShowLogin(true)}
             >
               로그인
@@ -104,12 +112,12 @@ export function Sidebar({
 
       {showLogin && !user && (
         <div
-          className="modal-backdrop"
+          className={s.modalBackdrop}
           onClick={() => setShowLogin(false)}
           role="dialog"
           aria-modal="true"
         >
-          <div className="modal-body" onClick={(e) => e.stopPropagation()}>
+          <div className={s.modalBody} onClick={(e) => e.stopPropagation()}>
             <Login
               onSuccess={(u) => {
                 onLogin(u);
@@ -118,7 +126,7 @@ export function Sidebar({
             />
             <button
               type="button"
-              className="modal-close"
+              className={s.modalClose}
               onClick={() => setShowLogin(false)}
             >
               닫기

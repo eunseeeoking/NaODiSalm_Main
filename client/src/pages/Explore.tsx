@@ -11,6 +11,7 @@ import { fetchComplexes, type ComplexMarker } from '../api/realty';
 import { KakaoMap } from '../components/KakaoMap';
 import { Sidebar } from '../components/Sidebar';
 import { ComplexDetailCard } from '../components/ComplexDetailCard';
+import s from '../css/Explore.module.css';
 
 export function ExplorePage() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -43,14 +44,14 @@ export function ExplorePage() {
 
   if (!bootChecked) {
     return (
-      <div className="app-loading">
+      <div className={s.loading}>
         <p>세션 확인 중...</p>
       </div>
     );
   }
 
   return (
-    <div className="app-layout">
+    <div className={s.layout}>
       <Sidebar
         user={user}
         onLogin={setUser}
@@ -58,26 +59,8 @@ export function ExplorePage() {
         sigunguCode={sigunguCode}
         onSigunguChange={setSigunguCode}
       />
-      <main className="map-area">
-        {/* 상단 좌측 — 추천 페이지로 돌아가는 링크 */}
-        <Link
-          to="/"
-          style={{
-            position: 'absolute',
-            top: '1rem',
-            left: '1rem',
-            zIndex: 10,
-            padding: '0.5rem 0.9rem',
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 8,
-            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-            color: '#1a73e8',
-            fontWeight: 600,
-            fontSize: '0.85rem',
-            textDecoration: 'none',
-          }}
-        >
+      <main className={s.mapArea}>
+        <Link to="/" className={s.backLink}>
           ← 지역 추천으로
         </Link>
         <KakaoMap markers={markers} onMarkerClick={setSelected} />

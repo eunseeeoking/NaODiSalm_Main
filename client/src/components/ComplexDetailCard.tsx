@@ -5,6 +5,7 @@ import {
   type ComplexMarker,
 } from '../api/realty';
 import { ApiError } from '../api/client';
+import s from '../css/ComplexDetailCard.module.css';
 
 interface Props {
   marker: ComplexMarker;
@@ -40,57 +41,62 @@ export function ComplexDetailCard({ marker, onClose }: Props) {
   }, [marker.id]);
 
   return (
-    <aside className="detail-card">
-      <header className="detail-header">
+    <aside className={s.card}>
+      <header className={s.header}>
         <div>
-          <h2>{marker.name}</h2>
-          <p className="detail-sub">
+          <h2 className={s.title}>{marker.name}</h2>
+          <p className={s.subtitle}>
             {marker.legalDong}
             {marker.builtYear ? ` · ${marker.builtYear}년 준공` : ''}
           </p>
         </div>
-        <button type="button" className="close-btn" onClick={onClose} aria-label="닫기">
+        <button
+          type="button"
+          className={s.closeBtn}
+          onClick={onClose}
+          aria-label="닫기"
+        >
           ✕
         </button>
       </header>
 
-      <section className="detail-summary">
-        <div className="summary-item">
-          <div className="summary-label">최근 매매가</div>
-          <div className="summary-value">
+      <section className={s.summary}>
+        <div className={s.summaryItem}>
+          <div className={s.summaryLabel}>최근 매매가</div>
+          <div className={s.summaryValue}>
             {marker.lastTradePriceManwon
               ? `${manwonToEok(marker.lastTradePriceManwon)}억`
               : '-'}
           </div>
-          <div className="summary-sub">
+          <div className={s.summarySub}>
             {marker.lastTradeDate
               ? new Date(marker.lastTradeDate).toLocaleDateString()
               : '거래 이력 없음'}
           </div>
         </div>
-        <div className="summary-item">
-          <div className="summary-label">최근 12개월</div>
-          <div className="summary-value">{marker.tradeCount12m}건</div>
-          <div className="summary-sub">매매 거래</div>
+        <div className={s.summaryItem}>
+          <div className={s.summaryLabel}>최근 12개월</div>
+          <div className={s.summaryValue}>{marker.tradeCount12m}건</div>
+          <div className={s.summarySub}>매매 거래</div>
         </div>
-        <div className="summary-item">
-          <div className="summary-label">전월세</div>
-          <div className="summary-value">{marker.rentCount12m}건</div>
-          <div className="summary-sub">12개월</div>
+        <div className={s.summaryItem}>
+          <div className={s.summaryLabel}>전월세</div>
+          <div className={s.summaryValue}>{marker.rentCount12m}건</div>
+          <div className={s.summarySub}>12개월</div>
         </div>
       </section>
 
-      {loading && <p className="detail-loading">로딩 중...</p>}
+      {loading && <p className={s.loading}>로딩 중...</p>}
       {error && <p className="error">에러: {error}</p>}
 
       {detail && (
         <>
-          <section className="detail-section">
-            <h3>최근 매매 ({detail.recentTrades.length})</h3>
+          <section className={s.section}>
+            <h3 className={s.sectionTitle}>최근 매매 ({detail.recentTrades.length})</h3>
             {detail.recentTrades.length === 0 ? (
               <p className="muted">이력 없음</p>
             ) : (
-              <table className="detail-table">
+              <table className={s.table}>
                 <thead>
                   <tr>
                     <th>일자</th>
@@ -113,12 +119,12 @@ export function ComplexDetailCard({ marker, onClose }: Props) {
             )}
           </section>
 
-          <section className="detail-section">
-            <h3>최근 전월세 ({detail.recentRents.length})</h3>
+          <section className={s.section}>
+            <h3 className={s.sectionTitle}>최근 전월세 ({detail.recentRents.length})</h3>
             {detail.recentRents.length === 0 ? (
               <p className="muted">이력 없음</p>
             ) : (
-              <table className="detail-table">
+              <table className={s.table}>
                 <thead>
                   <tr>
                     <th>일자</th>

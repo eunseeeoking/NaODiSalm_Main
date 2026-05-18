@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useKakaoLoader } from '../hooks/useKakaoLoader';
 import type { ComplexMarker } from '../api/realty';
+import s from '../css/KakaoMap.module.css';
 
 export interface LatLng {
   lat: number;
@@ -96,7 +97,7 @@ export function KakaoMap({
 
   if (!appKey) {
     return (
-      <div className={`${className ?? ''} kakao-map-fallback`}>
+      <div className={`${className ?? ''} ${s.fallback}`}>
         <p>
           <strong>VITE_KAKAO_MAP_KEY</strong> 가 설정되지 않았습니다.
         </p>
@@ -106,7 +107,7 @@ export function KakaoMap({
 
   if (status === 'error') {
     return (
-      <div className={`${className ?? ''} kakao-map-fallback`}>
+      <div className={`${className ?? ''} ${s.fallback}`}>
         지도 SDK 로딩 실패 — 키/도메인 등록을 확인하세요.
       </div>
     );

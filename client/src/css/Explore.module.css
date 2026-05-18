@@ -1,0 +1,46 @@
+/**
+ * ExplorePage 전용 스타일
+ *  - 좌(Sidebar) + 우(KakaoMap+카드) 가로 분할 레이아웃
+ *  - 우상단 "추천 페이지로" 링크
+ */
+
+/* ─── 레이아웃 ─── */
+.layout {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+}
+
+.loading {
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+}
+
+.mapArea {
+  flex: 1;
+  position: relative;
+  height: 100%;
+}
+
+/* ─── 추천 페이지로 가는 링크 (지도 위 좌상단 floating) ─── */
+.backLink {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 10;
+  padding: 0.5rem 0.9rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  color: #1a73e8;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  background: #f3f4f6;
+}

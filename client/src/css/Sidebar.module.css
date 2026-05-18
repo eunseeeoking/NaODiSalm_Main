@@ -1,0 +1,202 @@
+/**
+ * Sidebar 컴포넌트 전용 스타일
+ *  - 컨테이너 · 헤더 · 시군구 선택 · 검색 · 네비 · 푸터(사용자 영역) · 모달
+ *  - CSS Modules 자동 격리 → 클래스명 단순화 (camelCase)
+ */
+
+/* ─── 컨테이너 ─── */
+.sidebar {
+  width: 320px;
+  height: 100%;
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.04);
+  z-index: 10;
+}
+
+/* ─── 헤더 ─── */
+.header {
+  padding: 1.25rem 1.25rem 1rem;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.headerTitle {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #1a73e8;
+  letter-spacing: -0.02em;
+}
+
+.headerSubtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+/* ─── 시군구 선택 ─── */
+.section {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+}
+
+.sigunguSelect {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+
+.sigunguSelect:focus {
+  outline: 2px solid #1a73e8;
+  outline-offset: -1px;
+}
+
+/* ─── 검색 ─── */
+.search {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #f1f2f4;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: inherit;
+}
+
+.searchInput:focus {
+  outline: 2px solid #1a73e8;
+  outline-offset: -1px;
+  background: #fff;
+}
+
+/* ─── 네비 ─── */
+.nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.navItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #374151;
+  font-size: 0.95rem;
+}
+
+.navItem:hover {
+  background: #f3f4f6;
+}
+
+/* ─── 푸터 · 사용자 영역 ─── */
+.footer {
+  padding: 0.9rem 1rem;
+  border-top: 1px solid #f1f2f4;
+  background: #fafbfc;
+}
+
+.loginBtn {
+  width: 100%;
+  padding: 0.7rem;
+  border: 0;
+  border-radius: 8px;
+  background: #1a73e8;
+  color: #fff;
+  font-weight: 700;
+}
+
+.loginBtn:hover {
+  background: #1557b0;
+}
+
+.userBlock {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.userInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.userName {
+  font-weight: 700;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userEmail {
+  font-size: 0.8rem;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logoutBtn {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+}
+
+.logoutBtn:hover {
+  background: #f3f4f6;
+}
+
+/* ─── 모달 (Sidebar 가 띄우는 로그인 모달) ─── */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+
+.modalBody {
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.5rem;
+  width: min(420px, 92vw);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  position: relative;
+}
+
+.modalClose {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  font-size: 0.9rem;
+}

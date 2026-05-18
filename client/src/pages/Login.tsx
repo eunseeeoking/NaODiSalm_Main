@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { login, AuthUser } from '../api/auth';
 import { ApiError } from '../api/client';
+import s from '../css/Login.module.css';
 
 interface LoginProps {
   onSuccess: (user: AuthUser) => void;
@@ -38,11 +39,11 @@ export function Login({ onSuccess }: LoginProps) {
   }
 
   return (
-    <form className="card" onSubmit={onSubmit}>
-      <h2>로그인</h2>
+    <form className={s.form} onSubmit={onSubmit}>
+      <h2 className={s.title}>로그인</h2>
 
-      <div className="field">
-        <label htmlFor="email">이메일</label>
+      <div className={s.field}>
+        <label className={s.fieldLabel} htmlFor="email">이메일</label>
         <input
           id="email"
           type="email"
@@ -50,11 +51,12 @@ export function Login({ onSuccess }: LoginProps) {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          className={s.fieldInput}
         />
       </div>
 
-      <div className="field">
-        <label htmlFor="password">비밀번호</label>
+      <div className={s.field}>
+        <label className={s.fieldLabel} htmlFor="password">비밀번호</label>
         <input
           id="password"
           type="password"
@@ -62,12 +64,14 @@ export function Login({ onSuccess }: LoginProps) {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          className={s.fieldInput}
         />
       </div>
 
-      <label className="checkbox">
+      <label className={s.checkbox}>
         <input
           type="checkbox"
+          className={s.checkboxInput}
           checked={rememberMe}
           onChange={(e) => setRememberMe(e.target.checked)}
         />
@@ -76,11 +80,11 @@ export function Login({ onSuccess }: LoginProps) {
 
       {error && <p className="error">{error}</p>}
 
-      <button type="submit" disabled={loading}>
+      <button type="submit" className={s.submitButton} disabled={loading}>
         {loading ? '로그인 중...' : '로그인'}
       </button>
 
-      <small>
+      <small className={s.testInfo}>
         테스트 가입: <code>POST /api/auth/signup</code>{' '}
         <code>{'{"email":"a@b.com","password":"1234"}'}</code>
       </small>

@@ -1,0 +1,68 @@
+/**
+ * 전역 스타일 — 최소화 원칙
+ *  · Tailwind directives (preflight off, 새 Recommendation 컴포넌트가 사용)
+ *  · 글로벌 리셋 (box-sizing, font, body 레이아웃)
+ *  · 공통 상태 클래스 (.ok / .error / .muted) — 여러 컴포넌트에서 자유롭게 사용
+ *
+ *  컴포넌트별 스타일은 *.module.css 로 분리 (자동 격리, 클래스 충돌 0)
+ */
+
+/* ─── Tailwind directives ─── */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── 글로벌 리셋 ─── */
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Pretendard', sans-serif;
+  line-height: 1.5;
+  color-scheme: light dark;
+  color: #1a1a1a;
+  background-color: #f4f5f7;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input {
+  font: inherit;
+}
+
+code {
+  font-family: ui-monospace, Consolas, 'Courier New', monospace;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+/* ─── 공통 상태 (모든 컴포넌트가 자유롭게 사용) ─── */
+.ok {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.error {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.muted {
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
