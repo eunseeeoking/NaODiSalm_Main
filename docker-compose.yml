@@ -3,17 +3,23 @@ services:
     image: mysql:8.0
     container_name: molit-mysql
     restart: unless-stopped
+    # ⚠️ 비밀번호는 docker-compose 파일에 하드코딩 금지
+    #    프로젝트 루트의 .env 파일에서 읽음
+    #    .env 는 .gitignore 에 들어가야 함
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}
       MYSQL_DATABASE: molit_contest
       MYSQL_USER: molit
-      MYSQL_PASSWORD: molit
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}
       TZ: Asia/Seoul
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+    # ⚠️ "3306:3306" 은 0.0.0.0 바인드 → 인터넷 전체에 노출
+    #    "127.0.0.1:3306:3306" 으로 host 의 localhost 만 노출
+    #    (host 에서 npm run dev 로 서버 띄우는 환경에서 필요한 최소 노출)
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
 

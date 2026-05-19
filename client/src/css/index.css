@@ -1,11 +1,13 @@
 /**
- * 전역 스타일 — 최소화 원칙
- *  · Tailwind directives (preflight off, 새 Recommendation 컴포넌트가 사용)
- *  · 글로벌 리셋 (box-sizing, font, body 레이아웃)
- *  · 공통 상태 클래스 (.ok / .error / .muted) — 여러 컴포넌트에서 자유롭게 사용
+ * 전역 스타일 (토스 한국형 톤)
  *
- *  컴포넌트별 스타일은 *.module.css 로 분리 (자동 격리, 클래스 충돌 0)
+ *  · 폰트:    Pretendard Variable 단독 (한글 가독성 최우선)
+ *  · 다크모드: html.dark 클래스 토글 (useThemeStore + App.tsx)
+ *  · 슬라이더: input[type="range"] 토스 블루 thumb
  */
+
+/* ─── Pretendard Variable (한글 폰트, 가변 가중치) ─── */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
 
 /* ─── Tailwind directives ─── */
 @tailwind base;
@@ -18,11 +20,19 @@
 }
 
 :root {
-  font-family: system-ui, -apple-system, 'Segoe UI', 'Pretendard', sans-serif;
+  font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont,
+    system-ui, sans-serif;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
   line-height: 1.5;
-  color-scheme: light dark;
-  color: #1a1a1a;
-  background-color: #f4f5f7;
+  color-scheme: light;
+  color: #191F28;
+  background-color: #F5F6F8;
+}
+
+html.dark {
+  color-scheme: dark;
+  color: #F7F8F9;
+  background-color: #17171C;
 }
 
 html,
@@ -35,6 +45,10 @@ body,
   overflow: hidden;
 }
 
+body {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
 button {
   font: inherit;
   cursor: pointer;
@@ -45,24 +59,87 @@ input {
 }
 
 code {
-  font-family: ui-monospace, Consolas, 'Courier New', monospace;
-  background: rgba(0, 0, 0, 0.05);
+  font-family: ui-monospace, 'JetBrains Mono', Consolas, monospace;
+  background: rgba(0, 0, 0, 0.04);
   padding: 0.1em 0.35em;
   border-radius: 4px;
+  font-size: 0.9em;
 }
 
-/* ─── 공통 상태 (모든 컴포넌트가 자유롭게 사용) ─── */
+html.dark code {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ─── 공통 상태 ─── */
 .ok {
-  color: #16a34a;
+  color: #15B970;
   font-weight: 600;
 }
 
 .error {
-  color: #dc2626;
+  color: #F04452;
   font-weight: 600;
 }
 
 .muted {
-  color: #9ca3af;
+  color: #8B95A1;
   font-size: 0.85rem;
+}
+
+/* ─── Range slider (토스 블루 thumb · 큰 라운드) ─── */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  height: 22px;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  background: #E5E8EB;
+  border-radius: 3px;
+}
+
+html.dark input[type='range']::-webkit-slider-runnable-track {
+  background: #2D2F36;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 0;
+  margin-top: -7px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 0 0 2px #3182F6 inset;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type='range']:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16), 0 0 0 2px #3182F6 inset;
+}
+
+input[type='range']::-moz-range-track {
+  height: 6px;
+  background: #E5E8EB;
+  border-radius: 3px;
+}
+
+html.dark input[type='range']::-moz-range-track {
+  background: #2D2F36;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 0 0 2px #3182F6 inset;
+  cursor: pointer;
 }

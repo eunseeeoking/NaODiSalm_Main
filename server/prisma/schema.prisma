@@ -193,3 +193,30 @@ model TrainingResult {
   @@index([trainedAt])
   @@map("t_training_result")
 }
+
+// ──────────────────────────────────────────────────────────────
+//  통근시간 매트릭스 캐시 (ODsay 응답 영구 보관)
+// ──────────────────────────────────────────────────────────────
+
+/// 직장 ↔ 행정동 통근시간 매트릭스 (t_commute_matrix)
+///  - cacheKey = 직장 좌표 4자리 반올림 ("37.4979_127.0276")
+///    같은 빌딩 다른 층 입력해도 캐시 hit → ODsay 호출 0
+///  - 신규 직장 첫 입력 시에만 ODsay 호출, 이후 영구 hit
+///  - 90일 후 만료 정책은 추후 추가 (현재는 무기한 보관)
+model CommuteMatrix {
+  id               Int      @id @default(autoincrement()) /// 캐시 레코드 ID
+  cacheKey         String   @map("cache_key") @db.VarChar(40) /// "lat_lng" 4자리 반올림, 직장 그룹화 키
+  workLat          Float    @map("work_lat") /// 직장 위도 (원본, 디버그용)
+  workLng          Float    @map("work_lng") /// 직장 경도 (원본, 디버그용)
+  workLabel        String?  @map("work_label") @db.VarChar(120) /// 직장명 (예: "강남역", 디버그용)
+  legalDongCode    String   @map("legal_dong_code") @db.VarChar(10) /// 행정동 코드 (10자리)
+  transitMinutes   Int      @map("transit_minutes") /// 대중교통 통근시간 (분, ODsay)
+  transitTransfers Int?     @map("transit_transfers") /// 환승 횟수 (지하철+버스)
+  transitCostWon   Int?     @map("transit_cost_won") /// 1회 편도 비용 (원)
+  carMinutes       Int      @map("car_minutes") /// 자차 통근시간 (분, Haversine 추정)
+  computedAt       DateTime @default(now()) @map("computed_at") /// 캐시 생성 시각 (TTL 산출용)
+
+  @@unique([cacheKey, legalDongCode], map: "uniq_commute")
+  @@index([cacheKey])
+  @@map("t_commute_matrix")
+}

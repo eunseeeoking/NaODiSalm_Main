@@ -1,8 +1,8 @@
 /**
- * 추천 지역 카드
- *  - 호버 시 hoveredRegion 스토어 갱신 → 지도 폴리곤 외곽선 강조
- *  - 1위 카드만 강조 (2px 보더 + 4축 막대 표시)
- *  - 2~8위는 컴팩트
+ * 추천 지역 카드 (토스 한국형 톤)
+ *  - 1위: 브랜드 보더 2px + lift 그림자 + 4축 막대
+ *  - 2위 이하: 컴팩트, 호버 시 살짝 lift
+ *  - 호버 시 hoveredRegion 스토어 갱신 → 지도 핀 강조 연동
  */
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import type { RegionRecommendation } from '../../../types/recommendation';
@@ -13,11 +13,22 @@ interface Props {
 }
 
 function formatEok(manwon: number): string {
-  const eok = Math.floor(manwon / 10000);
-  const remainder = Math.round((manwon % 10000) / 1000);
-  if (remainder === 0) return `${eok}억`;
-  return `${eok}.${remainder}억`;
+  const eok = (manwon / 10000).toFixed(1).replace(/\.0$/, '');
+  return `${eok}억`;
 }
+
+const METRIC_BARS: ReadonlyArray<{
+  label: string;
+  key: keyof Pick<
+    RegionRecommendation,
+    'commuteScore' | 'valueScore' | 'investmentScore' | 'lifeScore'
+  >;
+}> = [
+  { label: '통근', key: 'commuteScore' },
+  { label: '가성비', key: 'valueScore' },
+  { label: '투자', key: 'investmentScore' },
+  { label: '생활', key: 'lifeScore' },
+];
 
 export function RegionCard({ region, rank }: Props) {
   const hoveredRegion = useRecommendationStore((s) => s.hoveredRegion);
@@ -25,58 +36,112 @@ export function RegionCard({ region, rank }: Props) {
   const isHovered = hoveredRegion === region.legalDongCode;
   const isTop = rank === 1;
 
-  const cls = [
-    'bg-white rounded-card p-3 transition-all cursor-pointer',
-    isTop ? 'border-2 border-info-border' : 'border border-gray-200 hover:border-gray-300',
-    isHovered && !isTop ? 'ring-1 ring-info-border' : '',
-  ].join(' ');
+  const base = 'rounded-cardlg p-4 transition-all cursor-pointer relative';
+  const color = isTop
+    ? 'bg-surface-elevated dark:bg-surface-dark-elevated border-2 border-brand shadow-card-hover'
+    : isHovered
+    ? 'bg-surface-elevated dark:bg-surface-dark-elevated border border-brand/40 shadow-card-hover -translate-y-px'
+    : 'bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card hover:shadow-card-hover hover:-translate-y-px';
 
   return (
     <div
       onMouseEnter={() => setHovered(region.legalDongCode)}
       onMouseLeave={() => setHovered(null)}
-      className={cls}
+      className={`${base} ${color}`}
     >
-      <div className="flex items-baseline justify-between mb-1.5">
-        <div className="flex items-baseline gap-1.5 min-w-0">
-          <span
-            className={[
-              'text-[10px] px-1.5 py-0.5 rounded shrink-0',
-              isTop ? 'bg-info-bg text-info-fg font-medium' : 'bg-gray-100 text-gray-600',
-            ].join(' ')}
-          >
-            {rank}위
-          </span>
-          <span className="text-[13px] font-medium truncate">{region.displayName}</span>
-        </div>
-        <span className="text-lg font-medium shrink-0 ml-2">
-          {region.totalScore}
-          <span className="text-[10px] text-gray-500 font-normal">점</span>
+      {/* 순위 + 지역명 */}
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className={
+            isTop
+              ? 'text-xs font-bold px-2 py-0.5 rounded-full bg-brand text-white shrink-0'
+              : 'text-xs font-semibold px-2 py-0.5 rounded-full bg-surface dark:bg-surface-dark-elevated-hover text-ink-secondary dark:text-ink-secondary-dark shrink-0'
+          }
+        >
+          {rank}위
+        </span>
+        <span className="text-sm font-semibold text-ink-primary dark:text-ink-primary-dark flex-1 truncate">
+          {region.displayName}
         </span>
       </div>
 
-      <div className="flex gap-2.5 text-[11px] text-gray-500 mb-2">
-        <span>🚇 {region.commuteMinutes}분</span>
-        <span>💰 {formatEok(region.representativePrice)}</span>
-        <span>📈 {region.expectedReturn3y > 0 ? '+' : ''}{region.expectedReturn3y}%</span>
-      </div>
+      {isTop ? (
+        <>
+          {/* 큰 점수 */}
+          <div className="flex items-baseline gap-1 mb-3">
+            <span className="text-metric-xl text-ink-primary dark:text-ink-primary-dark tabular-nums">
+              {region.totalScore}
+            </span>
+            <span className="text-sm text-ink-tertiary dark:text-ink-tertiary-dark font-medium">
+              점
+            </span>
+          </div>
 
-      {isTop && (
-        <div className="grid grid-cols-4 gap-1 text-[9px]">
-          {[
-            { label: '통근',   value: region.commuteScore },
-            { label: '가성비', value: region.valueScore },
-            { label: '투자',   value: region.investmentScore },
-            { label: '생활',   value: region.lifeScore },
-          ].map((m) => (
-            <div key={m.label}>
-              <div className="text-gray-500 mb-0.5">{m.label}</div>
-              <div className="h-[3px] bg-gray-100 rounded overflow-hidden">
-                <div className="h-full bg-info-border" style={{ width: `${m.value}%` }} />
+          {/* 메트릭 3개 */}
+          <div className="flex gap-4 text-sm text-ink-secondary dark:text-ink-secondary-dark mb-3.5 tabular-nums flex-wrap">
+            <span>
+              <span className="text-ink-tertiary dark:text-ink-tertiary-dark mr-1">통근</span>
+              <span className="font-semibold text-ink-primary dark:text-ink-primary-dark">
+                {region.commuteMinutes}분
+              </span>
+            </span>
+            <span>
+              <span className="text-ink-tertiary dark:text-ink-tertiary-dark mr-1">가격</span>
+              <span className="font-semibold text-ink-primary dark:text-ink-primary-dark">
+                {formatEok(region.representativePrice)}
+              </span>
+            </span>
+            <span>
+              <span className="text-ink-tertiary dark:text-ink-tertiary-dark mr-1">수익률</span>
+              <span className="font-bold text-positive">+{region.expectedReturn3y}%</span>
+            </span>
+          </div>
+
+          {/* 4축 막대 */}
+          <div className="grid grid-cols-4 gap-2.5">
+            {METRIC_BARS.map((m) => (
+              <div key={m.label}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-ink-tertiary dark:text-ink-tertiary-dark font-medium">
+                    {m.label}
+                  </span>
+                  <span className="text-xs text-ink-secondary dark:text-ink-secondary-dark tabular-nums font-semibold">
+                    {region[m.key]}
+                  </span>
+                </div>
+                <div className="h-1 bg-surface dark:bg-surface-dark rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-brand rounded-full transition-all"
+                    style={{ width: `${region[m.key]}%` }}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* 컴팩트 */}
+          <div className="flex items-baseline gap-1 mb-2">
+            <span className="text-metric-lg text-ink-primary dark:text-ink-primary-dark tabular-nums">
+              {region.totalScore}
+            </span>
+            <span className="text-xs text-ink-tertiary dark:text-ink-tertiary-dark font-medium">
+              점
+            </span>
+          </div>
+          <div className="flex gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark tabular-nums flex-wrap">
+            <span>
+              <span className="text-ink-tertiary dark:text-ink-tertiary-dark">통근</span>{' '}
+              {region.commuteMinutes}분
+            </span>
+            <span>
+              <span className="text-ink-tertiary dark:text-ink-tertiary-dark">가격</span>{' '}
+              {formatEok(region.representativePrice)}
+            </span>
+            <span className="text-positive font-semibold">+{region.expectedReturn3y}%</span>
+          </div>
+        </>
       )}
     </div>
   );

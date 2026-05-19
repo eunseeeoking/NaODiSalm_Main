@@ -50,6 +50,25 @@ declare global {
       setZIndex(zIndex: number): void;
     }
 
+    // ─── Polygon (행정동 통근 히트맵용) ──────────────────────
+    interface PolygonOptions {
+      path: LatLng[] | LatLng[][];
+      strokeWeight?: number;
+      strokeColor?: string;
+      strokeOpacity?: number;
+      strokeStyle?: string;
+      fillColor?: string;
+      fillOpacity?: number;
+      zIndex?: number;
+    }
+
+    class Polygon {
+      constructor(opts: PolygonOptions);
+      setMap(map: Map | null): void;
+      setOptions(opts: Partial<PolygonOptions>): void;
+      setPath(path: LatLng[] | LatLng[][]): void;
+    }
+
     namespace event {
       function addListener(target: unknown, type: string, handler: (...args: unknown[]) => void): void;
       function removeListener(target: unknown, type: string, handler: (...args: unknown[]) => void): void;

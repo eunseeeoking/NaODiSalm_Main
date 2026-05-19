@@ -1,7 +1,7 @@
 /**
- * Depth 2 · 지역 추천 페이지 (메인 화면)
- *  - 사용자가 직장을 선택하면 추천 결과 표시
- *  - 현재는 mock data 사용. 실제 API 연동은 Week 2 작업.
+ * Depth 2 · 지역 추천 페이지 (메인)
+ *  - 토스 한국형 톤 (Pretendard + 브랜드 블루 + 그림자 lift)
+ *  - 더미 데이터 (실제 API 연동은 다음 단계)
  */
 import { useEffect } from 'react';
 import { useRecommendationStore } from '../../stores/useRecommendationStore';
@@ -16,14 +16,10 @@ export function RecommendationPage() {
   const setRecommendations = useRecommendationStore((s) => s.setRecommendations);
   const bootstrap = useAuthStore((s) => s.bootstrap);
 
-  // 1회 부트 — 인증 상태 확인
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
 
-  // 직장 선택 시 추천 로드 (실제로는 API 호출)
-  //  · TODO: 실제 API 연동 시 fetch('/api/recommendations?lat=...&lng=...&patience=...')
-  //  · 현재는 MOCK_REGIONS 그대로 사용
   useEffect(() => {
     if (!workplace) {
       setRecommendations([]);
@@ -33,9 +29,9 @@ export function RecommendationPage() {
   }, [workplace, setRecommendations]);
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-[#f4f5f7] overflow-hidden">
+    <div className="w-screen h-screen flex flex-col bg-surface dark:bg-surface-dark overflow-hidden text-ink-primary dark:text-ink-primary-dark font-sans">
       <RecommendationHeader />
-      <main className="flex-1 flex gap-2.5 p-2.5 overflow-hidden">
+      <main className="flex-1 flex gap-3 p-3 overflow-hidden">
         <MapPanel />
         <CardPanel />
       </main>
