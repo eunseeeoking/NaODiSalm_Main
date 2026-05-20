@@ -3,26 +3,72 @@
  *  - 로고 + 직장 검색 + 예산 슬라이더 + 테마 토글 + /explore 링크
  *  - 모든 라벨 한글
  */
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { useThemeStore } from '../../../stores/useThemeStore';
 import { WorkplaceSearch } from './WorkplaceSearch';
+import { buildShareUrl } from '../utils/urlState';
+import { DemoBadge } from './DemoBadge';
+// 로고는 client/public/logo.svg — 절대 경로로 직접 참조 (import 불필요)
 
 function formatBudget(manwon: number): string {
   return `${(manwon / 10000).toFixed(1).replace(/\.0$/, '')}억`;
 }
 
+/** Clipboard API 미지원/권한거부 환경 폴백 (file:// 등) */
+function legacyCopy(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function RecommendationHeader() {
   const budget = useRecommendationStore((s) => s.budget);
   const setBudget = useRecommendationStore((s) => s.setBudget);
+  const workplace = useRecommendationStore((s) => s.workplace);
+  const weights = useRecommendationStore((s) => s.weights);
+  const patience = useRecommendationStore((s) => s.patience);
+  const dataSource = useRecommendationStore((s) => s.dataSource);
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggle);
 
+  const [copyState, setCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
+
+  async function handleShare() {
+    const path = buildShareUrl({ workplace, budget, weights, patience });
+    const absolute = `${window.location.origin}${path}`;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(absolute);
+      ok = true;
+    } catch {
+      ok = legacyCopy(absolute);
+    }
+    setCopyState(ok ? 'ok' : 'fail');
+    window.setTimeout(() => setCopyState('idle'), 1500);
+  }
+
   return (
     <header className="bg-surface-elevated dark:bg-surface-dark-elevated border-b border-line-light dark:border-line-dark px-5 py-3 flex items-center gap-3 shadow-card">
-      <h1 className="text-lg font-extrabold text-ink-primary dark:text-ink-primary-dark tracking-tight shrink-0">
-        스마트 직세권
+      <h1 className="text-lg font-extrabold text-ink-primary dark:text-ink-primary-dark tracking-tight shrink-0 flex items-center gap-1.5">
+        <img src="/logo.svg" alt="나어디삶 로고" className="w-7 h-7" />
+        <span>나어디삶</span>
       </h1>
+      <DemoBadge
+        visible={dataSource === 'mock'}
+        reason="서버 추천 API 미구현 — Sprint C 에서 대체"
+      />
       <div className="h-4 w-px bg-line-light dark:bg-line-dark shrink-0" />
 
       <div className="flex-1 max-w-2xl">
@@ -48,6 +94,35 @@ export function RecommendationHeader() {
           {formatBudget(budget)}
         </span>
       </div>
+
+      {/* 공유 버튼 — workplace 가 있을 때만 의미 있음 */}
+      <button
+        onClick={handleShare}
+        disabled={!workplace}
+        className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-card border border-line-light dark:border-line-dark hover:bg-surface dark:hover:bg-surface-dark-elevated-hover text-ink-secondary dark:text-ink-secondary-dark transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+        aria-label="현재 조건 URL 공유"
+        title={workplace ? '현재 조건을 URL로 공유' : '직장을 먼저 입력하세요'}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+        <span className="text-xs font-medium">
+          {copyState === 'ok' ? '복사됨' : copyState === 'fail' ? '실패' : '공유'}
+        </span>
+      </button>
 
       {/* 테마 토글 */}
       <button

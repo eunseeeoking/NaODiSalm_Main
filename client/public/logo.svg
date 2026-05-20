@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="나어디삶 임시 로고">
+  <!--
+    임시 placeholder 로고 — "나어디삶"
+    · 정사각 viewBox 0 0 32 32 (favicon + 헤더 공용)
+    · 토스 브랜드 블루 #3182F6 + 그린 #15B970
+    · 사용자가 본인 디자인 SVG 로 이 파일을 덮어쓰면 즉시 반영됨
+  -->
+  <!-- 집 실루엣 (위치 = 주거) -->
+  <path
+    d="M16 3 L28 13 V28 H20 V19 H12 V28 H4 V13 Z"
+    fill="#3182F6"
+  />
+  <!-- 위치 핀 (위치 = 직장) -->
+  <circle cx="23" cy="9" r="4" fill="#FFFFFF" />
+  <circle cx="23" cy="9" r="2.5" fill="#15B970" />
+</svg>

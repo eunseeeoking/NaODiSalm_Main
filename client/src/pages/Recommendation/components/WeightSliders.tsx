@@ -39,13 +39,17 @@ export function WeightSliders() {
         <span className="text-sm font-bold text-ink-primary dark:text-ink-primary-dark">
           가중치
         </span>
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="group" aria-label="가중치 프리셋">
           {PRESETS.map((p) => {
             const active = isSamePreset(weights, p.key);
             return (
               <button
                 key={p.key}
+                type="button"
                 onClick={() => applyPreset(p.key)}
+                aria-pressed={active}
+                aria-label={`${p.label}형 프리셋`}
+                title={`${p.label}형 프리셋 적용`}
                 className={
                   active
                     ? 'text-xs px-2.5 py-1 rounded-full bg-brand text-white font-semibold transition-all'

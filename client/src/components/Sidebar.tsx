@@ -52,8 +52,8 @@ export function Sidebar({
     <>
       <aside className={s.sidebar} role="navigation">
         <header className={s.header}>
-          <h1 className={s.headerTitle}>스마트 직세권</h1>
-          <p className={s.headerSubtitle}>K-MaaS 기반 주거선택</p>
+          <h1 className={s.headerTitle}>나어디삶</h1>
+          <p className={s.headerSubtitle}>직장인을 위한 AI 주거 추천</p>
         </header>
 
         <div className={s.section}>

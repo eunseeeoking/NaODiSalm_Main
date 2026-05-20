@@ -13,6 +13,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useThemeStore } from './stores/useThemeStore';
 import { RecommendationPage } from './pages/Recommendation';
 import { ExplorePage } from './pages/Explore';
+import { RegionDetailPage } from './pages/RegionDetail';
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
@@ -27,6 +28,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<RecommendationPage />} />
+      <Route path="/region/:legalDongCode" element={<RegionDetailPage />} />
       <Route path="/explore" element={<ExplorePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

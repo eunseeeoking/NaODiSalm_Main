@@ -43,11 +43,33 @@ declare global {
         title?: string;
         clickable?: boolean;
         zIndex?: number;
+        image?: MarkerImage;
+        map?: Map;
       });
       setMap(map: Map | null): void;
       setPosition(latlng: LatLng): void;
       getPosition(): LatLng;
       setZIndex(zIndex: number): void;
+      setImage(image: MarkerImage): void;
+    }
+
+    class Size {
+      constructor(width: number, height: number);
+    }
+
+    class Point {
+      constructor(x: number, y: number);
+    }
+
+    interface MarkerImageOptions {
+      offset?: Point;
+      alt?: string;
+      shape?: string;
+      coords?: string;
+    }
+
+    class MarkerImage {
+      constructor(src: string, size: Size, options?: MarkerImageOptions);
     }
 
     // ─── Polygon (행정동 통근 히트맵용) ──────────────────────

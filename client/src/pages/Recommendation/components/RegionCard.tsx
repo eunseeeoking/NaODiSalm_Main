@@ -4,6 +4,7 @@
  *  - 2위 이하: 컴팩트, 호버 시 살짝 lift
  *  - 호버 시 hoveredRegion 스토어 갱신 → 지도 핀 강조 연동
  */
+import { useNavigate } from 'react-router-dom';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import type { RegionRecommendation } from '../../../types/recommendation';
 
@@ -31,10 +32,13 @@ const METRIC_BARS: ReadonlyArray<{
 ];
 
 export function RegionCard({ region, rank }: Props) {
+  const navigate = useNavigate();
   const hoveredRegion = useRecommendationStore((s) => s.hoveredRegion);
   const setHovered = useRecommendationStore((s) => s.setHovered);
   const isHovered = hoveredRegion === region.legalDongCode;
   const isTop = rank === 1;
+
+  const goToDetail = () => navigate(`/region/${region.legalDongCode}`);
 
   const base = 'rounded-cardlg p-4 transition-all cursor-pointer relative';
   const color = isTop
@@ -45,9 +49,19 @@ export function RegionCard({ region, rank }: Props) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onMouseEnter={() => setHovered(region.legalDongCode)}
       onMouseLeave={() => setHovered(null)}
+      onClick={goToDetail}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          goToDetail();
+        }
+      }}
       className={`${base} ${color}`}
+      aria-label={`${region.displayName} 상세 페이지로 이동`}
     >
       {/* 순위 + 지역명 */}
       <div className="flex items-center gap-2 mb-2">

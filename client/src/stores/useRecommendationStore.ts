@@ -13,6 +13,8 @@ import {
   type RegionRecommendation,
 } from '../types/recommendation';
 
+export type RecommendationSource = 'api' | 'mock';
+
 interface RecommendationState {
   /** 직장 (좌표 + 라벨) */
   workplace: Workplace | null;
@@ -26,6 +28,13 @@ interface RecommendationState {
   hoveredRegion: string | null;
   /** 추천 결과 (서버 응답 또는 mock) */
   recommendations: RegionRecommendation[];
+  /**
+   * 추천 결과의 출처
+   *  - 'api'  실 서버 응답
+   *  - 'mock' mock 폴백 (DEMO 뱃지 노출)
+   *  - null   아직 요청 전 / workplace 미설정
+   */
+  dataSource: RecommendationSource | null;
 
   // ─── 액션 ───────────────────────────────────────────────
   setWorkplace: (w: Workplace | null) => void;
@@ -34,7 +43,10 @@ interface RecommendationState {
   applyPreset: (preset: WeightPreset) => void;
   setPatience: (minutes: number) => void;
   setHovered: (regionCode: string | null) => void;
-  setRecommendations: (recs: RegionRecommendation[]) => void;
+  setRecommendations: (
+    recs: RegionRecommendation[],
+    source?: RecommendationSource | null,
+  ) => void;
 }
 
 export const useRecommendationStore = create<RecommendationState>((set) => ({
@@ -44,6 +56,7 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
   patience: 45,
   hoveredRegion: null,
   recommendations: [],
+  dataSource: null,
 
   setWorkplace: (w) => set({ workplace: w }),
   setBudget: (manwon) => set({ budget: manwon }),
@@ -52,5 +65,6 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
   applyPreset: (preset) => set({ weights: { ...WEIGHT_PRESETS[preset] } }),
   setPatience: (minutes) => set({ patience: minutes }),
   setHovered: (regionCode) => set({ hoveredRegion: regionCode }),
-  setRecommendations: (recs) => set({ recommendations: recs }),
+  setRecommendations: (recs, source = null) =>
+    set({ recommendations: recs, dataSource: source }),
 }));
