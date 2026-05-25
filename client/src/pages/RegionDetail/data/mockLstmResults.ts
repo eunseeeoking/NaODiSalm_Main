@@ -42,7 +42,7 @@ export function getMockLstm(complexId: string): LstmAnalysis | null {
   const predicted1y = Math.round(current + (future - current) * 0.35);
   const predicted3y = future;
 
-  // 3년 누적 수익률 (%, 매매가 1회만 본다고 가정)
+  // 3년 가격 변동성 (%, 매매가 기준 — 가격 안정성 지표)
   const expectedReturn3y = ((future - current) / current) * 100;
 
   // 과거 60개월: 현재값에서 역추적

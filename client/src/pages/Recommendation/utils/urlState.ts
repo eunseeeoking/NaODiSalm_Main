@@ -5,23 +5,26 @@
  *    "URL 공유 → 동일 결과 재현"
  *
  *  쿼리 스키마 (전부 선택, 누락 시 스토어 기본값 유지):
- *    wp   = "lat,lng" 또는 "lat,lng,encodedLabel"     workplace
- *    b    = 정수 (만원)                                budget
- *    w    = "commute-value-investment-life" (합=100)  weights (4개 정수, '-' 구분)
- *    p    = 정수 (분)                                  patience
- *    pre  = "worker"|"investor"|"resident"             preset 키 (있으면 w 보다 우선)
+ *    wp   = "lat,lng" 또는 "lat,lng,encodedLabel"           workplace
+ *    b    = 정수 (만원)                                      budget
+ *    w    = "commute-affordability-safety-life" (합=100)    weights (4개 정수, '-' 구분)
+ *    p    = 정수 (분)                                        patience
+ *    pre  = "young"|"newlywed"|"resident"|"worker"          preset 키 (있으면 w 보다 우선)
+ *    q    = 1|2|3|4|5                                       소득 분위 (미설정 시 3분위 기본값)
  *
  *  설계 메모:
  *    - 가독성 우선 (base64 금지) — 공유 URL 을 사람이 읽고 의심하지 않게
  *    - label 만 encodeURIComponent (한글 + 쉼표 충돌 방지)
  *    - 부분 파싱 허용 — 일부만 잘못돼도 나머지는 적용 (방어적)
  *    - replaceState 만 사용 → 슬라이더 조작이 뒤로가기 히스토리를 폭주시키지 않음
+ *    - investor 프리셋 폐기 (2026-05-22): ?pre=investor 는 null 반환 → 기본값 적용
  */
 import {
   WEIGHT_PRESETS,
   type Workplace,
   type Weights,
   type WeightPreset,
+  type IncomeQuintile,
 } from '../../../types/recommendation';
 
 export interface SharedState {
@@ -30,9 +33,10 @@ export interface SharedState {
   weights: Weights | null;
   patience: number | null;
   preset: WeightPreset | null;
+  incomeQuintile: IncomeQuintile | null;
 }
 
-const PRESET_KEYS: readonly WeightPreset[] = ['worker', 'investor', 'resident'];
+const PRESET_KEYS: readonly WeightPreset[] = ['young', 'newlywed', 'resident', 'worker'];
 
 /* ─── 인코딩 ───────────────────────────────────────────────── */
 
@@ -41,6 +45,7 @@ export function encodeStateToParams(input: {
   budget: number;
   weights: Weights;
   patience: number;
+  incomeQuintile?: IncomeQuintile | null;
 }): URLSearchParams {
   const params = new URLSearchParams();
 
@@ -63,8 +68,13 @@ export function encodeStateToParams(input: {
   if (matchedPreset) {
     params.set('pre', matchedPreset);
   } else {
-    const { commute, value, investment, life } = input.weights;
-    params.set('w', `${commute}-${value}-${investment}-${life}`);
+    const { commute, affordability, safety, life } = input.weights;
+    params.set('w', `${commute}-${affordability}-${safety}-${life}`);
+  }
+
+  // 소득 분위 — null/undefined 이면 생략 (3분위 기본값으로 간주)
+  if (input.incomeQuintile != null) {
+    params.set('q', String(input.incomeQuintile));
   }
 
   return params;
@@ -91,7 +101,15 @@ export function decodeParamsToState(params: URLSearchParams): SharedState {
     weights: parseWeights(params.get('w')),
     patience: parsePositiveInt(params.get('p')),
     preset: parsePreset(params.get('pre')),
+    incomeQuintile: parseIncomeQuintile(params.get('q')),
   };
+}
+
+function parseIncomeQuintile(raw: string | null): IncomeQuintile | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n as IncomeQuintile;
+  return null;
 }
 
 function parseWorkplace(raw: string | null): Workplace | null {
@@ -111,15 +129,16 @@ function parseWeights(raw: string | null): Weights | null {
   if (!raw) return null;
   const parts = raw.split('-').map(Number);
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n) || n < 0)) return null;
-  const [commute, value, investment, life] = parts;
-  const sum = commute + value + investment + life;
+  const [commute, affordability, safety, life] = parts;
+  const sum = commute + affordability + safety + life;
   // 합계 95~105 허용 (반올림 오차 + 약간의 융통성)
   if (sum < 95 || sum > 105) return null;
-  return { commute, value, investment, life };
+  return { commute, affordability, safety, life };
 }
 
 function parsePreset(raw: string | null): WeightPreset | null {
   if (!raw) return null;
+  // investor 는 폐기 — null 반환 → 기본값(young) 적용
   return PRESET_KEYS.includes(raw as WeightPreset) ? (raw as WeightPreset) : null;
 }
 
@@ -144,8 +163,8 @@ function findMatchingPreset(w: Weights): WeightPreset | null {
     const p = WEIGHT_PRESETS[key];
     if (
       p.commute === w.commute &&
-      p.value === w.value &&
-      p.investment === w.investment &&
+      p.affordability === w.affordability &&
+      p.safety === w.safety &&
       p.life === w.life
     ) {
       return key;

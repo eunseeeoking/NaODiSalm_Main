@@ -6,12 +6,12 @@
  *    - 단, 에러를 "숨기지" 않는다 — console.warn + dataSource='mock' 로 화면에 명시
  *    - DEMO 뱃지 노출은 컴포넌트 책임 (이 함수는 source 만 알려줌)
  *
- *  ▷ 서버 계약 (Sprint C 에서 구현 예정):
+ *  ▷ 서버 계약 (청년 컨셉 전환 2026-05-22):
  *    POST /api/recommendations
  *    Body:
  *      { workplace: { lat, lng, label? },
  *        budget,
- *        weights: { commute, value, investment, life },
+ *        weights: { commute, affordability, safety, life },
  *        patience }
  *    Response: RegionRecommendation[]
  *
@@ -30,6 +30,8 @@ export interface RecommendationRequest {
   budget: number;
   weights: Weights;
   patience: number;
+  /** 소득 분위 선택 시 변환된 월 소득 (만원). 미선택 시 생략 → 서버 기본값(3분위 403만원) */
+  incomeMonthly?: number;
 }
 
 export type RecommendationSource = 'api' | 'mock';

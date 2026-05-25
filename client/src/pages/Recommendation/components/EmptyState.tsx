@@ -85,7 +85,7 @@ export function EmptyState({ suggestions }: Props) {
             인내심 {best.patience}분으로 늘리기
           </button>
         )}
-        <button className="px-4 py-2.5 text-sm font-medium text-ink-secondary dark:text-ink-secondary-dark border border-line-light dark:border-line-dark rounded-card hover:bg-surface dark:hover:bg-surface-dark-elevated-hover transition-colors">
+        <button className="px-4 py-2.5 text-sm font-medium text-ink-secondary dark:text-ink-secondary-dark bg-surface dark:bg-surface-dark-elevated-hover rounded-card hover:bg-brand-50 dark:hover:bg-brand/[.15] hover:text-brand dark:hover:text-brand-300 transition-colors">
           예산 조정하기
         </button>
       </div>

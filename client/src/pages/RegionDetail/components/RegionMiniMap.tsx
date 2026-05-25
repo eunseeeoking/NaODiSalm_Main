@@ -56,7 +56,8 @@ export function RegionMiniMap({
     markersRef.current = [];
 
     // 단지 마커 (SVG 데이터URL)
-    complexes.forEach((c) => {
+    // lat/lng = 0 은 지오코딩 미완료 단지 → 핀 생략 (카드 목록엔 표시됨)
+    complexes.filter((c) => c.lat !== 0 && c.lng !== 0).forEach((c) => {
       const isSelected = c.complexId === selectedComplexId;
       const fill = isSelected ? '#3182F6' : '#FFFFFF';
       const stroke = isSelected ? '#FFFFFF' : '#3182F6';

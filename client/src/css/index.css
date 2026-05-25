@@ -49,9 +49,21 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/**
+ *  ⚠️ tailwind.config.ts 에 `corePlugins.preflight = false` 가 설정되어 있어
+ *     브라우저 기본 user-agent 스타일(특히 button 의 2px outset gray border)이
+ *     그대로 노출됨.
+ *
+ *  → button 의 보더·배경을 글로벌 리셋해서, Tailwind utility(`border-*`, `bg-*`)로
+ *     명시한 스타일만 보이도록 함. Tailwind utility 가 specificity 동일하지만
+ *     선언 순서상 뒤에 들어와 우선 적용됨.
+ */
 button {
   font: inherit;
   cursor: pointer;
+  border: 0;
+  background: none;
+  color: inherit;
 }
 
 input {

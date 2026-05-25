@@ -13,6 +13,18 @@
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:studio": "npx prisma studio",
+    "seed:legal-dong": "tsx scripts/seedLegalDong.ts",
+    "seed:bjd": "tsx scripts/seedBjd.ts",
+    "seed:reb": "tsx scripts/seedRebPriceIndex.ts",
+    "reb:list": "tsx scripts/listRebTables.ts",
+    "ingest:apt:bulk": "tsx scripts/bulkIngestApt.ts",
+    "seed:lh": "tsx scripts/seedLhYouthHousing.ts",
+    "seed:transit": "tsx scripts/seedTransitSummary.ts",
+    "seed:income": "tsx scripts/seedIncomeQuintile.ts",
+    "seed:safety": "tsx scripts/seedSafetyIndex.ts",
+    "db:snapshot": "tsx scripts/dbSnapshot.ts",
+    "diagnose:depth3": "tsx scripts/diagnoseDept3.ts",
+    "find:mock-codes": "tsx scripts/findMockRegionCodes.ts",
     "postinstall": "npx prisma generate"
   },
   "dependencies": {

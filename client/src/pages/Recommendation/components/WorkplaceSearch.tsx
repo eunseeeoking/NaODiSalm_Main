@@ -157,7 +157,7 @@ export function WorkplaceSearch() {
           <button
             key={w.id}
             onClick={() => pickPopular(w)}
-            className="text-xs font-medium px-3 py-1 border border-line-light dark:border-line-dark rounded-full bg-surface-elevated dark:bg-surface-dark-elevated-hover text-ink-secondary dark:text-ink-secondary-dark hover:bg-brand-50 dark:hover:bg-brand/10 hover:border-brand/40 hover:text-brand transition-colors"
+            className="text-xs font-medium px-3 py-1 rounded-full bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300 hover:bg-brand hover:text-white transition-colors"
           >
             {w.label}
           </button>

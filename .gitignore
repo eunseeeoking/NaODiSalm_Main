@@ -38,3 +38,9 @@ coverage/
 
 # Vite
 .vite/
+
+# 시드용 외부 데이터 (현재 미사용 — seedBjd 가 GitHub 자동 fetch 로 전환됨)
+# 추후 오프라인 시드가 필요할 경우를 위해 라인 유지
+server/data/legal_dong_codes.txt
+server/data/*.csv
+server/data/*.zip

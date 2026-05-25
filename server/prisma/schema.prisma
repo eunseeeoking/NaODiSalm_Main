@@ -220,3 +220,77 @@ model CommuteMatrix {
   @@index([cacheKey])
   @@map("t_commute_matrix")
 }
+
+// ──────────────────────────────────────────────────────────────
+//  청년 컨셉 전환 (2026-05-22, D-7) — 4개 신규 테이블
+// ──────────────────────────────────────────────────────────────
+
+/// 한국부동산원 공동주택 실거래지수 (시군구·월 단위)
+///  - LSTM 학습 시 시장 추세 정규화에 사용 (Day 1 R-ONE 융합)
+///  - 실거래가 ÷ 부동산원 지수 = 정규화값 → LSTM → 복원
+model RebPriceIndex {
+  id          Int      @id @default(autoincrement())
+  sigunguCode String   @map("sigungu_code") @db.VarChar(5)
+  ym          String   @db.VarChar(7) /// "2025-04" 형식
+  indexValue  Float    @map("index_value") /// 100 기준 상대값
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([sigunguCode, ym], name: "sigunguCode_ym", map: "uniq_reb_idx")
+  @@map("t_reb_price_index")
+}
+
+/// LH 청년주택 공급 (행정동 단위 집계, Day 2)
+///  - 행복주택 / 청년매입임대 / 전세임대 등 프로그램별 집계
+///  - 추천 카드에 "주변 청년주택 N개" 표시
+model LhYouthHousing {
+  id             Int      @id @default(autoincrement())
+  legalDongCode  String   @map("legal_dong_code") @db.VarChar(10)
+  programType    String   @map("program_type") @db.VarChar(40) /// "행복주택"|"청년매입임대"|"전세임대"
+  unitsAvailable Int      @map("units_available")
+  monthlyRentMin Int?     @map("monthly_rent_min") /// 월세 최저 (만원)
+  monthlyRentMax Int?     @map("monthly_rent_max")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([legalDongCode])
+  @@map("t_lh_youth_housing")
+}
+
+/// 행정동 안전 지표 합성 (Day 3)
+///  - 경찰청 범죄주의구간 + 서울 가로등·CCTV 밀도 합성
+///  - safetyScore 축으로 사용 (0~100, 높을수록 안전)
+model SafetyIndex {
+  legalDongCode String   @id @map("legal_dong_code") @db.VarChar(10)
+  crimeScore    Float    @map("crime_score") /// 0~100, 높을수록 범죄 적음
+  lightScore    Float    @map("light_score") /// 가로등 밀도 정규화 (0~100)
+  cctvScore     Float    @map("cctv_score") /// CCTV 밀도 정규화 (0~100)
+  totalScore    Float    @map("total_score") /// 합성 점수 (0.5*crime + 0.3*light + 0.2*cctv)
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("t_safety_index")
+}
+
+/// 통계청 가계금융복지조사 — 소득 분위별 평균 월소득 (1회 시드)
+///  - 사용자 소득 미입력 시 분위별 평균으로 RIR 추정
+model IncomeQuintile {
+  quintile    Int     @id /// 1~5 (1=하위 20%)
+  avgIncome   Int     @map("avg_income") /// 월 평균 소득 (만원)
+  description String? /// 분위 설명 (예: "하위 20% — 월평균 130만원")
+
+  @@map("t_income_quintile")
+}
+
+/// 행정동 대중교통 품질 요약 (Day 2 — TAGO 융합)
+///  - 행정동 centroid 기준 반경 1km 버스 정류장·노선 집계
+///  - transitScore → commuteScore 보정에 사용
+///  - 배치 적재: npm run seed:transit
+model TransitRouteSummary {
+  legalDongCode  String   @id @map("legal_dong_code") @db.VarChar(10)
+  stationCount   Int      @map("station_count")        /// 반경 1km 정류장 수
+  avgHeadwayMin  Float?   @map("avg_headway_min")      /// 평균 배차 간격 (분)
+  nightAccessible Boolean @default(false) @map("night_accessible") /// 막차 23:30 이후 여부
+  firstBusTime   String?  @map("first_bus_time") @db.VarChar(4)   /// "0500" 형식
+  transitScore   Float    @map("transit_score")        /// 0~100 품질 점수
+  computedAt     DateTime @default(now()) @map("computed_at")
+
+  @@map("t_transit_route_summary")
+}

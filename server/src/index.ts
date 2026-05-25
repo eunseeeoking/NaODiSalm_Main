@@ -54,6 +54,19 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/health', healthRouter);
 app.use('/api', apiRouter);
 
+// ── 인코딩 진단 엔드포인트 (개발 전용) ─────────────────────────
+// curl http://localhost:4000/enc-test → 결과 확인 후 제거
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/enc-test', (_req, res) => {
+    const sample = '중대형소형신축구축';
+    res.json({
+      literal: sample,
+      charCodes: [...sample].map((c) => c.charCodeAt(0).toString(16)),
+      expected: ['c911', 'b300', 'd615', 'c18c', 'd615', 'c2e0', 'cd95', 'ad6c', 'cd95'],
+    });
+  });
+}
+
 // 404 handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'Not Found', path: req.path });

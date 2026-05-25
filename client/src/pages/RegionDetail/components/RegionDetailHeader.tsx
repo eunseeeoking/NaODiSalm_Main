@@ -12,16 +12,18 @@ import { DemoBadge } from '../../Recommendation/components/DemoBadge';
 interface Props {
   region: RegionRecommendation;
   onBack: () => void;
+  /** true = 단지·ARIMA·통근 데이터가 mock fallback 상태 (실 API 미응답) */
+  isDemoData?: boolean;
 }
 
-const METRICS: ReadonlyArray<{ label: string; key: keyof Pick<RegionRecommendation, 'commuteScore' | 'valueScore' | 'investmentScore' | 'lifeScore'> }> = [
+const METRICS: ReadonlyArray<{ label: string; key: keyof Pick<RegionRecommendation, 'commuteScore' | 'affordabilityScore' | 'safetyScore' | 'lifeScore'> }> = [
   { label: '통근', key: 'commuteScore' },
-  { label: '가성비', key: 'valueScore' },
-  { label: '투자', key: 'investmentScore' },
+  { label: '부담', key: 'affordabilityScore' },
+  { label: '안전', key: 'safetyScore' },
   { label: '생활', key: 'lifeScore' },
 ];
 
-export function RegionDetailHeader({ region, onBack }: Props) {
+export function RegionDetailHeader({ region, onBack, isDemoData = false }: Props) {
   const theme = useThemeStore((s) => s.theme);
   const toggle = useThemeStore((s) => s.toggle);
 
@@ -30,19 +32,19 @@ export function RegionDetailHeader({ region, onBack }: Props) {
   const { share, copyState, canShare } = useShareUrl();
 
   return (
-    <header className="shrink-0 px-4 py-3 border-b border-line-light dark:border-line-dark bg-surface-elevated dark:bg-surface-dark-elevated">
-      <div className="flex items-center gap-4">
+    <header className="shrink-0 px-3 md:px-4 py-2.5 md:py-3 border-b border-line-light dark:border-line-dark bg-surface-elevated dark:bg-surface-dark-elevated">
+      <div className="flex items-center gap-2 md:gap-4 flex-wrap">
         {/* 뒤로가기 + 브랜드 */}
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-card text-sm font-semibold text-ink-secondary dark:text-ink-secondary-dark hover:bg-surface dark:hover:bg-surface-dark-elevated-hover transition-colors"
+          className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-card text-sm font-semibold bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300 hover:bg-brand hover:text-white transition-colors shrink-0"
           aria-label="추천 페이지로 돌아가기"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M19 12H5" />
             <path d="m12 19-7-7 7-7" />
           </svg>
-          돌아가기
+          <span className="hidden sm:inline">돌아가기</span>
         </button>
 
         <div className="hidden lg:flex items-center gap-1.5 text-sm font-bold text-ink-primary dark:text-ink-primary-dark tracking-tight pr-1">
@@ -51,21 +53,24 @@ export function RegionDetailHeader({ region, onBack }: Props) {
           <span className="text-ink-tertiary dark:text-ink-tertiary-dark font-medium mx-1">·</span>
         </div>
 
-        {/* Depth 3 는 매물/LSTM/통근 비교 모두 mock 기반 — 항상 DEMO 노출 */}
-        <DemoBadge visible reason="매물·LSTM·통근 비교가 모두 mock — Sprint C 에서 대체" />
+        {/* 실 API 미응답(mock fallback) 시만 DEMO 배지 노출 */}
+        <DemoBadge
+          visible={isDemoData}
+          reason="단지 데이터를 서버에서 불러오지 못했습니다 — DB 세팅 확인 필요"
+        />
 
 
         {/* 지역명 */}
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-lg font-bold text-ink-primary dark:text-ink-primary-dark tracking-tight">
+        <div className="flex items-baseline gap-2 min-w-0 flex-1 md:flex-none">
+          <h1 className="text-base md:text-lg font-bold text-ink-primary dark:text-ink-primary-dark tracking-tight truncate">
             {region.displayName}
           </h1>
-          <span className="text-xs text-ink-tertiary dark:text-ink-tertiary-dark tabular-nums">
+          <span className="hidden md:inline text-xs text-ink-tertiary dark:text-ink-tertiary-dark tabular-nums">
             {region.legalDongCode}
           </span>
         </div>
 
-        {/* 4축 점수 (가운데, 여유 공간) */}
+        {/* 4축 점수 (가운데, 여유 공간) — md 미만 숨김 */}
         <div className="hidden md:flex flex-1 justify-center items-center gap-5">
           {METRICS.map((m) => (
             <div key={m.label} className="flex items-center gap-1.5">
@@ -80,23 +85,23 @@ export function RegionDetailHeader({ region, onBack }: Props) {
         </div>
 
         {/* 우측: 종합점수 + 공유 + 테마 토글 */}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-1.5 md:gap-3 shrink-0">
           <div className="flex items-baseline gap-1">
-            <span className="text-xs font-medium text-ink-tertiary dark:text-ink-tertiary-dark">
+            <span className="hidden sm:inline text-xs font-medium text-ink-tertiary dark:text-ink-tertiary-dark">
               종합
             </span>
-            <span className="text-2xl font-extrabold text-brand tabular-nums tracking-tight">
+            <span className="text-xl md:text-2xl font-extrabold text-brand tabular-nums tracking-tight">
               {region.totalScore}
             </span>
             <span className="text-xs text-ink-tertiary dark:text-ink-tertiary-dark">점</span>
           </div>
 
-          {/* [공유] — workplace 없을 땐 비활성 */}
+          {/* [공유] — workplace 없을 땐 비활성. 모바일은 아이콘만 */}
           <button
             type="button"
             onClick={share}
             disabled={!canShare}
-            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-card border border-line-light dark:border-line-dark hover:bg-surface dark:hover:bg-surface-dark-elevated-hover text-ink-secondary dark:text-ink-secondary-dark transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="relative flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-card bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300 hover:bg-brand hover:text-white transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label="현재 지역 URL 공유"
             title={canShare ? '현재 지역 URL 을 클립보드에 복사' : '직장을 먼저 입력하세요'}
           >
@@ -117,14 +122,14 @@ export function RegionDetailHeader({ region, onBack }: Props) {
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
               <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
             </svg>
-            <span className="text-xs font-semibold">
+            <span className="hidden sm:inline text-xs font-semibold">
               {copyState === 'ok' ? '복사됨' : copyState === 'fail' ? '실패' : '공유'}
             </span>
           </button>
 
           <button
             onClick={toggle}
-            className="w-9 h-9 flex items-center justify-center rounded-card text-ink-secondary dark:text-ink-secondary-dark hover:bg-surface dark:hover:bg-surface-dark-elevated-hover transition-colors"
+            className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-card bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300 hover:bg-brand hover:text-white transition-colors"
             aria-label={theme === 'dark' ? '라이트 모드' : '다크 모드'}
           >
             {theme === 'dark' ? (

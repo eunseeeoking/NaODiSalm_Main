@@ -82,7 +82,7 @@ export function Sidebar({
 
         <nav className={s.nav}>
           <button type="button" className={s.navItem}>📊 가성비 분석</button>
-          <button type="button" className={s.navItem}>📈 투자 수익 (AI)</button>
+          <button type="button" className={s.navItem}>📈 가격 분석</button>
           <button type="button" className={s.navItem}>🚗 통근 시뮬레이션</button>
           <button type="button" className={s.navItem}>⭐ 즐겨찾기</button>
         </nav>

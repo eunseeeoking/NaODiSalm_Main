@@ -72,6 +72,7 @@ const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
       households: 1132,
       recentPrice: 118000, pricePerM2: 1969,
       predictedPricePerM2_3y: 2230, confidence: 80,
+      isLhComplex: true,
     },
     {
       complexId: 'C-1156013000-03',
@@ -138,6 +139,7 @@ const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
       households: 198,
       recentPrice: 108000, pricePerM2: 1804,
       predictedPricePerM2_3y: 2010, confidence: 76,
+      isLhComplex: true,
     },
     {
       complexId: 'C-1141010100-03',
@@ -204,6 +206,7 @@ const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
       households: 408,
       recentPrice: 112000, pricePerM2: 1868,
       predictedPricePerM2_3y: 2040, confidence: 74,
+      isLhComplex: true,
     },
   ],
   // 용산구 한남동
@@ -250,6 +253,7 @@ const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
       households: 1758,
       recentPrice: 98000, pricePerM2: 1635,
       predictedPricePerM2_3y: 1750, confidence: 72,
+      isLhComplex: true,
     },
     {
       complexId: 'C-1153010400-03',

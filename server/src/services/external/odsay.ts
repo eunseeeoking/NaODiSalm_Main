@@ -159,18 +159,108 @@ export function haversineKm(
 }
 
 /**
- * 자차 통근시간 추정 (Haversine 거리 기반)
- *  - 도로 굴곡 보정 ×1.4, 시속 35km (도심 평균)
- *  - ODsay 와 별개 — 클라이언트 비교용
+ * 서울 출퇴근 시간대 자차 소요시간 추정 (비선형 거리 구간 보정)
+ *
+ *  단순 km÷속도 대신 구간별 분/km 계수 사용:
+ *    · 1km 미만  → 20분 고정 (주차 탐색·엘리베이터 = 도보보다 느림)
+ *    · 1~5km     → 8분/km + 10분 기본 (신호·정체 빈번한 도심 단거리)
+ *    · 5~15km    → 6분/km + 15분 기본 (강남권 핵심 정체 구간)
+ *    · 15km+     → 5분/km + 20분 기본 (외곽 — 상대적으로 빠르나 거리 패널티)
+ *
+ *  기준: 출퇴근 러시아워(07~09시, 18~20시) 평균, 실 내비 데이터 참고
+ *  ODsay API 없는 환경의 fallback — ODsay 캐시 hit 시 이 값은 사용되지 않음
  */
 export function estimateCarMinutes(
   origin: { lat: number; lng: number },
   dest: { lat: number; lng: number },
 ): number {
   const km = haversineKm(origin, dest);
-  const roadKm = km * 1.4;
-  return Math.round((roadKm / 35) * 60);
+  return seoulRushHourCarMinutes(km);
 }
+
+/** 직선거리(km) → 서울 출퇴근 자차 소요시간(분) */
+export function seoulRushHourCarMinutes(km: number): number {
+  if (km < 1)  return 20;
+  if (km < 5)  return Math.round(km * 8) + 10;
+  if (km < 15) return Math.round(km * 6) + 15;
+  return       Math.round(km * 5) + 20;
+}
+
+// ─── 카카오 모빌리티 자차 경로 ───────────────────────────────────
+
+const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;
+const KAKAO_NAV_ENDPOINT = 'https://apis-navi.kakaomobility.com/v1/directions';
+
+export interface KakaoCarResult {
+  /** 자차 소요시간 (분, RECOMMEND 경로 기준) */
+  carMinutes: number;
+  /** 경로 거리 (km) */
+  carDistanceKm: number;
+}
+
+interface KakaoNavResponse {
+  routes?: Array<{
+    result_code?: number;
+    summary?: {
+      duration?: number;  // 초
+      distance?: number;  // 미터
+    };
+  }>;
+}
+
+/**
+ * 카카오 모빌리티 길찾기 API — 자차 소요시간
+ *  · 엔드포인트: https://apis-navi.kakaomobility.com/v1/directions
+ *  · 인증: KakaoAK {KAKAO_REST_API_KEY}  (이미 .env 에 있음 — 추가 발급 불필요)
+ *  · 응답: routes[0].summary.duration (초), distance (미터)
+ *  · 실패 시 null → 호출부에서 estimateCarMinutes() 폴백
+ *
+ *  ⚠️ 좌표 순서: Kakao 는 lng,lat (경도,위도) 순서
+ *  ⚠️ 무료 일 300,000건 — 충분, 캐시 hit 시 미호출
+ */
+export async function fetchKakaoCarRoute(
+  origin: { lat: number; lng: number },
+  dest: { lat: number; lng: number },
+): Promise<KakaoCarResult | null> {
+  if (!KAKAO_REST_API_KEY) {
+    console.warn('[kakao] KAKAO_REST_API_KEY is not set — falling back to estimate');
+    return null;
+  }
+
+  const url = new URL(KAKAO_NAV_ENDPOINT);
+  // Kakao 는 경도(lng),위도(lat) 순서
+  url.searchParams.set('origin', `${origin.lng},${origin.lat}`);
+  url.searchParams.set('destination', `${dest.lng},${dest.lat}`);
+  url.searchParams.set('priority', 'RECOMMEND');
+
+  try {
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` },
+    });
+    if (!res.ok) {
+      console.warn(`[kakao] HTTP ${res.status} ${res.statusText}`);
+      return null;
+    }
+    const json = (await res.json()) as KakaoNavResponse;
+    const route = json.routes?.[0];
+    if (!route || route.result_code !== 0 || !route.summary) {
+      console.warn('[kakao] no valid route in response');
+      return null;
+    }
+
+    const seconds = route.summary.duration ?? 0;
+    const meters  = route.summary.distance ?? 0;
+    return {
+      carMinutes:    Math.max(1, Math.round(seconds / 60)),
+      carDistanceKm: Math.round((meters / 1000) * 10) / 10,
+    };
+  } catch (e) {
+    console.error('[kakao] fetch fail:', e);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 
 /**
  * 캐시 키 생성 — 직장 좌표 4자리 반올림

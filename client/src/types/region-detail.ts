@@ -33,6 +33,12 @@ export interface AptComplex {
   predictedPricePerM2_3y: number;
   /** 예측 신뢰도 (%) */
   confidence: number;
+  /**
+   * LH 청년주택 여부 (행복주택·청년매입임대·전세임대)
+   *  - true: 국가매물(LH)
+   *  - false | undefined: 민간매물
+   */
+  isLhComplex?: boolean;
 }
 
 /** LSTM 시계열 한 점 — 과거 또는 예측 */
@@ -60,8 +66,24 @@ export interface LstmAnalysis {
   predicted1yPricePerM2: number;
   /** 3년 후 예측 m²단가 (만원) */
   predicted3yPricePerM2: number;
-  /** 3년 누적 예상 수익률 (%) */
+  /**
+   * 3년 가격 변동성 (%)
+   *  - "투자 수익률" 표현 제거 — 가격 안정성 지표로 재정의 (컨셉 전환 2026-05-24)
+   *  - 서버 호환 필드명 유지 (제거 X)
+   */
   expectedReturn3y: number;
+}
+
+/**
+ * ARIMA 가격 안정성 분석 — LstmAnalysis 와 동일 shape + 추가 필드
+ *  - ARIMA(2,1,2) 백테스트 MAPE 10.16% (메인 모델)
+ *  - LSTM(20.41%) 대비 multi-step 누적 오차 없음
+ */
+export interface ArimaAnalysis extends LstmAnalysis {
+  /** 모델 구분자 */
+  modelType: 'arima';
+  /** 모델 한계 주의사항 (UI 표시용) */
+  disclaimer?: string;
 }
 
 /** 통근 비교 — 대중교통 vs 자차 */
@@ -72,8 +94,10 @@ export interface CommuteCompareData {
   transfers: number;
   /** 편도 비용 (원) — 대중교통 */
   transitCost: number;
-  /** 편도 분 — 자차 (현재는 mock; 추후 Kakao Mobility 가능) */
+  /** 편도 분 — 자차 (Kakao 실경로 or Haversine 비선형 추정) */
   carMinutes: number;
   /** 편도 비용 (원) — 자차 (연료비 추정) */
   carCost: number;
+  /** 자차 데이터 출처 ('kakao' = 실경로, 'estimate' = 비선형 추정, undefined = 구버전 API) */
+  carSource?: 'kakao' | 'estimate';
 }

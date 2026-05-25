@@ -6,6 +6,10 @@ import { authRouter } from './domains/auth';
 import { adminRouter } from './domains/admin';
 import { realtyRouter } from './domains/realty';
 import { commuteRouter } from './domains/commute';
+import { recommendationsRouter } from './domains/recommendations';
+import { regionsRouter } from './domains/regions';
+import { lstmRouter } from './domains/lstm';
+import { arimaRouter } from './domains/arima';
 import { requireAuth } from '../middleware/requireAuth';
 
 /**
@@ -18,6 +22,7 @@ import { requireAuth } from '../middleware/requireAuth';
  *  - /api/admin/*    → X-Admin-Token 헤더 필수 (ingest/지오코딩)
  *  - /api/realty/*   → public, 단지/거래 조회
  *  - /api/commute/*  → public, 통근 매트릭스 (ODsay 캐싱)
+ *  - /api/recommendations  → public, 지역 추천 (4축 점수 + 가중합)
  */
 export const apiRouter = Router();
 
@@ -28,3 +33,7 @@ apiRouter.use('/users', requireAuth, usersRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/realty', realtyRouter);
 apiRouter.use('/commute', commuteRouter);
+apiRouter.use('/recommendations', recommendationsRouter);
+apiRouter.use('/regions', regionsRouter);   // GET /api/regions/:legalDongCode/complexes
+apiRouter.use('/lstm', lstmRouter);         // GET /api/lstm/:complexId
+apiRouter.use('/arima', arimaRouter);       // GET /api/arima/:complexId (ARIMA 메인 모델)
