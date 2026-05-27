@@ -394,6 +394,8 @@ export async function fetchRegionCandidates(
       transitScore: transitScoreMap.get(c.agg.legalDongCode) ?? null,
       // Day 2: LH 청년주택 근접 수 (미적재 시 0)
       lhComplexNearby: lhCountMap.get(c.agg.legalDongCode) ?? 0,
+      // 행정동 내 단지 수 (마커 호버 툴팁용)
+      complexCount: c.agg.complexCount,
     };
   });
 
