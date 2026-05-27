@@ -145,6 +145,14 @@ export function RecommendationHeader() {
       </button>
 
       <Link
+        to="/about/data"
+        className="hidden sm:inline-block text-xs font-medium text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand shrink-0 transition-colors border-none"
+        title="공공데이터 4기관 융합 현황"
+      >
+        데이터 출처
+      </Link>
+
+      <Link
         to="/explore"
         className="hidden md:inline-block text-xs font-medium text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand shrink-0 transition-colors border-none"
       >

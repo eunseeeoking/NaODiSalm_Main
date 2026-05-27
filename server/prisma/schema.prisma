@@ -239,18 +239,30 @@ model RebPriceIndex {
   @@map("t_reb_price_index")
 }
 
-/// LH 청년주택 공급 (행정동 단위 집계, Day 2)
-///  - 행복주택 / 청년매입임대 / 전세임대 등 프로그램별 집계
-///  - 추천 카드에 "주변 청년주택 N개" 표시
+/// LH 청년주택 단지 마스터 (Day 2 + Phase 2-B 보강 2026-05-27)
+///  - 행복주택 / 청년매입임대 / 전세임대 — 단지 단위 한 row
+///  - Phase 2-B: complexName + address + lat/lng 컬럼 추가 (단지 식별 + 지도 표시 가능)
+///  - 적재: scripts/seedLhYouthHousing.ts → Kakao Local API 지오코딩으로 행정동 10자리
+///  - 사용처:
+///      · GET /api/regions/:legalDongCode/lh-summary  — 행정동/시군구 집계 배너
+///      · recommendationRepository lhComplexNearby   — Depth 2 "LH N" 배지
 model LhYouthHousing {
   id             Int      @id @default(autoincrement())
   legalDongCode  String   @map("legal_dong_code") @db.VarChar(10)
   programType    String   @map("program_type") @db.VarChar(40) /// "행복주택"|"청년매입임대"|"전세임대"
+  /// 단지명 — LH API SBD_LGO_NM. (legalDongCode + programType + complexName) 로 단지 식별
+  complexName    String   @map("complex_name") @db.VarChar(120)
+  /// 주소 원본 — LH API ARA_NM. 지오코딩 입력값 + 사용자 표시용
+  address        String?  @db.VarChar(255)
+  /// 좌표 — Kakao Local API 지오코딩 결과 (실패 시 null)
+  lat            Float?
+  lng            Float?
   unitsAvailable Int      @map("units_available")
   monthlyRentMin Int?     @map("monthly_rent_min") /// 월세 최저 (만원)
   monthlyRentMax Int?     @map("monthly_rent_max")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  @@unique([legalDongCode, programType, complexName], name: "lh_complex_uniq", map: "uniq_lh_complex")
   @@index([legalDongCode])
   @@map("t_lh_youth_housing")
 }
@@ -293,4 +305,20 @@ model TransitRouteSummary {
   computedAt     DateTime @default(now()) @map("computed_at")
 
   @@map("t_transit_route_summary")
+}
+
+// ──────────────────────────────────────────────────────────────
+//  외부 API 사용량 추적 (2026-05-27 추가)
+// ──────────────────────────────────────────────────────────────
+
+/// ODsay LAB 일일 호출량 (t_odsay_usage_daily)
+///  - 무료 한도 일 1,000건 → 800건 도달 시 게이트가 호출 차단
+///  - date 는 KST 기준 'YYYY-MM-DD' 문자열 (자정에 자동 새 row 생성)
+///  - callCount 는 실제 ODsay 호출 1건 = +1 (캐시 hit / 차단된 요청은 미카운트)
+model OdsayUsageDaily {
+  date      String   @id @db.VarChar(10) /// KST 기준 "YYYY-MM-DD"
+  callCount Int      @default(0) @map("call_count") /// 그날 ODsay 실 호출 누계
+  updatedAt DateTime @updatedAt @map("updated_at") /// 마지막 카운트 갱신 시각 (UTC)
+
+  @@map("t_odsay_usage_daily")
 }

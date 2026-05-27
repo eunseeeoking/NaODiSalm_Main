@@ -23,13 +23,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecommendationStore } from '../../stores/useRecommendationStore';
 import { MOCK_REGIONS } from '../Recommendation/data/mockRegions';
-import { fetchComplexes, fetchLstm, fetchArima, fetchCommuteCompare } from '../../api/regionDetail';
+import { fetchComplexes, fetchLstm, fetchArima, fetchCommuteCompare, fetchLhSummary } from '../../api/regionDetail';
 import { RegionDetailHeader } from './components/RegionDetailHeader';
 import { RegionMiniMap } from './components/RegionMiniMap';
 import { ComplexCardList } from './components/ComplexCardList';
+import { LhAggregateBanner } from './components/LhAggregateBanner';
 import { PriceStabilityAnalysis } from './components/LstmFullAnalysis';
 import { CommuteCompare } from './components/CommuteCompare';
-import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData } from '../../types/region-detail';
+import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData, LhSummary } from '../../types/region-detail';
 import type { RegionRecommendation } from '../../types/recommendation';
 
 export function RegionDetailPage() {
@@ -68,10 +69,24 @@ export function RegionDetailPage() {
     return () => ac.abort();
   }, [legalDongCode]);
 
+  // ─── LH 시군구 집계 — 별도 엔드포인트 + mock fallback (Phase 1.5) ─
+  const [lhSummary, setLhSummary] = useState<LhSummary | null>(null);
+  useEffect(() => {
+    if (!legalDongCode) return;
+    const ac = new AbortController();
+    fetchLhSummary(legalDongCode, ac.signal)
+      .then((result) => setLhSummary(result.summary))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.error('[RegionDetailPage] lh-summary fetch fail:', err);
+      });
+    return () => ac.abort();
+  }, [legalDongCode]);
+
   // ─── 선택 단지 ───────────────────────────────────────────────
   const [selectedComplex, setSelectedComplex] = useState<AptComplex | null>(null);
 
-  // 첫 단지 자동 선택 (로딩 완료 후)
+  // 첫 단지 자동 선택 (로딩 완료 후) — Phase 1.5: APT 만 들어옴
   useEffect(() => {
     if (!complexesLoading && complexes.length > 0 && !selectedComplex) {
       setSelectedComplex(complexes[0]);
@@ -127,7 +142,8 @@ export function RegionDetailPage() {
   const [commute, setCommute] = useState<CommuteCompareData | null>(null);
 
   useEffect(() => {
-    if (!selectedComplex || !workplace) {
+    // 좌표(0,0) 단지(미지오코딩) 는 통근 비교 무의미 — skip
+    if (!selectedComplex || !workplace || selectedComplex.lat === 0 || selectedComplex.lng === 0) {
       setCommute(null);
       return;
     }
@@ -189,6 +205,13 @@ export function RegionDetailPage() {
 
         {/* 우: 매물 + LSTM — 모바일 풀폭, 데스크톱 8컬 */}
         <section className="col-span-1 md:col-span-8 flex flex-col gap-3 md:overflow-hidden">
+          {/* LH 집계 배너 — Phase 2-B: 행정동 정밀도 지원. scope=DONG 이면 "역삼동", SIGUNGU 면 "강남구" */}
+          <LhAggregateBanner
+            summary={lhSummary}
+            sigunguDisplayName={region.sigungu}
+            dongDisplayName={region.dong}
+          />
+
           {/* 단지 카드 리스트 (가로 스크롤) */}
           {complexesLoading ? (
             <LoadingBar label="단지 목록 불러오는 중…" />

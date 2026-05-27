@@ -90,3 +90,87 @@ export async function geocodeFlexible(opts: {
   }
   return null;
 }
+
+/* ─── 좌표 → 행정동 코드 (2026-05-27, Phase 2-B) ─────────────── */
+
+interface KakaoRegionCodeResp {
+  documents?: Array<{
+    region_type: 'B' | 'H';        // B=법정동, H=행정동
+    code: string;                  // 10자리 BJD
+    address_name?: string;
+    region_1depth_name?: string;
+    region_2depth_name?: string;
+    region_3depth_name?: string;
+  }>;
+}
+
+export interface RegionCodeResult {
+  /** 법정동 10자리 (BJD 코드, region_type='B') */
+  legalDongCode: string;
+  /** 행정동 10자리 (region_type='H', 다를 수 있음) */
+  adminDongCode: string | null;
+  /** "서울특별시 강남구 역삼동" 형식 */
+  addressName: string | null;
+}
+
+/**
+ * 좌표(WGS84) → 법정동(B)·행정동(H) 코드 일괄 조회.
+ *  - region_type='B' 가 우리 t_legal_dong 시드와 일치하는 BJD 10자리
+ *  - 한 좌표에 B/H 두 row 가 함께 응답됨 (보통 다른 코드)
+ *  - 매칭 실패 시 null
+ */
+export async function coord2regioncode(
+  lat: number,
+  lng: number,
+): Promise<RegionCodeResult | null> {
+  if (!KAKAO_REST_API_KEY) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  const url = new URL('https://dapi.kakao.com/v2/local/geo/coord2regioncode.json');
+  url.searchParams.set('x', String(lng));
+  url.searchParams.set('y', String(lat));
+
+  const res = await fetch(url, {
+    headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` },
+  });
+  if (!res.ok) {
+    if (DEBUG) {
+      const body = await res.text().catch(() => '');
+      console.warn(`[geocoder] coord2region ${res.status} for (${lat},${lng}): ${body.slice(0, 200)}`);
+    }
+    return null;
+  }
+
+  const data = (await res.json()) as KakaoRegionCodeResp;
+  const bRow = data.documents?.find((d) => d.region_type === 'B');
+  const hRow = data.documents?.find((d) => d.region_type === 'H');
+  if (!bRow) {
+    if (DEBUG) console.log(`[geocoder] coord2region B-row miss: (${lat},${lng})`);
+    return null;
+  }
+  return {
+    legalDongCode: bRow.code,
+    adminDongCode: hRow?.code ?? null,
+    addressName: bRow.address_name ?? null,
+  };
+}
+
+/** addressToLegalDongCode 결과 — 좌표 + 행정동 코드 묶음 */
+export interface AddressResolveResult extends RegionCodeResult {
+  lat: number;
+  lng: number;
+}
+
+/**
+ * 주소 → 좌표 + 법정동 10자리 한 번에 (geocodeAddress + coord2regioncode 결합)
+ *  - 캐싱 권장: 호출자에서 Map<address, result> 보관
+ *  - rate-limit: Kakao 일 30만 호출 → 일반 seed 작업(<1만 row)에는 충분
+ *  - 좌표 변환 후 region 매칭 실패 시 좌표만이라도 활용 가능하도록 별도 처리 가능
+ */
+export async function addressToLegalDongCode(addr: string): Promise<AddressResolveResult | null> {
+  const ll = await geocodeAddress(addr);
+  if (!ll) return null;
+  const region = await coord2regioncode(ll.lat, ll.lng);
+  if (!region) return null;
+  return { ...region, lat: ll.lat, lng: ll.lng };
+}

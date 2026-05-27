@@ -198,3 +198,20 @@ adminRouter.post('/geocode', async (req, res, next) => {
     next(e);
   }
 });
+
+// GET /api/admin/odsay-usage  — 오늘 ODsay 호출량 / 잔량 / 차단 여부
+adminRouter.get('/odsay-usage', async (_req, res, next) => {
+  try {
+    const { getOdsayUsageToday, ODSAY_DAILY_LIMIT } = await import(
+      '../../services/external/odsayQuota'
+    );
+    const usage = await getOdsayUsageToday();
+    res.json({
+      ...usage,
+      limit: ODSAY_DAILY_LIMIT,
+      freeQuotaMax: 1000,
+    });
+  } catch (e) {
+    next(e);
+  }
+});

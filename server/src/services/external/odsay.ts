@@ -13,7 +13,13 @@
  *
  *  ⚠️ 무료 한도 (개인): 일 1,000건, 초당 5건
  *      → 배치 호출 시 fetchOdsayBatch 의 rate-limit 사용
+ *      → 일 800건 도달 시 odsayQuota 게이트가 호출 차단 → 호출자는 Haversine 폴백
  */
+import {
+  ODSAY_DAILY_LIMIT,
+  checkAndConsumeOdsayQuota,
+  refundOdsayQuota,
+} from './odsayQuota';
 
 const API_KEY = process.env.ODSAY_API_KEY;
 if (!API_KEY) {
@@ -52,12 +58,26 @@ interface OdsayRawResponse {
  * 단일 경로 호출
  *  - 좌표 단위는 WGS84
  *  - 실패 시 null (rate limit 초과 / 좌표 오류 / 경로 없음 등)
+ *  - 일 800건(ODSAY_DAILY_LIMIT) 초과 시 호출 차단 → null 반환 (호출자는 Haversine 폴백)
  */
 export async function fetchOdsayRoute(
   origin: { lat: number; lng: number },
   dest: { lat: number; lng: number },
 ): Promise<OdsayResult | null> {
   if (!API_KEY) throw new Error('ODSAY_API_KEY is not set');
+
+  // ── 일일 호출량 게이트 — 800/1000 도달 시 차단 ──────────────
+  const allowed = await checkAndConsumeOdsayQuota();
+  if (!allowed) {
+    // 일 1회 정도만 경고 — 호출자가 sync 로 폴백하므로 사용자 영향 없음
+    if (!_quotaWarnedToday) {
+      _quotaWarnedToday = true;
+      console.warn(
+        `[odsay] daily quota reached (>=${ODSAY_DAILY_LIMIT}). Skipping until KST midnight.`,
+      );
+    }
+    return null;
+  }
 
   const url = new URL(ENDPOINT);
   url.searchParams.set('SX', String(origin.lng));
@@ -99,10 +119,19 @@ export async function fetchOdsayRoute(
       transitCostWon: path.info.payment ?? 0,
     };
   } catch (e) {
-    console.error('[odsay] fetch fail:', e);
+    // 네트워크 오류 — ODsay 가 실제로 처리 못 했을 가능성이 높으므로 환불
+    await refundOdsayQuota();
+    console.error('[odsay] fetch fail (refunded):', e);
     return null;
   }
 }
+
+/** 일일 1회만 경고 출력하기 위한 flag — 자정 리셋은 게이트가 KST 기준 날짜로 처리 */
+let _quotaWarnedToday = false;
+// 자정 직후 리셋 (서버 시간 기준 24h 후) — 정확한 KST 동기화는 cron 권장
+setInterval(() => {
+  _quotaWarnedToday = false;
+}, 24 * 60 * 60 * 1000).unref?.();
 
 /**
  * 배치 호출 (rate-limit 적용)

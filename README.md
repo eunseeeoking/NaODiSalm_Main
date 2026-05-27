@@ -20,6 +20,22 @@
 | 서울 전체 히트맵으로 통근권 파악 | **Depth 2** — 지도 + 추천 카드 8선 |
 | 단지 클릭 → ARIMA 가격 안정성 차트 | **Depth 3** — 상세 분석 |
 
+### 📸 화면 (Day 7 첨부 예정)
+
+> 마감 24시간 전 캡처. 아래 5장 슬롯에 `docs/screenshots/*.png` 경로로 첨부.
+
+| 슬롯 | 화면 | 파일 (예정) |
+|---|---|---|
+| 1 | 메인 — 직장 입력 후 추천 8선 | `docs/screenshots/01-main.png` |
+| 2 | Depth 2 — 가중치 슬라이더 + 청년 프리셋 | `docs/screenshots/02-weights.png` |
+| 3 | Depth 3 — LH 행정동 배너 + ARIMA 도넛 | `docs/screenshots/03-detail.png` |
+| 4 | LSTM/ARIMA 비교 그래프 (ML repo backtest 산출물) | `docs/screenshots/04-backtest.png` |
+| 5 | 모바일 반응형 (375px) | `docs/screenshots/05-mobile.png` |
+
+### 🎬 데모 영상
+
+> [채울 곳: 30~60초 데모 GIF 또는 YouTube unlisted 링크 — Day 7 작성]
+
 ---
 
 ## 아키텍처
@@ -108,14 +124,26 @@ w₁ + w₂ + w₃ + w₄ = 100  (사용자 직접 조정)
 
 ## 융합 데이터 출처 (6개 기관)
 
-| 기관 | 데이터 | 규모 |
+> 📊 **실시간 적재 현황**: 운영 중인 서비스의 [`/about/data`](https://example.com/about/data) 페이지에서
+> `GET /api/meta/data-sources` 응답으로 항상 최신 row 수 확인 가능. (Phase 2-B 도입, 2026-05-27)
+
+| 기관 | 데이터 | 규모 (2026-05-27 스냅샷) |
 |---|---|---|
 | 국토교통부 | RTMS 아파트 실거래가 | ~130만 건 (2020~2025) |
-| 한국부동산원 (R-ONE) | 공동주택 매매·전세 가격지수 | 1,116건 (서울 25구 월별) |
-| 한국토지주택공사 (LH) | 행복주택·청년매입임대 공급 현황 | 3,950건 |
-| 국가대중교통정보센터 (TAGO) | 버스정류장·배차간격 | 33개 행정동 |
+| 한국부동산원 (R-ONE) | 공동주택 매매·전세 가격지수 | 4,216건 (서울 25구 월별) |
+| 한국토지주택공사 (LH) | 행복주택·청년매입임대 공급 현황 | 행정동 정밀화 ([채울 곳: row 수 — about/data]) |
+| 국가대중교통정보센터 (TAGO) | 버스정류장·배차간격 | [채울 곳: row 수 — about/data] |
 | 경찰청·서울시 | 범죄율·CCTV·가로등 안전지표 | 469개 행정동 |
 | 통계청 | 가구소득 분위 (2023) | 5분위 |
+
+### Phase 2-B 변경 (2026-05-27)
+
+```
+✅ LH 단지 주소 Kakao Local API 지오코딩 → 행정동 10자리 정밀도
+✅ /api/regions/:legalDongCode/lh-summary 응답에 scope (DONG/SIGUNGU) 추가
+✅ /api/meta/data-sources 신규 — 4기관 실시간 적재량 노출
+✅ /about/data 페이지 신규 — 공모전 채점위원 + 사용자 동시 확인
+```
 
 ---
 
@@ -191,6 +219,33 @@ curl -X POST http://localhost:4000/api/recommendations \
 ## 관련 저장소
 
 - **ML 파이프라인**: [2026_MOLIT_ML](../2026_MOLIT_ML) — LSTM 학습 + ARIMA 백테스트
+  - `npm run train:stats` — 학습 결과 통계 (confidence NULL 분포 등)
+  - `npm run train:backfill` — t_training_result.confidence NULL → MAPE 기반 자동 산출
+  - `npm run backtest` — MA-12 / ARIMA / LSTM / LSTM-REB 4모델 비교 (PNG 산출)
+
+---
+
+## 운영 명령 (server)
+
+```bash
+cd server
+
+# 데이터 적재 (모두 멱등)
+npm run seed:reb              # 한국부동산원 R-ONE 매매·전세지수
+npm run seed:lh -- --reset    # LH 청년주택 (Phase 2-B Kakao 지오코딩 통합)
+npm run seed:safety           # 자치구 5대범죄 + CCTV + 가로등 합성
+npm run seed:income           # 통계청 5분위 가처분소득
+
+# 진단 (read-only)
+npm run diagnose:depth3       # Depth 3 단지·LSTM 응답 회귀 점검
+npm run diagnose:confidence   # t_training_result.confidence 분포
+
+# 관리자 ingest (X-Admin-Token 필수)
+curl -X POST http://localhost:4000/api/admin/ingest/apt/seoul \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"fromYM":"202504","toYM":"202504"}'
+```
 
 ---
 

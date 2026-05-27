@@ -3,11 +3,28 @@
  *  - MOCK_REGIONS 의 8개 행정동에 대해 각각 3~5개 단지
  *  - 실 API 도착 전까지 사용
  *  - getMockComplexesForRegion(legalDongCode) 로 조회
+ *
+ *  Phase 1.5 (2026-05-27)
+ *  - LH 카드는 단지 리스트에서 분리됐음 (LhAggregateBanner 가 시군구 집계로 노출)
+ *  - 이 파일의 mock 은 모두 APT/SALE 로 normalize 됨
+ *  - propertyKind/dealType 은 normalize() 가 일괄 주입 — mock 엔트리는 작성하지 않아도 됨
+ *  - 향후 Phase 3 에서 VILLA/OFFICETEL mock 추가 시 MockRaw 에 kind 옵셔널 추가 검토
  */
 import type { AptComplex } from '../../../types/region-detail';
 
+/** mock 작성 편의용 — propertyKind/dealType 는 normalize 가 주입 */
+type MockRaw = Omit<AptComplex, 'propertyKind' | 'dealType'>;
+
+function normalize(c: MockRaw): AptComplex {
+  return {
+    ...c,
+    propertyKind: 'APT',
+    dealType: 'SALE',
+  };
+}
+
 /** 행정동코드 → 단지 배열 */
-const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
+const COMPLEXES_BY_REGION: Record<string, MockRaw[]> = {
   // 강남구 대치동
   '1168010600': [
     {
@@ -72,7 +89,7 @@ const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
       households: 1132,
       recentPrice: 118000, pricePerM2: 1969,
       predictedPricePerM2_3y: 2230, confidence: 80,
-      isLhComplex: true,
+
     },
     {
       complexId: 'C-1156013000-03',
@@ -139,7 +156,7 @@ const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
       households: 198,
       recentPrice: 108000, pricePerM2: 1804,
       predictedPricePerM2_3y: 2010, confidence: 76,
-      isLhComplex: true,
+
     },
     {
       complexId: 'C-1141010100-03',
@@ -206,7 +223,7 @@ const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
       households: 408,
       recentPrice: 112000, pricePerM2: 1868,
       predictedPricePerM2_3y: 2040, confidence: 74,
-      isLhComplex: true,
+
     },
   ],
   // 용산구 한남동
@@ -253,30 +270,41 @@ const COMPLEXES_BY_REGION: Record<string, AptComplex[]> = {
       households: 1758,
       recentPrice: 98000, pricePerM2: 1635,
       predictedPricePerM2_3y: 1750, confidence: 72,
-      isLhComplex: true,
+
     },
     {
       complexId: 'C-1153010400-03',
       name: '신도림 SK뷰',
       legalDongCode: '1153010400',
       lat: 37.5078, lng: 126.8906,
-      exclusiveArea: 114.90, sizeBucket: '중대형', ageBucket: '구축', builtYear: 1999,
-      households: 1284,
-      recentPrice: 132000, pricePerM2: 1149,
-      predictedPricePerM2_3y: 1230, confidence: 68,
+      exclusiveArea: 114.90, sizeBucket: '중대형', ageBucket: '구축', builtYear: 2006,
+      households: 720,
+      recentPrice: 165000, pricePerM2: 1436,
+      predictedPricePerM2_3y: 1540, confidence: 70,
     },
   ],
 };
 
+/**
+ * 행정동 코드에 해당하는 단지 목록 반환.
+ *  - 코드가 매핑에 없으면 빈 배열
+ *  - normalize() 가 propertyKind/dealType 일괄 주입
+ */
 export function getMockComplexesForRegion(legalDongCode: string): AptComplex[] {
-  return COMPLEXES_BY_REGION[legalDongCode] ?? [];
+  const rawList = COMPLEXES_BY_REGION[legalDongCode];
+  if (!rawList) return [];
+  return rawList.map(normalize);
 }
 
-/** 전체 단지 평탄화 — 단지 ID 역방향 조회용 */
-export function findMockComplex(complexId: string): AptComplex | undefined {
-  for (const list of Object.values(COMPLEXES_BY_REGION)) {
-    const hit = list.find((c) => c.complexId === complexId);
-    if (hit) return hit;
+/**
+ * complexId 로 단일 단지 lookup (모든 행정동 순회).
+ *  - mockLstmResults / mockCommuteCompare 에서 단지 메타(좌표·면적·가격)가 필요할 때 사용
+ *  - 매칭 없으면 null
+ */
+export function findMockComplex(complexId: string): AptComplex | null {
+  for (const rawList of Object.values(COMPLEXES_BY_REGION)) {
+    const hit = rawList.find((c) => c.complexId === complexId);
+    if (hit) return normalize(hit);
   }
-  return undefined;
+  return null;
 }

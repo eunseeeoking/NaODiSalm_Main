@@ -24,6 +24,7 @@
     "seed:safety": "tsx scripts/seedSafetyIndex.ts",
     "db:snapshot": "tsx scripts/dbSnapshot.ts",
     "diagnose:depth3": "tsx scripts/diagnoseDept3.ts",
+    "diagnose:confidence": "tsx scripts/diagnoseConfidence.ts",
     "find:mock-codes": "tsx scripts/findMockRegionCodes.ts",
     "postinstall": "npx prisma generate"
   },

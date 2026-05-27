@@ -10,10 +10,11 @@
  *    - AbortError 는 그대로 re-throw (호출처 무시)
  */
 import { apiFetch, ApiError } from './client';
-import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData } from '../types/region-detail';
+import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData, LhSummary } from '../types/region-detail';
 import { getMockComplexesForRegion } from '../pages/RegionDetail/data/mockComplexes';
 import { getMockLstm } from '../pages/RegionDetail/data/mockLstmResults';
 import { getMockCommuteCompare } from '../pages/RegionDetail/data/mockCommuteCompare';
+import { getMockLhSummary } from '../pages/RegionDetail/data/mockLhSummary';
 import type { Workplace } from '../types/recommendation';
 
 // ─── 단지 목록 ────────────────────────────────────────────────
@@ -45,6 +46,42 @@ export async function fetchComplexes(
     console.warn('[regionDetail] complexes API 실패 → mock 폴백:', reason);
     return {
       complexes: getMockComplexesForRegion(legalDongCode),
+      source: 'mock',
+    };
+  }
+}
+
+// ─── LH 청년주택 시군구 집계 ──────────────────────────────────
+
+export type LhSummarySource = 'api' | 'mock';
+
+export interface LhSummaryResult {
+  summary: LhSummary;
+  source: LhSummarySource;
+}
+
+/**
+ * 시군구 LH 청년주택 집계 조회
+ *  - 응답이 totalRows=0 이면 'api' source 로 그대로 반환 (배너 자동 숨김)
+ *  - API 자체 실패(네트워크/500) 시 mock 폴백
+ */
+export async function fetchLhSummary(
+  legalDongCode: string,
+  signal?: AbortSignal,
+): Promise<LhSummaryResult> {
+  try {
+    const data = await apiFetch<LhSummary>(
+      `/api/regions/${legalDongCode}/lh-summary`,
+      { signal },
+    );
+    if (!data || typeof data.totalRows !== 'number') throw new Error('invalid shape');
+    return { summary: data, source: 'api' };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    const reason = describeError(err);
+    console.warn('[regionDetail] lh-summary API 실패 → mock 폴백:', reason);
+    return {
+      summary: getMockLhSummary(legalDongCode),
       source: 'mock',
     };
   }

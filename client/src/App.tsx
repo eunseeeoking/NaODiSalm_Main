@@ -14,6 +14,7 @@ import { useThemeStore } from './stores/useThemeStore';
 import { RecommendationPage } from './pages/Recommendation';
 import { ExplorePage } from './pages/Explore';
 import { RegionDetailPage } from './pages/RegionDetail';
+import { AboutDataPage } from './pages/AboutData';
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
@@ -30,6 +31,7 @@ export default function App() {
       <Route path="/" element={<RecommendationPage />} />
       <Route path="/region/:legalDongCode" element={<RegionDetailPage />} />
       <Route path="/explore" element={<ExplorePage />} />
+      <Route path="/about/data" element={<AboutDataPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
