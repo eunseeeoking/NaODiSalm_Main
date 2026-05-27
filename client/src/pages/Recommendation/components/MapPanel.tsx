@@ -289,7 +289,8 @@ export function MapPanel() {
       });
 
       // ── CustomOverlay 생성 ────────────────────────────────
-      const overlay = new k.CustomOverlay({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const overlay = new (k as any).CustomOverlay({
         position: new k.LatLng(r.lat, r.lng),
         content: wrap,
         yAnchor: 1.0,  // 핀 꼬리 끝이 좌표에 닿도록
