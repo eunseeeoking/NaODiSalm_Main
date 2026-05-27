@@ -153,7 +153,7 @@ export function WorkplaceSearch() {
         <span className="hidden sm:inline text-xs text-ink-tertiary dark:text-ink-tertiary-dark font-medium shrink-0 mr-0.5">
           인기 직장
         </span>
-        {POPULAR_WORKPLACES.map((w, idx) => (
+        {POPULAR_WORKPLACES.map((w, _idx) => (
           <button
             key={w.id}
             onClick={() => pickPopular(w)}
@@ -162,7 +162,7 @@ export function WorkplaceSearch() {
             {w.label}
           </button>
         ))}
-      </div> {/* <--- 여기가 닫혀있어야 합니다 */}
+      </div>
     </div>
   );
 }
