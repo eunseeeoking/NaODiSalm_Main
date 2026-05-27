@@ -23,6 +23,7 @@ import {
   ArcElement,
 } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
+import type { ChartData } from 'chart.js';
 import type { AptComplex, LstmAnalysis, ArimaAnalysis } from '../../../types/region-detail';
 import { useThemeStore } from '../../../stores/useThemeStore';
 
@@ -173,7 +174,7 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
     }] : []),
   ];
 
-  const lineData = { labels, datasets };
+  const lineData = { labels, datasets } as ChartData<'line'>;
 
   const lineOptions = {
     responsive: true,

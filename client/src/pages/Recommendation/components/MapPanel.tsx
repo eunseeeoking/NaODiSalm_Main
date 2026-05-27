@@ -45,7 +45,8 @@ export function MapPanel() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<kakao.maps.Map | null>(null);
   const workplaceMarkerRef = useRef<kakao.maps.Marker | null>(null);
-  const regionOverlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const regionOverlaysRef = useRef<any[]>([]);
 
   const workplace = useRecommendationStore((s) => s.workplace);
   const patience = useRecommendationStore((s) => s.patience);
