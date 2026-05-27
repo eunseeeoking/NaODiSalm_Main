@@ -155,3 +155,51 @@ input[type='range']::-moz-range-thumb {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 0 0 2px #3182F6 inset;
   cursor: pointer;
 }
+
+/* ─── 얇은 가로 스크롤바 (.scroll-x-thin) ───────────────────────
+ *  · 화살표 버튼 완전 제거
+ *  · 높이 3px — 기본 브라우저 스크롤바(16px)보다 훨씬 얇음
+ *  · 트랙 투명 / 썸 라운드 pill
+ *  · 모바일(터치)에서는 OS가 스크롤바를 숨기므로 사실상 무시됨
+ * ─────────────────────────────────────────────────────────────── */
+.scroll-x-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #D1D5DB transparent; /* Firefox: thumb track */
+}
+
+.scroll-x-thin::-webkit-scrollbar {
+  height: 3px;
+  background: transparent;
+}
+
+.scroll-x-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 좌우 화살표 버튼 제거 */
+.scroll-x-thin::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.scroll-x-thin::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 9999px;
+}
+
+.scroll-x-thin::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+html.dark .scroll-x-thin {
+  scrollbar-color: #3A3D47 transparent;
+}
+
+html.dark .scroll-x-thin::-webkit-scrollbar-thumb {
+  background: #3A3D47;
+}
+
+html.dark .scroll-x-thin::-webkit-scrollbar-thumb:hover {
+  background: #4B5563;
+}

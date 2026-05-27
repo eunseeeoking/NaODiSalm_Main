@@ -124,7 +124,7 @@ export function WorkplaceSearch() {
           onFocus={() => results.length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="회사명, 지하철역, 도로명을 입력하세요"
-          className="w-full pl-9 pr-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated-hover border border-line-light dark:border-line-dark rounded-card text-sm text-ink-primary dark:text-ink-primary-dark placeholder:text-ink-tertiary dark:placeholder:text-ink-tertiary-dark focus:outline-none focus:border-brand focus:shadow-card-active transition-all"
+          className="w-full pl-9 pr-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated-hover border-0 rounded-card text-sm text-ink-primary dark:text-ink-primary-dark placeholder:text-ink-tertiary dark:placeholder:text-ink-tertiary-dark focus:outline-none transition-all"
         />
       </div>
       {open && results.length > 0 && (
@@ -148,21 +148,21 @@ export function WorkplaceSearch() {
           ))}
         </ul>
       )}
-      {/* 퀵 칩 */}
-      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-        <span className="text-xs text-ink-tertiary dark:text-ink-tertiary-dark font-medium mr-0.5">
+      {/* 퀵 칩 — 모바일: 한 줄 가로 스크롤 / 데스크톱: 줄바꿈 허용 */}
+      <div className="flex items-center gap-1.5 mt-2 overflow-x-auto scroll-x-thin md:flex-wrap">
+        <span className="hidden sm:inline text-xs text-ink-tertiary dark:text-ink-tertiary-dark font-medium shrink-0 mr-0.5">
           인기 직장
         </span>
-        {POPULAR_WORKPLACES.map((w) => (
+        {POPULAR_WORKPLACES.map((w, idx) => (
           <button
             key={w.id}
             onClick={() => pickPopular(w)}
-            className="text-xs font-medium px-3 py-1 rounded-full bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300 hover:bg-brand hover:text-white transition-colors"
+            className="shrink-0 text-xs font-medium px-3 py-1 rounded-full bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300 hover:bg-brand hover:text-white transition-colors"
           >
             {w.label}
           </button>
         ))}
-      </div>
+      </div> {/* <--- 여기가 닫혀있어야 합니다 */}
     </div>
   );
 }

@@ -75,13 +75,13 @@ export function RecommendationHeader() {
       <button
         onClick={handleShare}
         disabled={!workplace}
-        className="relative flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-card bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300 hover:bg-brand hover:text-white transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="inline-flex items-center justify-center gap-1.5 p-2 rounded-card text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
         aria-label="현재 조건 URL 공유"
         title={workplace ? '현재 조건을 URL로 공유' : '직장을 먼저 입력하세요'}
       >
         <svg
-          width="14"
-          height="14"
+          width="16"
+          height="16"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -103,7 +103,7 @@ export function RecommendationHeader() {
       {/* 테마 토글 */}
       <button
         onClick={toggleTheme}
-        className="p-2 rounded-card bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300 hover:bg-brand hover:text-white transition-colors shrink-0"
+        className="inline-flex items-center justify-center p-2 rounded-card text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 transition-colors shrink-0"
         aria-label="테마 전환"
         title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
       >

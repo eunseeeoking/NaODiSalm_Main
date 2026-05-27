@@ -393,14 +393,14 @@ export function MapPanel() {
       {/* 통근시간 범례 — absolute 하단 */}
       <div
         style={{ zIndex: 5 }}
-        className="absolute bottom-0 left-0 right-0 px-4 py-2 bg-surface-elevated/90 dark:bg-surface-dark-elevated/90 backdrop-blur-sm border-t border-line-light dark:border-line-dark flex items-center gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark flex-wrap tabular-nums"
+        className="absolute bottom-0 left-0 right-0 px-4 py-2 bg-surface-elevated/90 dark:bg-surface-dark-elevated/90 backdrop-blur-sm border-t border-line-light dark:border-line-dark flex items-center gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark overflow-x-auto scroll-x-thin tabular-nums"
       >
-        <span className="font-semibold">통근시간</span>
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-2.5 bg-commute-fastest rounded-sm" />20분 이내</span>
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-2.5 bg-commute-fast rounded-sm" />30분</span>
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-2.5 bg-commute-medium rounded-sm" />45분</span>
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-2.5 bg-commute-slow rounded-sm" />60분</span>
-        <span className="flex items-center gap-1.5"><span className="w-3.5 h-2.5 bg-commute-slowest rounded-sm" />60분 이상</span>
+        <span className="font-semibold shrink-0">통근시간</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-fastest rounded-sm" />20분 이내</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-fast rounded-sm" />30분</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-medium rounded-sm" />45분</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-slow rounded-sm" />60분</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-sloslowest rounded-sm" />60분 이상</span>
       </div>
     </div>
   );
