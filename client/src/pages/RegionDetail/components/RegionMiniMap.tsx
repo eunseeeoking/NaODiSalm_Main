@@ -41,15 +41,15 @@ export function RegionMiniMap({
     const map = new k.Map(containerRef.current, {
       center: new k.LatLng(region.lat, region.lng),
       level: 5,
-      draggable: true,       // 마우스/터치 드래그 명시 활성화
-      scrollwheel: true,     // 휠 줌 유지
-      disableDoubleClick: false,
-      disableDoubleClickZoom: false,
     });
     // 컨테이너 크기 확정 후 relayout — 늦은 렌더링 대비 100ms 여유
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = map as any;
     setTimeout(() => {
       map.relayout();
-      map.setDraggable(true);
+      // 타입 정의에 없지만 Kakao Maps SDK 런타임 메서드로 드래그 명시 활성화
+      if (typeof m.setDraggable === 'function') m.setDraggable(true);
+      if (typeof m.setScrollWheelZoomable === 'function') m.setScrollWheelZoomable(true);
     }, 100);
     setMapInstance(map);
   }, [status, mapInstance, region.lat, region.lng]);

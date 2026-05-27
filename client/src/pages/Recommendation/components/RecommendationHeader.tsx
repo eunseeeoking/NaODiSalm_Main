@@ -5,7 +5,6 @@
  *  - 모든 라벨 한글
  */
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { useThemeStore } from '../../../stores/useThemeStore';
 import { WorkplaceSearch } from './WorkplaceSearch';
