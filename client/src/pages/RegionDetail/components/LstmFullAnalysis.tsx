@@ -22,8 +22,9 @@ import {
   Legend,
   ArcElement,
 } from 'chart.js';
+import type { ChartData, ChartDataset } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
-import type { AptComplex, LstmAnalysis, ArimaAnalysis } from '../../../types/region-detail';
+import type { AptComplex, LstmAnalysis, ArimaAnalysis, ConfidenceDataScope } from '../../../types/region-detail';
 import { useThemeStore } from '../../../stores/useThemeStore';
 
 // Chart.js 전역 등록 (한 번만)
@@ -55,6 +56,18 @@ function formatPyMillion(perM2: number, exclusiveArea: number): string {
   const total = perM2 * exclusiveArea;
   return `${(total / 10000).toFixed(1)}억`;
 }
+
+/**
+ * 신뢰도 데이터 출처 칩 메타 (2026-05-27)
+ *  - 도넛 차트 아래에 작은 색상 칩 + 라벨로 표시
+ *  - 심사위원·사용자가 "이 신뢰도가 어떤 데이터에 근거하는지" 즉시 인지
+ */
+const SCOPE_META: Record<ConfidenceDataScope, { label: string; cls: string; }> = {
+  COMPLEX:      { label: '단지 데이터',   cls: 'bg-positive/15 text-positive' },
+  LEGAL_DONG:   { label: '행정동 평균',   cls: 'bg-brand/15 text-brand' },
+  SIGUNGU:      { label: '시군구 평균',   cls: 'bg-amber-500/15 text-amber-600' },
+  INSUFFICIENT: { label: '데이터 부족',   cls: 'bg-negative/15 text-negative' },
+};
 
 export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
   const theme = useThemeStore((s) => s.theme);
@@ -110,7 +123,7 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
     return fcs;
   }, [arima, lstm, labels]);
 
-  const datasets: object[] = [
+  const datasets: ChartDataset<'line', (number | null)[]>[] = [
     // 신뢰구간 상한 (ARIMA)
     {
       label: '예측 상한',
@@ -173,7 +186,7 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
     }] : []),
   ];
 
-  const lineData = { labels, datasets };
+  const lineData: ChartData<'line', (number | null)[], string> = { labels, datasets };
 
   const lineOptions = {
     responsive: true,
@@ -317,7 +330,15 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
           <div className="text-xs font-semibold text-ink-secondary dark:text-ink-secondary-dark mb-2 flex items-center gap-1 justify-center">
             예측 신뢰도
             <InfoTooltip
-              text="회귀 적합도(R²)와 실거래 데이터 수를 반영한 신뢰 지수. 50~88 범위. 거래가 많고 추세가 뚜렷할수록 높습니다."
+              text={
+                primary?.confidenceDetail
+                  ? `${primary.confidenceDetail} · ${
+                      arima
+                        ? '회귀 적합도(R²) + 거래 데이터 수 반영. 50~88 범위.'
+                        : '학습 MAPE + 샘플 수 기반. 50~95 범위.'
+                    }`
+                  : '회귀 적합도(R²)와 실거래 데이터 수를 반영한 신뢰 지수.'
+              }
               position="top"
             />
           </div>
@@ -330,7 +351,16 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
               <span className="text-2xs text-ink-tertiary dark:text-ink-tertiary-dark">/ 100</span>
             </div>
           </div>
-          <p className="mt-3 text-2xs text-ink-tertiary dark:text-ink-tertiary-dark text-center leading-relaxed">
+          {/* 데이터 출처 칩 — 2026-05-27 추가 */}
+          {primary?.dataScope && (
+            <span
+              className={`mt-3 text-2xs font-semibold px-2 py-0.5 rounded-full ${SCOPE_META[primary.dataScope].cls}`}
+              title={primary.confidenceDetail}
+            >
+              {SCOPE_META[primary.dataScope].label}
+            </span>
+          )}
+          <p className="mt-2 text-2xs text-ink-tertiary dark:text-ink-tertiary-dark text-center leading-relaxed">
             {arima ? 'ARIMA(2,1,2)' : 'LSTM'}
             <br />
             과거 실거래 기반

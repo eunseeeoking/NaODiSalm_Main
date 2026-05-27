@@ -41,16 +41,57 @@ export interface MatrixResponse {
 }
 
 /**
+ * 서버 가드 상한 — POST /api/commute/matrix 는 targets 1000개까지만 허용.
+ * 수도권 확장(서울+경기+인천) 후 행정동 1000개 초과 가능
+ *   → 클라이언트에서 자동 chunk 분할 + 결과 병합
+ */
+const CHUNK_SIZE = 900; // 가드 1000 보다 여유 100 (안전 마진)
+
+/**
  * 통근 매트릭스 요청
+ *  - targets ≤ 900 : 단일 요청
+ *  - targets > 900 : 자동 chunk 분할 → 순차 호출 → 결과 병합
  *  - 첫 호출 시 ~100초 대기 가능 (470건 ODsay 호출)
  *  - 같은 직장 재요청 시 즉시 응답 (~50ms)
  */
-export function fetchCommuteMatrix(
+export async function fetchCommuteMatrix(
   origin: { lat: number; lng: number; label?: string },
   targets: CommuteTarget[],
 ): Promise<MatrixResponse> {
-  return apiFetch<MatrixResponse>('/api/commute/matrix', {
-    method: 'POST',
-    json: { origin, targets },
-  });
+  if (targets.length <= CHUNK_SIZE) {
+    return apiFetch<MatrixResponse>('/api/commute/matrix', {
+      method: 'POST',
+      json: { origin, targets },
+    });
+  }
+
+  // chunk 분할 + 순차 호출 + 결과 병합
+  const merged: MatrixResponse = {
+    cacheKey: '',
+    cacheHit: 0,
+    cacheNearby: 0,
+    cacheMiss: 0,
+    written: 0,
+    elapsedMs: 0,
+    matrix: {},
+  };
+
+  for (let i = 0; i < targets.length; i += CHUNK_SIZE) {
+    const chunk = targets.slice(i, i + CHUNK_SIZE);
+    const resp = await apiFetch<MatrixResponse>('/api/commute/matrix', {
+      method: 'POST',
+      json: { origin, targets: chunk },
+    });
+
+    // 결과 병합
+    if (!merged.cacheKey) merged.cacheKey = resp.cacheKey;
+    merged.cacheHit += resp.cacheHit;
+    merged.cacheNearby += resp.cacheNearby;
+    merged.cacheMiss += resp.cacheMiss;
+    merged.written += resp.written;
+    merged.elapsedMs += resp.elapsedMs;
+    Object.assign(merged.matrix, resp.matrix);
+  }
+
+  return merged;
 }

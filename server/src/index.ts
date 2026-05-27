@@ -92,3 +92,20 @@ async function shutdown(signal: string) {
 }
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
+
+// ─── Process-level 안전망 (2026-05-27 Hotfix) ─────────────────
+//   Express 4 의 async handler 에서 throw 된 promise rejection 은 자동으로
+//   error middleware 로 가지 않음. Node 15+ 의 unhandledRejection 기본 동작
+//   (--unhandled-rejections=throw) 으로 process 가 종료될 수 있음.
+//   다량 동시 호출에서 ARIMA SQL 실패 / DB 풀 고갈 / 외부 API 타임아웃 등이
+//   process 자체를 죽이지 않도록 log + 계속 동작.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[unhandledRejection]', reason);
+  // promise 자체는 어디서 발생했는지 추적 어려움 — 핫스팟은 라우터별 try-catch 권장
+  void promise;
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+  // 동기 throw — Node 가 일반적으로 process 종료. 일단 로그만 남기고 계속.
+  // 진짜 위험한 에러면 SIGTERM 으로 보내서 graceful shutdown.
+});

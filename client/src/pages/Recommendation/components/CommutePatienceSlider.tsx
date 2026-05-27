@@ -6,9 +6,26 @@
  */
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 
-/** 예산(만원) → "X.X억" 표기, .0 트리밍 */
+/**
+ * 예산(만원) → 사람이 읽는 한글 표기
+ *  · 1억 미만        → "X천만"            (예: 3000 → "3천만")
+ *  · 1억 이상 정확히 → "N억"               (예: 10000 → "1억")
+ *  · 1억 이상 잔여   → "N억 M천만"        (예: 13000 → "1억 3천만", 12500 → "1억 2500만")
+ *
+ *  step 이 1000(천만원) 이라 천만 단위까지 표현하면 충분.
+ *  step 보다 작은 잔여(예: 500만원)는 "X만" 으로 fallback.
+ */
 function formatBudget(manwon: number): string {
-  return `${(manwon / 10000).toFixed(1).replace(/\.0$/, '')}억`;
+  if (manwon < 10000) {
+    // 1억 미만
+    if (manwon % 1000 === 0) return `${manwon / 1000}천만`;
+    return `${manwon.toLocaleString()}만`;
+  }
+  const eok = Math.floor(manwon / 10000);
+  const rest = manwon - eok * 10000; // 0~9999 만원
+  if (rest === 0) return `${eok}억`;
+  if (rest % 1000 === 0) return `${eok}억 ${rest / 1000}천만`;
+  return `${eok}억 ${rest.toLocaleString()}만`;
 }
 
 export function CommutePatienceSlider() {
@@ -64,17 +81,17 @@ export function CommutePatienceSlider() {
         </div>
         <input
           type="range"
-          min={20000}
+          min={1000}
           max={150000}
-          step={5000}
+          step={1000}
           value={budget}
           onChange={(e) => setBudget(Number(e.target.value))}
           className="w-full"
           aria-label="예산"
         />
         <div className="flex justify-between text-xs text-ink-tertiary dark:text-ink-tertiary-dark mt-1 tabular-nums font-medium">
-          <span>2억</span>
-          <span>8.5억</span>
+          <span>1천만</span>
+          <span>7.5억</span>
           <span>15억</span>
         </div>
       </div>

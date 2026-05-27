@@ -52,6 +52,12 @@ export interface RegionMetrics {
    *  - RegionCard "주변 LH 청년주택 N개" 표시
    */
   lhComplexNearby: number;
+  /**
+   * 행정동 내 단지 수 (마커 호버 툴팁용)
+   *  - t_apt_complex GROUP BY legal_dong_code 카운트
+   *  - 추천 응답 매핑에서 직접 사용 (recommendations.ts)
+   */
+  complexCount: number;
 }
 
 /**

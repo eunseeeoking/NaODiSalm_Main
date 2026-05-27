@@ -23,6 +23,7 @@
  *    - batchAdjustReturns: t_reb_price_index 적재 후 자동으로 지수 보정 적용
  *    - 미적재(seed:reb 실행 전) 시 rawReturn3y 그대로 사용 (fallback, 기존 동작)
  */
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { haversineKm } from '../external/odsay';
 import { findCachedMatrix, type CommuteEntry } from './commuteRepository';
@@ -349,16 +350,50 @@ export async function fetchRegionCandidates(
     transitRows.map((r) => [r.legal_dong_code, r.transit_score]),
   );
 
-  // 5-C) LH 청년주택 근접 수 (행정동 단위)
+  // 5-C) LH 청년주택 근접 수 (Phase 2-B 보강, 2026-05-27)
+  //   행정동 정확 일치(DONG) 우선, 0이면 시군구 prefix 폴백(SIGUNGU).
+  //   - lhYouthHousing.legal_dong_code 는 모두 10자리 (지오코딩 완료)
+  //   - 단지 49건은 14개 동에만 몰려 있어서, 폴백 없으면 나머지 동에서 항상 0
+  //   - 시군구 prefix 폴백: LEFT(legal_dong_code,5)=sigungu → 같은 시군구 내 모든 단지
+  //   - 중복 방지: 행정동 매칭이 있으면 시군구 폴백 사용 안 함
+  const candidateSigunguSet = new Set(candidateDongCodes.map((c) => c.slice(0, 5)));
+  const candidateSigungus = Array.from(candidateSigunguSet);
   type LhCountRow = { legal_dong_code: string; cnt: bigint };
-  const lhRows = await prisma.$queryRaw<LhCountRow[]>`
-    SELECT legal_dong_code, COUNT(*) AS cnt
-    FROM t_lh_youth_housing
-    WHERE legal_dong_code IN (${candidateDongCodes.join(',') || "''"})
-    GROUP BY legal_dong_code
-  `;
+  type LhSigunguCountRow = { sigungu: string; cnt: bigint };
+
+  // (a) 10자리 행정동 정확 일치
+  const lhDongRows = candidateDongCodes.length
+    ? await prisma.$queryRaw<LhCountRow[]>`
+        SELECT legal_dong_code, COUNT(*) AS cnt
+        FROM t_lh_youth_housing
+        WHERE legal_dong_code IN (${Prisma.join(candidateDongCodes)})
+        GROUP BY legal_dong_code
+      `.catch(() => [] as LhCountRow[])
+    : [];
+  const lhDongCount = new Map<string, number>(
+    lhDongRows.map((r) => [r.legal_dong_code, Number(r.cnt)]),
+  );
+
+  // (b) 시군구 5자리 prefix 폴백 — LEFT(legal_dong_code, 5) 로 시군구 묶음
+  const lhSigunguRows = candidateSigungus.length
+    ? await prisma.$queryRaw<LhSigunguCountRow[]>`
+        SELECT LEFT(legal_dong_code, 5) AS sigungu, COUNT(*) AS cnt
+        FROM t_lh_youth_housing
+        WHERE LEFT(legal_dong_code, 5) IN (${Prisma.join(candidateSigungus)})
+        GROUP BY LEFT(legal_dong_code, 5)
+      `.catch(() => [] as LhSigunguCountRow[])
+    : [];
+  const lhSigunguCount = new Map<string, number>(
+    lhSigunguRows.map((r) => [r.sigungu, Number(r.cnt)]),
+  );
+
+  // 행정동 우선, 없으면 시군구 폴백 — 중복 카운트 회피
   const lhCountMap = new Map<string, number>(
-    lhRows.map((r) => [r.legal_dong_code, Number(r.cnt)]),
+    candidateDongCodes.map((dong) => {
+      const dongCnt = lhDongCount.get(dong) ?? 0;
+      if (dongCnt > 0) return [dong, dongCnt];
+      return [dong, lhSigunguCount.get(dong.slice(0, 5)) ?? 0];
+    }),
   );
 
   // 5-D) 안전 지표 (Day 3: t_safety_index — seed:safety 실행 후 활성, 미적재 시 50 fallback)
@@ -394,6 +429,8 @@ export async function fetchRegionCandidates(
       transitScore: transitScoreMap.get(c.agg.legalDongCode) ?? null,
       // Day 2: LH 청년주택 근접 수 (미적재 시 0)
       lhComplexNearby: lhCountMap.get(c.agg.legalDongCode) ?? 0,
+      // 행정동 내 단지 수 — 마커 호버 툴팁용 (RegionAggregate 에서 그대로 전달)
+      complexCount: c.agg.complexCount,
     };
   });
 

@@ -96,6 +96,26 @@ declare global {
       function removeListener(target: unknown, type: string, handler: (...args: unknown[]) => void): void;
     }
 
+    // ─── CustomOverlay (추천 지역 커스텀 핀 마커용) ────────────
+    interface CustomOverlayOptions {
+      position: LatLng;
+      content: HTMLElement | string;
+      xAnchor?: number;
+      yAnchor?: number;
+      zIndex?: number;
+      clickable?: boolean;
+      map?: Map;
+    }
+
+    class CustomOverlay {
+      constructor(opts: CustomOverlayOptions);
+      setMap(map: Map | null): void;
+      setPosition(latlng: LatLng): void;
+      getPosition(): LatLng;
+      setContent(content: HTMLElement | string): void;
+      setZIndex(zIndex: number): void;
+    }
+
     namespace MarkerClusterer {
       // namespace placeholder for nested types
     }

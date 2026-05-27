@@ -45,10 +45,20 @@ function toAgeBucket(builtYear: number | null): AgeBucket {
 
 // ─── 응답 타입 ────────────────────────────────────────────────
 
+/**
+ * Phase 0+1 + 1.5 (2026-05-27)
+ *  · 단지 카드는 APT/SALE 만 흐름. VILLA/OFFICETEL/JEONSE 는 Phase 3 까지 비활성.
+ *  · LH 는 단지 디테일 부재로 단지 리스트에서 분리 — /lh-summary 가 시군구 집계로 노출.
+ */
+type PropertyKind = 'APT' | 'VILLA' | 'OFFICETEL';
+type DealType = 'SALE' | 'JEONSE' | 'MONTHLY';
+
 interface AptComplexDto {
   complexId: string;
   name: string;
   legalDongCode: string;
+  propertyKind: PropertyKind;
+  dealType: DealType;
   lat: number;
   lng: number;
   exclusiveArea: number;
@@ -60,17 +70,6 @@ interface AptComplexDto {
   pricePerM2: number;
   predictedPricePerM2_3y: number;
   confidence: number;
-  /** LH 청년주택 여부 — 단지명 키워드 기반 추정 또는 DB 조인으로 확인 */
-  isLhComplex: boolean;
-}
-
-/**
- * 단지명 키워드로 LH/공공임대 여부 추정
- *  - DB에 complex_id ↔ lh_id 조인 없는 경우 fallback
- */
-const LH_NAME_KEYWORDS = ['행복주택', '임대', 'LH', '보금자리', '국민임대', '청년임대', '매입임대', '전세임대'];
-function isLhByName(name: string): boolean {
-  return LH_NAME_KEYWORDS.some((kw) => name.includes(kw));
 }
 
 // ─── 라우터 ───────────────────────────────────────────────────
@@ -252,21 +251,199 @@ regionsRouter.get(
         complexId: String(c.id),
         name: c.name,
         legalDongCode,
+        propertyKind: 'APT',
+        dealType: 'SALE',
         lat: c.lat ?? 0,
         lng: c.lng ?? 0,
         exclusiveArea: avgArea,
         sizeBucket: toSizeBucket(avgArea),
         ageBucket: toAgeBucket(c.builtYear),
         builtYear: c.builtYear ?? 0,
-        households: 0, // t_apt_complex
+        households: 0, // t_apt_complex 에 households 없음
         recentPrice: trade.avgPrice,
         pricePerM2,
         predictedPricePerM2_3y,
         confidence,
-        isLhComplex: isLhByName(c.name),
       });
     }
 
+    // ※ LH 청년주택은 단지 단위 디테일(이름·좌표·세대수)이 없으므로
+    //   Depth 3 단지 카드 리스트에는 포함하지 않음.
+    //   대신 별도 엔드포인트 GET /:legalDongCode/lh-summary 에서 시군구 집계로 노출.
+
     return res.json(result);
+  },
+);
+
+/**
+ *  GET /api/regions/:legalDongCode/lh-summary
+ *
+ *  ▷ 목적
+ *    Depth 3 (지역 상세) 상단 배너용 — "이 시군구에 LH 청년주택 N호 공급 중" 안내.
+ *
+ *  ▷ 데이터 소스
+ *    t_lh_youth_housing — lhLeaseInfo1 적재본. legal_dong_code 는 시군구 5자리.
+ *
+ *  ▷ 응답
+ *    {
+ *      sigunguCode: "11680",
+ *      totalRows: 12,
+ *      totalUnits: 458,
+ *      programs: [
+ *        { programType: "행복주택", rows: 5, units: 320, monthlyRentMin: 8, monthlyRentMax: 22 },
+ *        { programType: "청년매입임대", rows: 4, units: 88,  monthlyRentMin: null, monthlyRentMax: null },
+ *        ...
+ *      ]
+ *    }
+ *
+ *  ▷ Phase 1.5: 데이터 미적재 시 totalRows=0 응답 (404 아님 → 클라이언트가 배너 숨김 처리)
+ */
+interface LhProgramSummary {
+  programType: string;
+  rows: number;
+  units: number;
+  monthlyRentMin: number | null;
+  monthlyRentMax: number | null;
+}
+
+/** 정밀도 — Phase 2-B(2026-05-27):
+ *   DONG       : 행정동 10자리 정확 일치 (지오코딩 성공한 row 만 집계)
+ *   SIGUNGU    : 시군구 5자리 폴백 (지오코딩 없거나 실패한 row)
+ *   INSUFFICIENT: 양쪽 모두 0건 → 배너 숨김
+ */
+export type LhSummaryScope = 'DONG' | 'SIGUNGU' | 'INSUFFICIENT';
+
+interface LhSummaryDto {
+  sigunguCode: string;
+  legalDongCode: string;
+  /** 표시에 사용할 우선 scope. 행정동 단위에 1건 이상이면 'DONG', 아니면 'SIGUNGU', 둘 다 0이면 'INSUFFICIENT' */
+  scope: LhSummaryScope;
+  totalRows: number;
+  totalUnits: number;
+  programs: LhProgramSummary[];
+  /** 참고용 — 시군구 단위 통계 (행정동 모드에서도 같이 노출해서 UI 가 비교 가능) */
+  sigunguTotalRows: number;
+  sigunguTotalUnits: number;
+}
+
+type LhRow = {
+  programType: string;
+  unitsAvailable: number;
+  monthlyRentMin: number | null;
+  monthlyRentMax: number | null;
+};
+
+function aggregate(rows: LhRow[]): { programs: LhProgramSummary[]; totalUnits: number } {
+  const byProgram = new Map<string, LhProgramSummary>();
+  for (const r of rows) {
+    const cur = byProgram.get(r.programType) ?? {
+      programType: r.programType,
+      rows: 0,
+      units: 0,
+      monthlyRentMin: null as number | null,
+      monthlyRentMax: null as number | null,
+    };
+    cur.rows += 1;
+    cur.units += r.unitsAvailable ?? 0;
+    if (r.monthlyRentMin != null) {
+      cur.monthlyRentMin =
+        cur.monthlyRentMin == null ? r.monthlyRentMin : Math.min(cur.monthlyRentMin, r.monthlyRentMin);
+    }
+    if (r.monthlyRentMax != null) {
+      cur.monthlyRentMax =
+        cur.monthlyRentMax == null ? r.monthlyRentMax : Math.max(cur.monthlyRentMax, r.monthlyRentMax);
+    }
+    byProgram.set(r.programType, cur);
+  }
+  const programs = Array.from(byProgram.values()).sort((a, b) => b.units - a.units);
+  const totalUnits = programs.reduce((s, p) => s + p.units, 0);
+  return { programs, totalUnits };
+}
+
+regionsRouter.get(
+  '/:legalDongCode/lh-summary',
+  async (req: Request, res: Response) => {
+    const { legalDongCode } = req.params;
+    if (!/^\d{10}$/.test(legalDongCode)) {
+      return res.status(400).json({ error: 'legalDongCode must be a 10-digit numeric string' });
+    }
+    const sigunguCode = legalDongCode.slice(0, 5);
+
+    const emptyDto: LhSummaryDto = {
+      sigunguCode,
+      legalDongCode,
+      scope: 'INSUFFICIENT',
+      totalRows: 0,
+      totalUnits: 0,
+      programs: [],
+      sigunguTotalRows: 0,
+      sigunguTotalUnits: 0,
+    };
+
+    try {
+      // (a) 행정동 10자리 정확 일치 (지오코딩 성공 row)
+      const dongRows = await prisma.lhYouthHousing.findMany({
+        where: { legalDongCode },
+        select: {
+          programType: true,
+          unitsAvailable: true,
+          monthlyRentMin: true,
+          monthlyRentMax: true,
+        },
+      });
+
+      // (b) 시군구 prefix 폴백 (Phase 2-B 보강: 같은 시군구 내 행정동 row 모두 포함)
+      //   기존: legalDongCode == sigunguCode (5자리 정확 일치) — 지오코딩 결과는 10자리라 항상 0
+      //   현재: legalDongCode startsWith sigunguCode — 같은 시군구의 행정동 10자리 row 도 매칭
+      //   → 14개 행정동만 행정동(DONG) 모드로 노출되던 한계 해소.
+      //     같은 시군구의 다른 동에 들어와도 "[시군구]에 N호" 폴백 표시 가능.
+      const sigunguRows = await prisma.lhYouthHousing.findMany({
+        where: { legalDongCode: { startsWith: sigunguCode } },
+        select: {
+          programType: true,
+          unitsAvailable: true,
+          monthlyRentMin: true,
+          monthlyRentMax: true,
+        },
+      });
+
+      const dongAgg = aggregate(dongRows);
+      const sigunguAgg = aggregate(sigunguRows);
+
+      // 우선 scope 결정 — 행정동에 1건 이상 있으면 DONG, 아니면 SIGUNGU
+      let scope: LhSummaryScope;
+      let primaryRows = 0;
+      let primaryUnits = 0;
+      let primaryPrograms: LhProgramSummary[] = [];
+
+      if (dongRows.length > 0) {
+        scope = 'DONG';
+        primaryRows = dongRows.length;
+        primaryUnits = dongAgg.totalUnits;
+        primaryPrograms = dongAgg.programs;
+      } else if (sigunguRows.length > 0) {
+        scope = 'SIGUNGU';
+        primaryRows = sigunguRows.length;
+        primaryUnits = sigunguAgg.totalUnits;
+        primaryPrograms = sigunguAgg.programs;
+      } else {
+        return res.json(emptyDto);
+      }
+
+      const dto: LhSummaryDto = {
+        sigunguCode,
+        legalDongCode,
+        scope,
+        totalRows: primaryRows,
+        totalUnits: primaryUnits,
+        programs: primaryPrograms,
+        sigunguTotalRows: sigunguRows.length,
+        sigunguTotalUnits: sigunguAgg.totalUnits,
+      };
+      return res.json(dto);
+    } catch (e) {
+      console.warn('[regions/lh-summary] skipped:', e instanceof Error ? e.message : e);
+      return res.json(emptyDto);
+    }
   },
 );

@@ -27,17 +27,20 @@ import {
 import { fetchCommuteMatrix, type CommuteEntry } from '../../../api/commute';
 // CommutePatienceSlider → LeftPanel 로 이동
 
-interface SeoulCentroid {
+interface RegionCentroid {
   code: string;
   name: string;
   sigungu: string;
   sigunguCode: string;
+  /** 시도명 (예: "서울특별시", "경기도", "인천광역시") — 수도권 확장 후 추가 */
+  sido?: string;
   lat: number;
   lng: number;
 }
 
-const GEOJSON_URL = '/data/seoul-hjd-simplified.geojson';
-const CENTROIDS_URL = '/data/seoul-centroids.json';
+// 수도권 (서울 + 경기 + 인천) 통합 데이터 — 2026-05-27 확장
+const GEOJSON_URL = '/data/capital-hjd-simplified.geojson';
+const CENTROIDS_URL = '/data/capital-centroids.json';
 
 export function MapPanel() {
   const appKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
@@ -56,10 +59,10 @@ export function MapPanel() {
   setHoveredRef.current = setHovered;
 
   // ── 행정동 centroid 로드 (1회) ─────────────────────────────
-  const [centroids, setCentroids] = useState<SeoulCentroid[]>([]);
+  const [centroids, setCentroids] = useState<RegionCentroid[]>([]);
   useEffect(() => {
     fetch(CENTROIDS_URL)
-      .then((r) => r.json() as Promise<SeoulCentroid[]>)
+      .then((r) => r.json() as Promise<RegionCentroid[]>)
       .then(setCentroids)
       .catch((e) => console.error('[centroids] fetch fail:', e));
   }, []);

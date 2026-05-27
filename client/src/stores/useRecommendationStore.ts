@@ -60,7 +60,8 @@ interface RecommendationState {
 
 export const useRecommendationStore = create<RecommendationState>((set) => ({
   workplace: null,
-  budget: 40000,
+  // 사회초년생 기본값 — 1.5억 (천만원 단위, 1000~150000 슬라이더 중간보다 낮은 위치)
+  budget: 15000,
   weights: { ...WEIGHT_PRESETS.worker },
   patience: 45,
   incomeQuintile: null,

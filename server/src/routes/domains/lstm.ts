@@ -40,6 +40,10 @@ interface LstmAnalysisDto {
   predicted1yPricePerM2: number;
   predicted3yPricePerM2: number;
   expectedReturn3y: number;
+  /** 신뢰도 산출 데이터 출처 — UI 도넛 옆 칩 표시용 (2026-05-27 추가) */
+  dataScope?: 'COMPLEX' | 'LEGAL_DONG' | 'INSUFFICIENT';
+  /** 신뢰도 산출 방식 설명 (UI 툴팁 표시용) */
+  confidenceDetail?: string;
 }
 
 // ─── 헬퍼 ─────────────────────────────────────────────────────
@@ -47,6 +51,48 @@ interface LstmAnalysisDto {
 function ymLabel(base: Date, offsetMonths: number): string {
   const d = new Date(base.getFullYear(), base.getMonth() + offsetMonths, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * MAPE + sampleCount 기반 LSTM confidence 동적 산출
+ *
+ *   문제:
+ *     - t_training_result.confidence 가 전부 NULL (ML repo train.ts:99 "추후 변동성 기반 산출" TODO)
+ *     - 기존 코드 `?? 0.7` 폴백 → 모든 단지에서 confidence=70 픽스
+ *
+ *   산식 (MAPE 기반, 학술 근거):
+ *     base = 100 - mape × 1.5     ← 예측 오차가 작을수록 높음
+ *     bonus = log10(sampleCount) × 5  ← 학습 샘플 풍부할수록 추가 가점
+ *     confidence = clamp(50, 95, round(base + bonus))
+ *
+ *   예시:
+ *     MAPE 5%,  sample 1000 → 100 - 7.5 + 15 = 107.5 → 95 (cap)
+ *     MAPE 12%, sample 500  → 100 - 18  + 13.5 ≈ 95.5 → 95 (cap)
+ *     MAPE 20%, sample 100  → 100 - 30  + 10 ≈ 80
+ *     MAPE 30%, sample 50   → 100 - 45  + 8.5 ≈ 64
+ *     MAPE 50%, sample 20   → 100 - 75  + 6.5 ≈ 50 (floor)
+ *
+ *   NULL 처리:
+ *     mape 또는 sampleCount NULL → 70 폴백 (기존 동작 유지, 보수적)
+ */
+function calcLstmConfidence(
+  mape: number | null,
+  sampleCount: number | null,
+): { confidence: number; detail: string } {
+  if (mape == null || sampleCount == null || sampleCount <= 0) {
+    return {
+      confidence: 70,
+      detail: '학습 메트릭 미저장 (보수적 기본값)',
+    };
+  }
+  const base = 100 - mape * 1.5;
+  const bonus = Math.log10(Math.max(1, sampleCount)) * 5;
+  const raw = base + bonus;
+  const confidence = Math.min(95, Math.max(50, Math.round(raw)));
+  return {
+    confidence,
+    detail: `MAPE ${mape.toFixed(1)}%, 학습 샘플 ${sampleCount.toLocaleString()}건`,
+  };
 }
 
 // ─── 라우터 ───────────────────────────────────────────────────
@@ -83,6 +129,7 @@ lstmRouter.get('/:complexId', async (req: Request, res: Response) => {
   `;
 
   // 3) 학습 결과 조회 (단지 row 우선, 없으면 행정동 집계 row)
+  //    mape/sampleCount 도 함께 가져와서 confidence 동적 산출에 사용
   const trainingResult = await prisma.trainingResult.findFirst({
     where: { sigunguCode: complex.sigunguCode, legalDong: complex.legalDong },
     orderBy: { baseDate: 'desc' },
@@ -91,6 +138,8 @@ lstmRouter.get('/:complexId', async (req: Request, res: Response) => {
       predicted1yPricePerM2: true,
       predicted3yPricePerM2: true,
       confidence: true,
+      mape: true,
+      sampleCount: true,
     },
   });
 
@@ -101,6 +150,8 @@ lstmRouter.get('/:complexId', async (req: Request, res: Response) => {
   let predicted1yPricePerM2: number;
   let predicted3yPricePerM2: number;
   let confidence: number;
+  let dataScope: 'COMPLEX' | 'LEGAL_DONG' | 'INSUFFICIENT' = 'INSUFFICIENT';
+  let confidenceDetail = '데이터 부족 — 보수적 기본값';
 
   if (monthlyRows.length > 0) {
     const lastRow = monthlyRows[monthlyRows.length - 1];
@@ -136,7 +187,19 @@ lstmRouter.get('/:complexId', async (req: Request, res: Response) => {
       );
     }
 
-    confidence = Math.round((trainingResult.confidence ?? 0.7) * 100);
+    // 신뢰도 동적 산출 (2026-05-27)
+    //   - 기존: `?? 0.7 × 100` → 모든 단지 70 픽스
+    //   - 변경: trainingResult.confidence 가 NULL 이어도 mape + sampleCount 로 동적 계산
+    if (trainingResult.confidence != null) {
+      // 학습 시점에 confidence 가 저장된 row (드물지만 대비)
+      confidence = Math.round(trainingResult.confidence * 100);
+      confidenceDetail = `학습 confidence 직접 사용 (${(trainingResult.confidence * 100).toFixed(0)}%)`;
+    } else {
+      const calc = calcLstmConfidence(trainingResult.mape, trainingResult.sampleCount);
+      confidence = calc.confidence;
+      confidenceDetail = calc.detail;
+    }
+    dataScope = 'LEGAL_DONG';
   } else {
     // 학습 결과 없음 — 최근 추세 선형 외삽 (안전망)
     if (monthlyRows.length >= 2) {
@@ -146,11 +209,17 @@ lstmRouter.get('/:complexId', async (req: Request, res: Response) => {
         monthlyRows.length > 1 ? (last - first) / monthlyRows.length : 0;
       predicted1yPricePerM2 = Math.round(last + monthlyGrowth * 12);
       predicted3yPricePerM2 = Math.round(last + monthlyGrowth * 36);
+      // 단지 거래 데이터로 외삽 — 신뢰도는 거래 월수에 비례 (50~70)
+      confidence = Math.min(70, 50 + Math.floor(monthlyRows.length / 2));
+      confidenceDetail = `학습 결과 없음 — 단지 거래 ${monthlyRows.length}개월 선형 외삽`;
+      dataScope = 'COMPLEX';
     } else {
       predicted1yPricePerM2 = currentPricePerM2;
       predicted3yPricePerM2 = currentPricePerM2;
+      confidence = 50;
+      confidenceDetail = '학습 결과 + 거래 데이터 모두 부족';
+      dataScope = 'INSUFFICIENT';
     }
-    confidence = 50; // 학습 결과 없음 → 낮은 신뢰도
   }
 
   const expectedReturn3y =
@@ -200,6 +269,8 @@ lstmRouter.get('/:complexId', async (req: Request, res: Response) => {
     predicted1yPricePerM2,
     predicted3yPricePerM2,
     expectedReturn3y,
+    dataScope,
+    confidenceDetail,
   };
 
   return res.json(dto);

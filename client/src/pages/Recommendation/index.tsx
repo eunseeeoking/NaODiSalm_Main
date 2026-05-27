@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRecommendationStore } from '../../stores/useRecommendationStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { fetchRecommendations } from '../../api/recommendations';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { RecommendationHeader } from './components/RecommendationHeader';
 import { MapPanel } from './components/MapPanel';
 import { LeftPanel } from './components/LeftPanel';
@@ -127,20 +128,40 @@ export function RecommendationPage() {
   const toggleLeft = () => (leftCollapsed ? openLeft() : setLeftCollapsed(true));
   const toggleRight = () => (rightCollapsed ? openRight() : setRightCollapsed(true));
 
+  // ─── 슬라이더 입력 debounce (2026-05-27 추가) ───────────────
+  //   가중치/예산/통근인내심 슬라이더는 매 입력마다 값 변경 →
+  //   원래 useEffect 가 매번 트리거되어 fetchRecommendations 폭주 (사용자 보고).
+  //   슬라이더 정지 후 350ms 안정되어야 1회 호출되도록 debounce.
+  //   - UI 표시 값(weights/budget/patience) 자체는 즉시 반영 — 슬라이더 라벨 등은 그대로 동작
+  //   - fetch 호출에만 debounced 값 사용
+  //   - workplace/incomeQuintile 은 슬라이더가 아니라 검색/선택 → debounce 불필요
+  const debouncedWeights = useDebouncedValue(weights, 350);
+  const debouncedBudget = useDebouncedValue(budget, 350);
+  const debouncedPatience = useDebouncedValue(patience, 350);
+
   // ─── 추천 결과 (실 API + mock 폴백) ──────────────────────
   useEffect(() => {
     if (!workplace) {
       setRecommendations([], null);
       return;
     }
-    if (!isWeightsValid(weights)) return;
+    if (!isWeightsValid(debouncedWeights)) return;
 
     const ac = new AbortController();
     let alive = true;
 
     const incomeMonthly = incomeQuintile ? QUINTILE_INCOME_MAP[incomeQuintile] : undefined;
 
-    fetchRecommendations({ workplace, budget, weights, patience, incomeMonthly }, ac.signal)
+    fetchRecommendations(
+      {
+        workplace,
+        budget: debouncedBudget,
+        weights: debouncedWeights,
+        patience: debouncedPatience,
+        incomeMonthly,
+      },
+      ac.signal,
+    )
       .then((result) => {
         if (!alive) return;
         setRecommendations(result.regions, result.source);
@@ -154,7 +175,7 @@ export function RecommendationPage() {
       alive = false;
       ac.abort();
     };
-  }, [workplace, budget, weights, patience, incomeQuintile, setRecommendations]);
+  }, [workplace, debouncedBudget, debouncedWeights, debouncedPatience, incomeQuintile, setRecommendations]);
 
   // ─── 스토어 → URL (replaceState, 디바운스 200ms) ──────────
   useEffect(() => {
