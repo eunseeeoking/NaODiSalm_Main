@@ -25,6 +25,8 @@ import {
 import type { ChartData, ChartDataset } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
 import type { AptComplex, LstmAnalysis, ArimaAnalysis, ConfidenceDataScope } from '../../../types/region-detail';
+import type { ChartData } from 'chart.js';
+import type { AptComplex, LstmAnalysis, ArimaAnalysis } from '../../../types/region-detail';
 import { useThemeStore } from '../../../stores/useThemeStore';
 
 // Chart.js 전역 등록 (한 번만)
@@ -187,6 +189,7 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
   ];
 
   const lineData: ChartData<'line', (number | null)[], string> = { labels, datasets };
+  const lineData = { labels, datasets } as ChartData<'line'>;
 
   const lineOptions = {
     responsive: true,
