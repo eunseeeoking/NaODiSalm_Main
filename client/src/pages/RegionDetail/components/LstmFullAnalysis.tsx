@@ -187,7 +187,6 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
   ];
 
   const lineData: ChartData<'line', (number | null)[], string> = { labels, datasets };
-  const lineData = { labels, datasets } as ChartData<'line'>;
 
   const lineOptions = {
     responsive: true,
