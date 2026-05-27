@@ -23,7 +23,7 @@ export function CommuteCompare({ data }: Props) {
   const monthlyDiff = Math.abs(monthlyTransit - monthlyCar);
 
   return (
-    <div className="h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card p-4 flex flex-col gap-3">
+    <div className="md:h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card p-4 flex flex-col gap-3">
       <div>
         <h3 className="text-sm font-bold text-ink-primary dark:text-ink-primary-dark">
           통근 비교

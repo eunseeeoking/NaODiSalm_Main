@@ -271,7 +271,7 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
   }, [isDark]);
 
   return (
-    <div className="h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card p-3 md:p-4 flex flex-col gap-3 md:gap-4">
+    <div className="md:h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card p-3 md:p-4 flex flex-col gap-3 md:gap-4">
       {/* 단지 헤더 */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">

@@ -182,16 +182,19 @@ export function RegionDetailPage() {
   }
 
   return (
-    //  모바일(<md): 전체 페이지 세로 스크롤 + 1열 stacking
-    //  데스크톱(md+): 화면 고정 + 12-grid 2단 레이아웃 (현재 동작)
-    <div className="w-screen md:h-screen min-h-screen flex flex-col bg-surface dark:bg-surface-dark md:overflow-hidden text-ink-primary dark:text-ink-primary-dark font-sans">
+    //  모바일(<md): main 내부 세로 스크롤 + 1열 stacking
+    //  데스크톱(md+): 화면 고정 + 12-grid 2단 레이아웃
+    <div className="w-screen h-screen flex flex-col bg-surface dark:bg-surface-dark overflow-hidden text-ink-primary dark:text-ink-primary-dark font-sans">
       <RegionDetailHeader
         region={region}
         onBack={() => navigate('/')}
         isDemoData={complexesSource === 'mock'}
       />
 
-      <main className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 p-3 md:overflow-hidden">
+      {/* flex-1 min-h-0: 헤더 아래 남은 공간을 정확히 차지
+          overflow-y-auto: 모바일에서 이 영역이 세로 스크롤
+          md:overflow-hidden: 데스크톱은 섹션별 내부 스크롤 유지 */}
+      <main className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden grid grid-cols-1 md:grid-cols-12 gap-3 p-3">
         {/* 좌: 미니 지도 — 모바일 풀폭 + 고정 높이, 데스크톱 4컬 */}
         <section className="col-span-1 md:col-span-4 h-[40vh] md:h-auto rounded-cardlg overflow-hidden bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card">
           <RegionMiniMap
@@ -223,8 +226,10 @@ export function RegionDetailPage() {
             />
           )}
 
-          {/* 가격 안정성 분석 + 통근 비교 — 모바일 1열, 데스크톱 3-grid */}
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 md:overflow-hidden">
+          {/* 가격 안정성 분석 + 통근 비교 — 모바일 1열, 데스크톱 3-grid
+              모바일: flex-1 제거 → auto height (main 스크롤로 처리)
+              데스크톱: md:flex-1 md:min-h-0 → flex column 남은 공간 채움 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:flex-1 md:min-h-0 md:overflow-hidden">
             <div className="col-span-1 md:col-span-2 md:overflow-auto">
               {(arimaLoading || lstmLoading) ? (
                 <LoadingBar label="가격 안정성 분석 중…" />
@@ -270,7 +275,9 @@ function LoadingBar({ label }: { label: string }) {
 
 function EmptyAnalysis() {
   return (
-    <div className="h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card flex items-center justify-center text-sm text-ink-tertiary dark:text-ink-tertiary-dark">
+    // h-full: 데스크톱(flex-1 grid)에서 행 전체 높이 채움
+    // min-h-[80px]: 모바일 auto-height 컨텍스트에서 최소 가시 영역 확보
+    <div className="min-h-[80px] md:h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card flex items-center justify-center text-sm text-ink-tertiary dark:text-ink-tertiary-dark">
       좌측 매물을 선택해 주세요.
     </div>
   );
@@ -278,7 +285,7 @@ function EmptyAnalysis() {
 
 function EmptyCommute() {
   return (
-    <div className="h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card flex items-center justify-center text-xs text-ink-tertiary dark:text-ink-tertiary-dark text-center px-3">
+    <div className="min-h-[80px] md:h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card flex items-center justify-center text-xs text-ink-tertiary dark:text-ink-tertiary-dark text-center px-3">
       직장이 설정되어야
       <br />
       통근 비교가 표시됩니다.

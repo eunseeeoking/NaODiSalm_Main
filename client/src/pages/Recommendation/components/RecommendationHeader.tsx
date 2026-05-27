@@ -71,93 +71,48 @@ export function RecommendationHeader() {
         <WorkplaceSearch />
       </div>
 
-      {/* 공유 버튼 — workplace 가 있을 때만 의미 있음. 모바일은 아이콘만 */}
-      <button
-        onClick={handleShare}
-        disabled={!workplace}
-        className="inline-flex items-center justify-center gap-1.5 p-2 rounded-card text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-        aria-label="현재 조건 URL 공유"
-        title={workplace ? '현재 조건을 URL로 공유' : '직장을 먼저 입력하세요'}
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+      {/* 공유 + 테마 토글 — ml-auto 로 우측 끝 고정 */}
+      <div className="ml-auto flex items-center gap-1 shrink-0">
+        <button
+          onClick={handleShare}
+          disabled={!workplace}
+          className="inline-flex items-center justify-center gap-1.5 p-2 rounded-card text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="현재 조건 URL 공유"
+          title={workplace ? '현재 조건을 URL로 공유' : '직장을 먼저 입력하세요'}
         >
-          <circle cx="18" cy="5" r="3" />
-          <circle cx="6" cy="12" r="3" />
-          <circle cx="18" cy="19" r="3" />
-          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-        </svg>
-        <span className="text-xs font-medium hidden sm:inline">
-          {copyState === 'ok' ? '복사됨' : copyState === 'fail' ? '실패' : '공유'}
-        </span>
-      </button>
-
-      {/* 테마 토글 */}
-      <button
-        onClick={toggleTheme}
-        className="inline-flex items-center justify-center p-2 rounded-card text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 transition-colors shrink-0"
-        aria-label="테마 전환"
-        title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
-      >
-        {theme === 'dark' ? (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2" />
-            <path d="M12 20v2" />
-            <path d="m4.93 4.93 1.41 1.41" />
-            <path d="m17.66 17.66 1.41 1.41" />
-            <path d="M2 12h2" />
-            <path d="M20 12h2" />
-            <path d="m6.34 17.66-1.41 1.41" />
-            <path d="m19.07 4.93-1.41 1.41" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
           </svg>
-        ) : (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-          </svg>
-        )}
-      </button>
+          <span className="text-xs font-medium hidden sm:inline">
+            {copyState === 'ok' ? '복사됨' : copyState === 'fail' ? '실패' : '공유'}
+          </span>
+        </button>
 
-      <Link
-        to="/about/data"
-        className="hidden sm:inline-block text-xs font-medium text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand shrink-0 transition-colors border-none"
-        title="공공데이터 4기관 융합 현황"
-      >
-        데이터 출처
-      </Link>
-
-      <Link
-        to="/explore"
-        className="hidden md:inline-block text-xs font-medium text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand shrink-0 transition-colors border-none"
-      >
-        시군구 탐색 →
-      </Link>
+        <button
+          onClick={toggleTheme}
+          className="inline-flex items-center justify-center p-2 rounded-card text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 transition-colors"
+          aria-label="테마 전환"
+          title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
+        >
+          {theme === 'dark' ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2" /><path d="M12 20v2" />
+              <path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
+              <path d="M2 12h2" /><path d="M20 12h2" />
+              <path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+            </svg>
+          )}
+        </button>
+      </div>
     </header>
   );
 }

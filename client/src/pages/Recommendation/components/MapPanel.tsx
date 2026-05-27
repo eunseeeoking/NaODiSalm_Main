@@ -362,11 +362,12 @@ export function MapPanel() {
         </div>
       )}
 
-      {/* 데이터 로딩 배지 — 지도 하단 중앙 (패널과 겹치지 않는 위치) */}
+      {/* 데이터 로딩 배지 — 지도 하단 중앙 (모바일 숨김, 데스크톱만 표시) */}
       {badgeText && (
         <div
           style={{ zIndex: 5 }}
           className={[
+            'hidden md:block',
             'absolute bottom-12 left-1/2 -translate-x-1/2 pointer-events-none',
             'px-2.5 py-1 rounded-card text-xs shadow-card font-medium',
             badgeKind === 'loading'

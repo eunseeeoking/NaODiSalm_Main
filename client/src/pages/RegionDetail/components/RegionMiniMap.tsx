@@ -41,10 +41,26 @@ export function RegionMiniMap({
     const map = new k.Map(containerRef.current, {
       center: new k.LatLng(region.lat, region.lng),
       level: 5,
+      draggable: true,       // 마우스/터치 드래그 명시 활성화
+      scrollwheel: true,     // 휠 줌 유지
+      disableDoubleClick: false,
+      disableDoubleClickZoom: false,
     });
+    // 컨테이너 크기 확정 후 relayout — 늦은 렌더링 대비 100ms 여유
+    setTimeout(() => {
+      map.relayout();
+      map.setDraggable(true);
+    }, 100);
     setMapInstance(map);
-    setTimeout(() => map.relayout(), 0);
   }, [status, mapInstance, region.lat, region.lng]);
+
+  // 윈도우 리사이즈 시 지도 재배치 (2뎁스와 동일하게)
+  useEffect(() => {
+    if (!mapInstance) return;
+    const onResize = () => mapInstance.relayout();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [mapInstance]);
 
   // 단지 마커 갱신
   useEffect(() => {

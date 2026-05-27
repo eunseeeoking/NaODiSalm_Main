@@ -20,6 +20,7 @@
  * ──────────────────────────────────────────────────────────────
  */
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useRecommendationStore } from '../../stores/useRecommendationStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { fetchRecommendations } from '../../api/recommendations';
@@ -197,15 +198,19 @@ export function RecommendationPage() {
 
       {/* 데이터 출처 배지 스트립 — 모바일 숨김 */}
       <div className="bg-surface-elevated dark:bg-surface-dark-elevated border-b border-line-light dark:border-line-dark px-5 py-1.5 hidden md:flex items-center gap-2 overflow-x-auto shrink-0">
-        <span className="text-2xs font-semibold text-ink-tertiary dark:text-ink-tertiary-dark shrink-0 mr-1">
+        <Link
+          to="/about/data"
+          className="text-2xs font-semibold text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 underline underline-offset-2 shrink-0 mr-1 transition-colors"
+          title="공공데이터 4기관 융합 현황 보기"
+        >
           데이터 출처
-        </span>
+        </Link>
         {[
-          { label: 'MOLIT RTMS',         desc: '국토부 실거래가 1.3M건 (2006~2025)' },
-          { label: '한국부동산원 R-ONE',  desc: '공동주택 매매·전세 지수 (2015~2026)' },
+          { label: 'MOLIT RTMS',          desc: '국토부 실거래가 1.3M건 (2006~2025)' },
+          { label: '한국부동산원 R-ONE',   desc: '공동주택 매매·전세 지수 (2015~2026)' },
           { label: '한국교통안전공단 TAGO', desc: '대중교통 품질 점수 (배차·야간·정류장)' },
-          { label: 'LH 청년주택',         desc: '행복주택·청년매입임대·전세임대' },
-          { label: '통계청',              desc: '청년 1인가구 소득 5분위' },
+          { label: 'LH 청년주택',          desc: '행복주택·청년매입임대·전세임대' },
+          { label: '통계청',               desc: '청년 1인가구 소득 5분위' },
         ].map(({ label, desc }) => (
           <span
             key={label}
@@ -220,7 +225,6 @@ export function RecommendationPage() {
       {/*
         ── 모바일 필터 바 (md 미만에서만 노출) ─────────────────────
         검색 바 바로 하단에 고정. 가로 스크롤 가능.
-        각 버튼은 활성 시 brand 채워짐 / 비활성 시 brand-50 배경.
       */}
       <div className="md:hidden flex overflow-x-auto gap-2 px-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated shrink-0 scroll-x-thin">
         {MOBILE_FILTER_ITEMS.map(({ key, label }) => {
