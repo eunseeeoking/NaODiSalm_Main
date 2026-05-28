@@ -9,6 +9,61 @@
 /* ─── Pretendard Variable (한글 폰트, 가변 가중치) ─── */
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
 
+/* ─── 로컬 한글 폰트 (Landing /intro 전용) ─────────────────────────
+ *  · SB Aggro     — 타이틀용 (디스플레이/세리프 임팩트)
+ *  · Noto Sans KR — 본문용 (가독성 우선, Variable Weight 100~900)
+ *
+ *  적용 위치:
+ *    .font-aggro  → /intro 타이틀 (h1/h2/h3, section label, big number)
+ *    .font-noto   → /intro 본문 (p, description, body text)
+ *
+ *  다른 페이지(Recommendation/RegionDetail/AboutData)는 영향 없음 — Pretendard 유지.
+ *  파일 경로: client/public/font/*.ttf  (Vite 가 /font/* 로 정적 서빙)
+ *  font-display: swap — fallback Pretendard 즉시 노출, 로컬 폰트 도착 시 교체.
+ * ────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'SB Aggro';
+  font-weight: 300;
+  font-style: normal;
+  src: url('/font/SB%20%EC%96%B4%EA%B7%B8%EB%A1%9C%20L.ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SB Aggro';
+  font-weight: 500;
+  font-style: normal;
+  src: url('/font/SB%20%EC%96%B4%EA%B7%B8%EB%A1%9C%20M.ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SB Aggro';
+  font-weight: 700 900;
+  font-style: normal;
+  src: url('/font/SB%20%EC%96%B4%EA%B7%B8%EB%A1%9C%20B.ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans KR Local';
+  font-weight: 100 900;
+  font-style: normal;
+  src: url('/font/NotoSansKR-VariableFont_wght.ttf') format('truetype-variations'),
+       url('/font/NotoSansKR-VariableFont_wght.ttf') format('truetype');
+  font-display: swap;
+}
+
+.font-aggro {
+  font-family: 'SB Aggro', 'Pretendard Variable', 'Pretendard', system-ui, sans-serif;
+  letter-spacing: -0.015em;
+  word-break: keep-all; /* 한글 타이틀 줄바꿈 단어 단위로 */
+}
+
+.font-noto {
+  font-family: 'Noto Sans KR Local', 'Noto Sans KR', 'Pretendard Variable', 'Pretendard',
+    system-ui, sans-serif;
+  letter-spacing: -0.005em;
+  word-break: keep-all; /* 본문도 한글 자연스러운 줄바꿈 */
+}
+
 /* ─── Tailwind directives ─── */
 @tailwind base;
 @tailwind components;

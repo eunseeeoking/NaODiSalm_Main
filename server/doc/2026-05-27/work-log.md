@@ -13,7 +13,7 @@
 ### ① typecheck + build 확인 ★ 5분 — 필수
 
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\client
+cd C:\git\NaODiSalm_Main\client
 npm run typecheck       # tsc --noEmit
 npm run build           # tsc -b && vite build
 
@@ -31,7 +31,7 @@ npm run typecheck       # tsc --noEmit
 권한 복구 후 `prisma db push` 로 밀어버린 상태. schema 와 migrations 폴더가 어긋나 있을 수 있음.
 
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\server
+cd C:\git\NaODiSalm_Main\server
 
 # 현재 schema vs DB 일치 확인
 npx prisma migrate status
@@ -54,7 +54,7 @@ npx prisma migrate dev --name add_odsay_usage_daily --create-only
 ### ③ 회귀 테스트 (수동, 브라우저) ★ 15분 — 필수
 
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\client
+cd C:\git\NaODiSalm_Main\client
 npm run dev   # vite, http://localhost:5173
 ```
 
@@ -84,7 +84,7 @@ npm run dev   # vite, http://localhost:5173
 `.env` 에 `MOLIT_SERVICE_KEY` 가 있는지 확인. 있으면 LH 데이터 실 적재:
 
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\server
+cd C:\git\NaODiSalm_Main\server
 type .env | findstr MOLIT_SERVICE_KEY     # PowerShell: Select-String
 
 # 키 있으면 실 LH 데이터 적재

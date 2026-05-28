@@ -221,7 +221,7 @@ complexCount: c.agg.complexCount,
 ## 6. 변경 파일 통계
 
 ```
-서버 (C:\git\2026_MOLIT_CONTEST\server)
+서버 (C:\git\NaODiSalm_Main\server)
   src/routes/domains/lstm.ts                   +60 lines (calcLstmConfidence + 동적 산출)
   src/routes/domains/arima.ts                  +80 lines (3단계 폴백 + dataScope)
   src/services/recommendation/scoring.ts        +6 lines (complexCount 필드)
@@ -229,7 +229,7 @@ complexCount: c.agg.complexCount,
   scripts/diagnoseConfidence.ts              신규 ~250 lines
   package.json                                  +1 script
 
-클라이언트 (C:\git\2026_MOLIT_CONTEST\client)
+클라이언트 (C:\git\NaODiSalm_Main\client)
   src/types/region-detail.ts                   +12 lines (ConfidenceDataScope)
   src/pages/RegionDetail/components/LstmFullAnalysis.tsx  +25 lines (SCOPE_META 칩)
   src/pages/RegionDetail/data/mockComplexes.ts +25 lines (잘린 부분 복구 + findMockComplex)
@@ -359,7 +359,7 @@ cd client  && npm run typecheck   → EXIT:0 ✅
 ### 13.4 운영 절차 (사용자)
 
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\server
+cd C:\git\NaODiSalm_Main\server
 npm run seed:lh -- --reset      # 기존 5자리 row 삭제 후 지오코딩 결과로 재적재
 # 마지막 로그:
 #   지오코딩: ok N / fail M / cache hit K / 주소없음 skip S
@@ -766,3 +766,206 @@ client typecheck 정리 (1)
 ## 25. 다음 세션 첫 한 줄 (최종)
 
 > **"Phase 2-B 옵션 B + 안정성 핫픽스(ARIMA JOIN/try-catch/process 안전망/슬라이더 debounce) ✅. 기능 정상 검증 완료. 다음 세션 진입 단서: (1) ODsay 3×3 격자 재설계 — B(Neighbor cover) 우선 검토, (2) 클라이언트 UI/UX 후속, (3) 잔여 9개 라우터 try-catch 일괄 도입. + ML 세션 산출물 도착 시 README 스크린샷 + 기획서 §6 KPI/§7-D 베타 슬롯 채움 → Render 배포 점검 → 마감 24h 전 제출."**
+
+---
+
+## 26. /intro 랜딩 페이지 + 영상 촬영 기획서 + 폰트 적용 (D-1 오후 세션)
+
+### 26.0 진입 컨텍스트
+
+- 사용자 요청: "70시간 계획 미이행 항목 파악 후, 마감 직전이라 ① 랜딩페이지 ② 영상 촬영 기획서 마무리 ③ README 정리".
+- 7day-roadmap.md (DAY 1~7) vs 실제 진행 매트릭스 대조 → 미이행 = TAGO 시드, 베타 응답·§7-D 베타 슬롯, §6 운영KPI 4건 슬롯, **랜딩페이지(7day-roadmap에 항목 누락)**, README 스크린샷·데모 영상.
+- 사용자 결정 (4문항):
+  - 랜딩 형태: `/intro` 새 라우트로 분리 (기존 `/` Depth 2 유지)
+  - 주요 CTA: 서비스 설명 + 데모 노출 (회원가입 강요 X)
+  - 영상 기획서: 30~60초 데모 GIF/동영상용 콘티
+  - README: 후순위 (이번 세션 미진행)
+
+### 26.1 신규 — `/intro` 랜딩 페이지
+
+```
+client/src/pages/Landing/index.tsx                            신규 ~510 lines
+  · 라우트: /intro (App.tsx 1줄 추가, 기존 / 동작 100% 유지)
+  · 7개 섹션: Hero / Pain / Flow / Diff / Numbers / DemoCTA / Footer
+  · DemoCardMock + ArimaChartMock 컴포넌트 (실 화면 캡쳐 도착 전 placeholder)
+  · IntersectionObserver 기반 SectionReveal — 진입 시 fade-up 1회성
+    - rootMargin '-10%', threshold 0.15, duration 700ms ease-out
+    - prefers-reduced-motion 사용자 즉시 visible (a11y)
+    - IO 미지원 환경 즉시 visible (안전망)
+
+client/src/App.tsx                                            +2 lines
+  · import LandingPage + <Route path="/intro">
+```
+
+### 26.2 톤·시각 디자인 (3회 반복 조정)
+
+**1차 (다크 모드 영향 받음)**: `bg-surface dark:bg-surface-dark` 사용 → 사용자 피드백 "너무 어둡다, 공모전 제출용 화이트톤".
+
+**2차 (화이트톤 + 차트 가시성 + 스크롤 reveal)**:
+- 페이지 전체 `dark:` variant 제거, `bg-white` 고정 → 사용자 피드백 "카드가 배경에 묻혀서 텍스트만 떠있는 느낌".
+- ArimaChartMock 가독성 보강: 가로 그리드 5줄 + Y축 라벨, X축 시간 라벨(2021/2026/2029), 학습/예측 분리선 + 인-차트 라벨, 영역 음영 linearGradient, 라인 두께 1.5→2.5/3px, 분기점·종점 dot 4r + 흰 stroke.
+- SectionReveal 도입.
+
+**3차 (카드 입체감)**: 루트 `bg-white` → `bg-surface(#F5F6F8)` 전환 + 모든 카드 `shadow-card transition-shadow hover:shadow-card-hover`. AboutData와 톤 일치.
+
+**4차 (폰트 + 가독성)**:
+- 사용자: "타이틀 SB 어그로, 본문 NotoSans, 심사위원 첫 화면"
+- `client/public/font/` 4개 TTF 확인:
+  - `SB 어그로 L.ttf` / `M.ttf` / `B.ttf`
+  - `NotoSansKR-VariableFont_wght.ttf`
+- `client/src/css/index.css` 에 @font-face 4개 등록 (한글 파일명 percent-encoded URL `/font/SB%20%EC%96%B4%EA%B7%B8%EB%A1%9C%20*.ttf`, `font-display: swap`)
+- `.font-aggro` / `.font-noto` 유틸 클래스 신규 — fallback chain은 Pretendard 시스템.
+- Landing 루트에 `font-noto`, 타이틀 11곳에 `font-aggro` (h1/h2/h3 + section label + 큰 숫자 + 로고).
+- Hero 본문 `text-sm md:text-base leading-relaxed` → `text-base md:text-lg leading-[1.75]`.
+- 큰 숫자(Pain 통계, Number 카드) 폰트 크기 한 단계 ↑.
+
+**5차 (로고 교체)**:
+- 기존: 인라인 `<div>나</div>` 톤. 사용자 요청 "public/logo.svg 쓰자".
+- Header / Footer 2곳 모두 `<img src="/logo.svg" alt="나어디삶 로고" width={32} height={32} />` 로 교체.
+
+### 26.3 신규 — 영상 촬영 기획서
+
+```
+server/doc/2026-05-28/video-shoot-plan.md                     신규 ~250 lines
+  · 30~60초 데모 GIF/동영상용 콘티 (README §🎬 슬롯 채울 용도)
+  · 0~9 섹션: 사전 체크 / 8씬 리스트 / 자막 가이드 / 내레이션 30초 본
+                ffmpeg 인코딩 명령 / 후처리 체크리스트 / A·B·C 백업 시나리오 / 6대 함정
+  · 50초 8씬 동선:
+      Scene 1 (5초) Hero & 진입 (/intro)
+      Scene 2 (4초) "지금 추천 받기" 클릭 → /
+      Scene 3 (8초) 강남역 입력 + 사회초년생 프리셋 + 자동 fetch
+      Scene 4 (7초) 추천 카드 8선 + 지도 동기화
+      Scene 5 (6초) 안전 가중치 ↑ → 재정렬 (debounce 350ms 시연)
+      Scene 6 (8초) 1위 카드 클릭 → /region/1168010600
+      Scene 7 (7초) ARIMA 도넛 + dataScope 칩 단지간 전환
+      Scene 8 (5초) /about/data 4기관 카드 클로징
+```
+
+### 26.4 진입 경로 점검 — `/intro` 노출
+
+- **현재**: `/intro` 는 직접 URL 접근만 가능. Depth 2(`/`), Depth 3(`/region/:code`), AboutData(`/about/data`) 어디에도 `/intro` 로의 링크 없음.
+- **의도된 동작**: 심사위원이 제출 URL 또는 README 링크를 통해 `/intro` 로 직접 진입 → "지금 추천 받기" CTA 로 `/` 진입.
+- **위험**: 일반 사용자가 `/` 로 먼저 들어오면 랜딩을 영원히 안 봄. 채점위원 시연 동선이 깨질 수 있음.
+- **권장 (마감 전 결정 필요)**:
+  - 옵션 A: 그대로 유지 + 제출 시 URL을 `https://<vercel>/intro` 로 명시
+  - 옵션 B: 헤더 (`RecommendationHeader.tsx`)에 "서비스 소개" 작은 링크 1개 추가 (이미 "데이터 출처" 링크 있는 자리 옆)
+  - 옵션 C: 신규 방문자(`localStorage.firstVisit`) 첫 진입 시 `/intro` 자동 리다이렉트 — 복귀 사용자 영향 0, 작업량 ~10줄
+
+### 26.5 변경 파일 통계 (본 세션)
+
+```
+신규 (2)
+  client/src/pages/Landing/index.tsx                          ~510 lines
+  server/doc/2026-05-28/video-shoot-plan.md                   ~250 lines
+
+수정 (3)
+  client/src/App.tsx                                          +2  lines  (Landing import + Route)
+  client/src/css/index.css                                    +55 lines  (@font-face 4 + .font-aggro / .font-noto)
+  server/doc/2026-05-28/work-log.md                           +본 §26 (현재 작성 중)
+
+총 신규/수정    ~820 lines + 폰트 자산 4 TTF 활용
+```
+
+### 26.6 D-1 잔존 미이행 (사용자 결정 필요)
+
+```
+[★★★] 사용자 직접 — typecheck 양측 EXIT:0 확인
+        cd C:\git\NaODiSalm_Main\client && npm run typecheck
+        cd C:\git\NaODiSalm_Main\server && npm run typecheck
+
+[★★★] /intro 시각 회귀 1회
+        npm run dev → http://localhost:5173/intro
+        - 로고 SVG 정상 노출 (헤더 + 푸터)
+        - SB 어그로 폰트 적용 확인 (Hero h1, section h2, 큰 숫자)
+        - NotoSans 본문 적용 확인 (Hero 부제, 카드 description)
+        - 스크롤 시 섹션이 아래에서 올라오는 fade-up 동작
+        - 카드 hover 시 그림자 lift
+        - 카드들이 배경 위에 떠 있는 입체감 (bg-surface vs bg-white)
+
+[★★]  영상 촬영 (video-shoot-plan.md §0 체크리스트 → §1 씬 1~8)
+        - ODsay 캐시 워밍업 (강남역 1회 호출) 필수
+        - 라이트 모드 + DevTools 닫힘 + 책갈피 숨김
+        - 본편 30~40분 + 후처리 20분
+        - docs/screenshots/04-demo.gif 로 저장
+
+[★★]  /intro 진입 경로 결정 (§26.4 옵션 A/B/C)
+
+[★]   README 마무리 (다음 세션)
+        - §📸 스크린샷 5장 캡쳐 (Win + Shift + S)
+        - §🎬 데모 GIF 경로 첨부
+        - 5개 기관 / 6개 기관 표기 일관성 (§4 표 vs Landing Hero 배지 5개 + ODsay·Kakao 2개)
+
+[★]   기획서 §6 운영KPI 슬롯 4건 + §7-D 베타 응답
+        - p95 응답시간 / NPS / 데이터 융합 카운트 / 베타 정성 인터뷰 3건
+```
+
+### 26.7 개선여지 (마감 후 v1.1)
+
+```
+① 폰트 파일명 ASCII rename
+   "SB 어그로 *.ttf" 한글+공백 파일명 → "SB-Aggro-Bold.ttf" 등 ASCII 명으로 변경.
+   현재 percent-encoded URL 로 우회했지만 일부 CDN/캐싱 환경에서 실패 가능.
+   PowerShell 1줄로 rename + CSS @font-face url() 동시 갱신 (10분).
+
+② 영상 첨부 후 Hero 동영상 백그라운드
+   현재 Hero 는 정적 텍스트만. 데모 GIF 도착 시 Hero 우측에 작은 muted autoplay loop
+   embed (4~6초). 채점위원 시각 임팩트 +α. <video muted autoplay loop> 1개.
+
+③ 진입 경로 옵션 C (신규 방문자 자동 /intro 리다이렉트)
+   localStorage 가드 + Recommendation/index.tsx useEffect 5줄.
+   복귀 사용자 영향 0, 채점위원 첫 방문 시 랜딩 100% 노출 보장.
+
+④ 모바일 hero 본문 압도 위험
+   text-base md:text-lg + leading-1.75 가 모바일에서 본문이 hero 를 압도할 가능성.
+   text-sm → text-base (md+ 만 lg) 한 단계 축소 검토 후 모바일 회귀 1회.
+
+⑤ ArimaChartMock 도넛 추가
+   실 Depth 3 화면은 라인 차트 + 신뢰도 도넛 2개 컴포넌트인데 mock 에는 도넛 없음.
+   현재 우상단 "88" 텍스트만 → 작은 도넛 SVG (24x24) 추가하면 실 화면과 톤 일치.
+
+⑥ AboutData 페이지도 동일한 폰트 패턴
+   /intro 와 /about/data 가 채점위원이 가장 많이 볼 두 화면. about/data 도 .font-aggro
+   타이틀 적용하면 일관성. ~20줄 수정.
+
+⑦ DemoCTA 그라데이션 카드의 다크 톤
+   "강남역으로 출퇴근하는 사회초년생이라면" 그라데이션 카드가 페이지 유일한 다크 영역.
+   사용자가 "화이트톤" 강조했으므로 grad 톤 다운 (brand-400 → brand-500) 검토.
+
+⑧ SectionReveal threshold 모바일 조정
+   현재 0.15 → 모바일 스크롤 빠르면 reveal 안 보일 수 있음. 0.05 + delay 단축 옵션.
+
+⑨ /intro 메타태그 (og:image, twitter:card)
+   index.html 또는 react-helmet 으로 SNS 공유 시 미리보기 이미지 추가.
+   채점위원이 URL 공유받았을 때 첫인상 개선.
+
+⑩ Footer 의 ML repo 외부 링크
+   현재 푸터에 ML repo 링크 없음. README 의 "관련 저장소" 처럼 GitHub URL 추가.
+```
+
+### 26.8 마무리 판정
+
+```
+인트로는 이대로 마무리해도 좋은 상태:
+  ✅ 화이트톤 + 카드 입체감 + 그림자 hover
+  ✅ SB 어그로 타이틀 / NotoSans 본문 / Pretendard fallback
+  ✅ logo.svg 헤더·푸터 적용
+  ✅ IntersectionObserver 스크롤 reveal (a11y reduced-motion 회피)
+  ✅ Depth 3 차트 모사 가독성 보강 (그리드·축·음영·dot)
+  ✅ 채점위원 첫 화면 동선 7섹션 자연스러운 흐름
+
+마감 전 마지막 액션 3개만:
+  1. typecheck (5분)
+  2. 시각 회귀 1회 (10분)
+  3. /intro 진입 경로 옵션 결정 (옵션 A 권장 — 변경 없음)
+
+이후 트랙:
+  - 영상 촬영 (video-shoot-plan.md 따라)
+  - README 스크린샷·GIF 첨부 (다음 세션)
+  - 기획서 §6 운영KPI + §7-D 베타 슬롯 (다음 세션)
+  - Render 배포 점검 → 마감 24h 전 제출
+```
+
+### 26.9 다음 세션 첫 한 줄 (D-Day 또는 D+0)
+
+> **"`/intro` 랜딩 + 영상 촬영 기획서 + 폰트(SB 어그로·NotoSans) + logo.svg + 스크롤 reveal + 카드 입체감 ✅. 사용자 typecheck/시각 회귀/영상 촬영 후, README §📸·§🎬 슬롯 채움 + 기획서 §6 운영KPI·§7-D 베타 슬롯 채움 + Render 배포 점검 → 마감 24h 전 제출. 진입 경로 옵션 C (신규 방문자 /intro 자동 리다이렉트, ~10줄)는 v1.1 후순위."**
+

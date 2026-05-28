@@ -49,7 +49,7 @@ client/src/pages/Recommendation/components/logo.png
 ### 미반영 (의도적)
 ```
 README.md / 루트 package.json / repo 이름
-  · 공모전 출품 식별자(2026_MOLIT_CONTEST) 는 그대로 유지
+  · 공모전 출품 식별자(NaODiSalm_Main) 는 그대로 유지
   · 발표 자료 작성 시점에 일괄 정리
 ```
 

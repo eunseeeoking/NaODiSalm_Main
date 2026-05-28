@@ -47,8 +47,8 @@
 
 ### 1. typecheck 확인 ★ 5분
 ```
-cd C:\git\2026_MOLIT_CONTEST\client && npx tsc --noEmit
-cd C:\git\2026_MOLIT_CONTEST\server && npx prisma generate && npx tsc --noEmit
+cd C:\git\NaODiSalm_Main\client && npx tsc --noEmit
+cd C:\git\NaODiSalm_Main\server && npx prisma generate && npx tsc --noEmit
 
 → seoulRushHourCarMinutes export 추가로 인한 타입 영향 없을 것으로 예상
   이상 있으면 odsay.ts export 확인
@@ -619,7 +619,7 @@ curl -X POST http://localhost:4000/api/recommendations `
 ### 환경 세팅
 ```powershell
 git clone <repo>
-cd 2026_MOLIT_CONTEST
+cd NaODiSalm_Main
 
 # 루트
 npm install

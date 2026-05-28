@@ -196,7 +196,7 @@ curl -X POST http://localhost:4000/api/recommendations \
 ## 폴더 구조
 
 ```
-2026_MOLIT_CONTEST/
+NaODiSalm_Main/
 ├── client/                     # Vite + React SPA
 │   └── src/
 │       ├── pages/Recommendation/   # Depth 1/2/3 메인 UI

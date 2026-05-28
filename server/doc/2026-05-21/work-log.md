@@ -481,7 +481,7 @@ t_training_result                                →  2,143건 / 모두 expected
 
 ### 12.4 시드 실행 절차 (사용자)
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\server
+cd C:\git\NaODiSalm_Main\server
 npm run seed:legal-dong
 # 콘솔 로그:
 # [seed:legal-dong] start
@@ -623,7 +623,7 @@ URL:    https://www.code.go.kr/stdcode/regCodeL.do
 #### 2) 파일 배치
 ```
 다운로드한 파일을 다음 경로에 저장:
-  C:\git\2026_MOLIT_CONTEST\server\data\legal_dong_codes.txt
+  C:\git\NaODiSalm_Main\server\data\legal_dong_codes.txt
   (server/data/ 폴더가 없으면 생성)
 
 ※ 인코딩 변환 불필요 — 스크립트가 EUC-KR/CP949 → UTF-8 자동 처리
@@ -631,7 +631,7 @@ URL:    https://www.code.go.kr/stdcode/regCodeL.do
 
 #### 3) 의존성 설치 + 시드 실행
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\server
+cd C:\git\NaODiSalm_Main\server
 npm install                # iconv-lite 추가됨
 npm run seed:bjd
 
@@ -743,7 +743,7 @@ https://github.com/kr-legal-dong/kr-legal-dong
 ### 14.4 사용자 액션 — 한 줄
 
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\server
+cd C:\git\NaODiSalm_Main\server
 npm run seed:bjd
 ```
 
@@ -790,7 +790,7 @@ WHERE ac.sigungu_code LIKE '11%';
 ### 14.6 브라우저 시연 검증
 
 ```
-1. cd C:\git\2026_MOLIT_CONTEST && npm run dev
+1. cd C:\git\NaODiSalm_Main && npm run dev
 2. http://localhost:5173/ → "강남역" 검색
 3. 우상단 DEMO 뱃지 자동 소거 (서버 200 OK → dataSource='api')
 4. 카드 8건 + 1위 클릭 → Depth 3 진입

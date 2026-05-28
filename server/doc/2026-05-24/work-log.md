@@ -418,8 +418,8 @@ server/doc/2026-05-24/proposal-draft.md   ~250 lines, 7개 섹션
 ### 7.6 검증·배포 작업 (Day 7)
 ```
 [ ] typecheck (client + server)
-    cd C:\git\2026_MOLIT_CONTEST\client && npx tsc --noEmit
-    cd C:\git\2026_MOLIT_CONTEST\server && npx prisma generate && npx tsc --noEmit
+    cd C:\git\NaODiSalm_Main\client && npx tsc --noEmit
+    cd C:\git\NaODiSalm_Main\server && npx prisma generate && npx tsc --noEmit
 
 [ ] db:snapshot 재실행
     cd server && npm run db:snapshot

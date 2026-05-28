@@ -258,7 +258,7 @@ EmptyState "예산 조정하기" (EmptyState.tsx)
 
 ```
 변경 직후마다 typecheck:
-  cd C:\git\2026_MOLIT_CONTEST\client && npx tsc --noEmit
+  cd C:\git\NaODiSalm_Main\client && npx tsc --noEmit
   → 모든 단계 EXIT:0
 
 서버 측 코드 변경 없음 — server typecheck 미실행 (영향 없음).

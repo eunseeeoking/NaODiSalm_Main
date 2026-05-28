@@ -174,7 +174,7 @@ isDark 변경 시 useEffect 로 차트 key 갱신
 
 ### 윈도우 측 (user 환경에서 직접)
 ```powershell
-cd C:\git\2026_MOLIT_CONTEST\client
+cd C:\git\NaODiSalm_Main\client
 npm install                                              # ← chart.js + react-chartjs-2 설치
 npm run typecheck                                        # ← tsc -b --noEmit
 npm run dev                                              # ← 브라우저 검증

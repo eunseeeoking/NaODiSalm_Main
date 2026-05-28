@@ -102,7 +102,7 @@ t_reb_price_index  1,116건  ✅
 
 ```powershell
 # 서버 기동
-cd C:\git\2026_MOLIT_CONTEST
+cd C:\git\NaODiSalm_Main
 npm run dev
 
 # 강남역 추천 API 테스트

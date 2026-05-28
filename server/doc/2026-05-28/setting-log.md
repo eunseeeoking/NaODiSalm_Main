@@ -66,7 +66,7 @@ DB:       molit_contest
 ### 2.3 생성 파일
 
 ```
-C:\git\2026_MOLIT_CONTEST\backup\
+C:\git\NaODiSalm_Main\backup\
   backup-daily.ps1      매일 02:00 — 소형 테이블 전체 + 대형 테이블 DDL만
   backup-weekly.ps1     매주 일요일 03:00 — 전체 풀 덤프
   setup-scheduler.ps1   Windows 작업 스케줄러 등록 스크립트
@@ -234,9 +234,9 @@ cd client && npx tsc -b --noEmit → EXIT:0 (출력 없음)
    GitHub Secrets 이전 후 전체 재발급 계획. 이전까지 .env git 커밋 절대 금지.
 
 ⑤ 루트 vercel.json 잔존 가능성
-   세션 중 실수로 C:\git\2026_MOLIT_CONTEST\vercel.json 생성.
+   세션 중 실수로 C:\git\NaODiSalm_Main\vercel.json 생성.
    git status로 확인 후 미커밋 상태면 삭제:
-   Remove-Item C:\git\2026_MOLIT_CONTEST\vercel.json
+   Remove-Item C:\git\NaODiSalm_Main\vercel.json
 ```
 
 ---

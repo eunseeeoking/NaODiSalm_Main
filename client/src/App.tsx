@@ -2,6 +2,7 @@
  * 라우트 컨테이너 + 테마 적용
  *
  *  /              → Depth 2 · 지역 추천 (메인)
+ *  /intro         → 서비스 소개 + 데모 노출 랜딩 (Phase 7, 2026-05-28)
  *  /region/:code  → Depth 3 · 단지 상세
  *  /about/data    → 4기관 데이터 융합 현황
  *  *              → / 로 리다이렉트
@@ -19,6 +20,7 @@ import { RecommendationPage } from './pages/Recommendation';
 // import { ExplorePage } from './pages/Explore'; // 2026-05-28: 로그인 미사용, 401 방지
 import { RegionDetailPage } from './pages/RegionDetail';
 import { AboutDataPage } from './pages/AboutData';
+import { LandingPage } from './pages/Landing';
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
@@ -33,6 +35,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<RecommendationPage />} />
+      <Route path="/intro" element={<LandingPage />} />
       <Route path="/region/:legalDongCode" element={<RegionDetailPage />} />
       {/* <Route path="/explore" element={<ExplorePage />} /> */}
       <Route path="/about/data" element={<AboutDataPage />} />
