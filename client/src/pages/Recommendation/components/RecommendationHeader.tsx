@@ -56,7 +56,7 @@ export function RecommendationHeader() {
 
   return (
     <header className="bg-surface-elevated dark:bg-surface-dark-elevated border-b border-line-light dark:border-line-dark px-3 md:px-5 py-2.5 md:py-3 flex items-center gap-2 md:gap-3 shadow-card">
-      <h1 className="text-base md:text-lg font-extrabold text-ink-primary dark:text-ink-primary-dark tracking-tight shrink-0 flex items-center gap-1.5">
+      <h1 className="text-base md:text-lg font-extrabold text-ink-primary dark:text-ink-primary-dark tracking-tight shrink-0 flex items-center gap-1.5 cursor-default select-none">
         <img src="/logo.svg" alt="나어디삶 로고" className="w-6 h-6 md:w-7 md:h-7" />
         <span className="hidden sm:inline">나어디삶</span>
       </h1>

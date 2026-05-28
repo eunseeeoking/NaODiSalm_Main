@@ -199,6 +199,13 @@ export function RecommendationPage() {
       {/* 데이터 출처 배지 스트립 — 모바일 숨김 */}
       <div className="bg-surface-elevated dark:bg-surface-dark-elevated border-b border-line-light dark:border-line-dark px-5 py-1.5 hidden md:flex items-center gap-2 overflow-x-auto shrink-0">
         <Link
+          to="/intro"
+          className="text-2xs font-semibold text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 underline underline-offset-2 shrink-0 transition-colors"
+          title="나어디삶 서비스 소개 페이지 (/intro)"
+        >
+          소개 페이지
+        </Link>
+        <Link
           to="/about/data"
           className="text-2xs font-semibold text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 underline underline-offset-2 shrink-0 mr-1 transition-colors"
           title="공공데이터 4기관 융합 현황 보기"

@@ -47,7 +47,7 @@ export function RegionDetailHeader({ region, onBack, isDemoData = false }: Props
           <span className="hidden sm:inline">돌아가기</span>
         </button>
 
-        <div className="hidden lg:flex items-center gap-1.5 text-sm font-bold text-ink-primary dark:text-ink-primary-dark tracking-tight pr-1">
+        <div className="hidden lg:flex items-center gap-1.5 text-sm font-bold text-ink-primary dark:text-ink-primary-dark tracking-tight pr-1 cursor-default select-none">
           <img src="/logo.svg" alt="" className="w-5 h-5" aria-hidden="true" />
           <span>나어디삶</span>
           <span className="text-ink-tertiary dark:text-ink-tertiary-dark font-medium mx-1">·</span>
