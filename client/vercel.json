@@ -12,6 +12,10 @@
     {
       "source": "/health",
       "destination": "https://molit-server.onrender.com/health"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

@@ -355,7 +355,21 @@ function ArimaChartMock() {
 
 /* ────────────────────────── 페이지 ────────────────────────── */
 
+/** App.tsx RootRoute 와 동기화되는 키 */
+const INTRO_SEEN_KEY = 'nadirisal:intro-seen';
+
 export function LandingPage() {
+  // /intro 에 직접 접근한 경우에도 플래그를 세팅해 둔다.
+  // 이렇게 해야 CTA → "/" 이동 시 RootRoute 가 "복귀 방문자"로 판단해
+  // RecommendationPage 를 바로 보여준다 (무한 리다이렉트 방지).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(INTRO_SEEN_KEY, '1');
+    } catch {
+      // localStorage 차단 환경(시크릿 모드 등) — 무시
+    }
+  }, []);
+
   return (
     // ⚠️ 화이트톤 고정: dark: variant 일절 사용 안 함.
     //    페이지 배경은 surface(#F5F6F8 토스톤 살짝 회색) — 흰 카드가 떠 보이도록.
