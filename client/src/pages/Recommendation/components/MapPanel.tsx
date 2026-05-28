@@ -401,7 +401,7 @@ export function MapPanel() {
         <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-fast rounded-sm" />30분</span>
         <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-medium rounded-sm" />45분</span>
         <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-slow rounded-sm" />60분</span>
-        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-sloslowest rounded-sm" />60분 이상</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-slowest rounded-sm" />60분 이상</span>
       </div>
     </div>
   );
