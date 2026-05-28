@@ -8,6 +8,7 @@
  *  - LH 집계는 별도 컴포넌트 <LhAggregateBanner> 가 상단에서 처리
  *  - propertyKind 필드는 유지 (Phase 3 의 VILLA/OFFICETEL 분기에 재사용)
  */
+import { useDragScroll } from '../../../hooks/useDragScroll';
 import type { AptComplex } from '../../../types/region-detail';
 
 interface Props {
@@ -28,6 +29,9 @@ function priceVolatility3y(c: AptComplex): number {
 }
 
 export function ComplexCardList({ complexes, selectedId, onSelect }: Props) {
+  // 훅은 early return 보다 먼저 (Rules of Hooks)
+  const cardScrollRef = useDragScroll<HTMLDivElement>();
+
   if (complexes.length === 0) {
     return (
       <div className="shrink-0 h-32 rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card flex items-center justify-center text-sm text-ink-tertiary dark:text-ink-tertiary-dark">
@@ -48,7 +52,7 @@ export function ComplexCardList({ complexes, selectedId, onSelect }: Props) {
         </h2>
       </div>
 
-      <div className="overflow-x-auto -mx-1 px-1 pb-1">
+      <div ref={cardScrollRef} className="overflow-x-auto scroll-x-slider -mx-1 px-1 pb-1">
         <div className="flex gap-2.5 min-w-min">
           {complexes.map((c) => {
             const isSelected = c.complexId === selectedId;

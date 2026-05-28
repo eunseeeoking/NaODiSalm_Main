@@ -25,6 +25,7 @@ import { useRecommendationStore } from '../../stores/useRecommendationStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { fetchRecommendations } from '../../api/recommendations';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { useDragScroll } from '../../hooks/useDragScroll';
 import { RecommendationHeader } from './components/RecommendationHeader';
 import { MapPanel } from './components/MapPanel';
 import { LeftPanel } from './components/LeftPanel';
@@ -75,6 +76,10 @@ const MOBILE_FILTER_ITEMS: ReadonlyArray<{ key: MobilePanel; label: string }> = 
 
 export function RecommendationPage() {
   const isMobile = useIsMobile();
+
+  // 가로 스크롤 슬라이더 — 데이터 출처 배지 스트립 / 모바일 필터 바
+  const dataStripRef = useDragScroll<HTMLDivElement>();
+  const mobileFilterRef = useDragScroll<HTMLDivElement>();
 
   // ─── 데스크톱 패널 상태 ──────────────────────────────────────
   const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() =>
@@ -197,7 +202,7 @@ export function RecommendationPage() {
       <RecommendationHeader />
 
       {/* 데이터 출처 배지 스트립 — 모바일 숨김 */}
-      <div className="bg-surface-elevated dark:bg-surface-dark-elevated border-b border-line-light dark:border-line-dark px-5 py-1.5 hidden md:flex items-center gap-2 overflow-x-auto shrink-0">
+      <div ref={dataStripRef} className="bg-surface-elevated dark:bg-surface-dark-elevated border-b border-line-light dark:border-line-dark px-5 py-1.5 hidden md:flex items-center gap-2 overflow-x-auto scroll-x-slider shrink-0">
         <Link
           to="/intro"
           className="text-2xs font-semibold text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 underline underline-offset-2 shrink-0 transition-colors"
@@ -233,7 +238,7 @@ export function RecommendationPage() {
         ── 모바일 필터 바 (md 미만에서만 노출) ─────────────────────
         검색 바 바로 하단에 고정. 가로 스크롤 가능.
       */}
-      <div className="md:hidden flex overflow-x-auto gap-2 px-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated shrink-0 scroll-x-thin">
+      <div ref={mobileFilterRef} className="md:hidden flex overflow-x-auto gap-2 px-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated shrink-0 scroll-x-slider">
         {MOBILE_FILTER_ITEMS.map(({ key, label }) => {
           const active = mobileActivePanel === key;
           return (

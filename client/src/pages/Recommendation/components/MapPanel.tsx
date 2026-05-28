@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useKakaoLoader } from '../../../hooks/useKakaoLoader';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
+import { useDragScroll } from '../../../hooks/useDragScroll';
 import { useChoroplethLayer } from '../hooks/useChoroplethLayer';
 import {
   estimateCommuteMinutes,
@@ -46,6 +47,8 @@ export function MapPanel() {
   const appKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
   const status = useKakaoLoader(appKey, ['services', 'clusterer']);
   const containerRef = useRef<HTMLDivElement>(null);
+  // 통근시간 범례 가로 스크롤 — 드래그 슬라이더 + 스크롤바 숨김
+  const legendScrollRef = useDragScroll<HTMLDivElement>();
   const [mapInstance, setMapInstance] = useState<kakao.maps.Map | null>(null);
   const workplaceMarkerRef = useRef<kakao.maps.Marker | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -393,8 +396,9 @@ export function MapPanel() {
 
       {/* 통근시간 범례 — absolute 하단 */}
       <div
+        ref={legendScrollRef}
         style={{ zIndex: 5 }}
-        className="absolute bottom-0 left-0 right-0 px-4 py-2 bg-surface-elevated/90 dark:bg-surface-dark-elevated/90 backdrop-blur-sm border-t border-line-light dark:border-line-dark flex items-center gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark overflow-x-auto scroll-x-thin tabular-nums"
+        className="absolute bottom-0 left-0 right-0 px-4 py-2 bg-surface-elevated/90 dark:bg-surface-dark-elevated/90 backdrop-blur-sm border-t border-line-light dark:border-line-dark flex items-center gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark overflow-x-auto scroll-x-slider tabular-nums"
       >
         <span className="font-semibold shrink-0">통근시간</span>
         <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-fastest rounded-sm" />20분 이내</span>

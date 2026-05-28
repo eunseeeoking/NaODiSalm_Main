@@ -17,6 +17,7 @@
  *   └────────────────────────────────────┘
  */
 import { useState } from 'react';
+import { useDragScroll } from '../../../hooks/useDragScroll';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { InfoTooltip } from '../../../components/InfoTooltip';
 import {
@@ -85,6 +86,8 @@ export function WeightSliders() {
 
   /** 슬라이더(통근/부담/안전/생활)만 접힘 — 소득분위는 별도 항상 표시 */
   const [slidersOpen, setSlidersOpen] = useState(false);
+  // 소득 분위 칩 가로 스크롤 — 드래그 슬라이더 + 스크롤바 숨김
+  const quintileScrollRef = useDragScroll<HTMLDivElement>();
 
   const [salaryInput, setSalaryInput] = useState('');
   const [salaryHint,  setSalaryHint]  = useState<string | null>(null);
@@ -248,7 +251,7 @@ export function WeightSliders() {
         </div>
 
         {/* 분위 칩 */}
-        <div className="flex overflow-x-auto scroll-x-thin gap-1.5" role="group" aria-label="소득 분위 선택">
+        <div ref={quintileScrollRef} className="flex overflow-x-auto scroll-x-slider gap-1.5" role="group" aria-label="소득 분위 선택">
           <button
             type="button"
             onClick={() => handleQuintileChipClick(null)}

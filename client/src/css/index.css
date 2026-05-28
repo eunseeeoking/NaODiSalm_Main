@@ -125,6 +125,19 @@ input {
   font: inherit;
 }
 
+/**
+ *  preflight 가 꺼져 있어 (tailwind.config.ts → corePlugins.preflight=false)
+ *  브라우저 기본 ul/ol 의 disc 불릿(• • •)·들여쓰기가 그대로 노출됨.
+ *  → 자동완성 드롭다운 등 list 의 좌측 점(핀처럼 보이는) 제거를 위해 글로벌 리셋.
+ *  개별 리스트에서 불릿이 필요하면 list-disc 등 Tailwind utility 로 명시.
+ */
+ul,
+ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 code {
   font-family: ui-monospace, 'JetBrains Mono', Consolas, monospace;
   background: rgba(0, 0, 0, 0.04);
@@ -257,4 +270,42 @@ html.dark .scroll-x-thin::-webkit-scrollbar-thumb {
 
 html.dark .scroll-x-thin::-webkit-scrollbar-thumb:hover {
   background: #4B5563;
+}
+
+/* ─── 슬라이더형 가로 스크롤 (.scroll-x-slider) ─────────────────
+   스크롤바를 완전히 숨기고 useDragScroll 훅으로 마우스 드래그/휠 스크롤.
+   소득분위·인기직장·통근범례 등 좌우 칩셋에 사용. */
+.scroll-x-slider {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-x-slider::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+.scroll-x-slider.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* ─── 슬라이더형 가로 스크롤 (.scroll-x-slider) ──────────────────
+ *  · 스크롤바 완전 숨김 (시각적으로 안 보임)
+ *  · 스크롤 자체는 유지 — useDragScroll 훅으로 드래그/휠 조작
+ *  · 드래그 중에는 grabbing 커서 + 텍스트 선택 방지
+ * ─────────────────────────────────────────────────────────────── */
+.scroll-x-slider {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* 구 Edge/IE */
+}
+
+.scroll-x-slider::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;                  /* Chrome/Safari */
+}
+
+.scroll-x-slider.is-dragging {
+  cursor: grabbing;
+  user-select: none;
 }

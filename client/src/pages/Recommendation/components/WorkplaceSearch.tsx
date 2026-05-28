@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useKakaoLoader } from '../../../hooks/useKakaoLoader';
+import { useDragScroll } from '../../../hooks/useDragScroll';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { POPULAR_WORKPLACES, type PopularWorkplace } from '../data/popularWorkplaces';
 
@@ -28,6 +29,11 @@ export function WorkplaceSearch() {
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [open, setOpen] = useState(false);
   const debounceRef = useRef<number | null>(null);
+  // 진행 중인 keywordSearch 의 순번 — 늦게 도착한 stale 응답이 최신 결과를 덮어쓰지 않도록 가드.
+  // (모바일에서 빠르게 입력 시 비동기 응답이 뒤섞여 리스트가 더블링되던 문제 방지)
+  const seqRef = useRef(0);
+  // 인기 직장 칩 가로 스크롤 — 슬라이더(드래그) 동작 + 스크롤바 숨김
+  const chipScrollRef = useDragScroll<HTMLDivElement>();
 
   useEffect(() => {
     if (!query.trim() || status !== 'ready') {
@@ -39,7 +45,10 @@ export function WorkplaceSearch() {
       const PlacesCtor = window.kakao?.maps?.services?.Places;
       if (!PlacesCtor) return;
       const ps = new PlacesCtor();
+      const mySeq = ++seqRef.current;
       ps.keywordSearch(query, (data: PlaceResult[], statusCode: string) => {
+        // 최신 요청의 응답만 반영 (이전 in-flight 응답은 무시)
+        if (mySeq !== seqRef.current) return;
         if (statusCode === 'OK') {
           setResults(data.slice(0, 5));
           setOpen(true);
@@ -124,11 +133,16 @@ export function WorkplaceSearch() {
           onFocus={() => results.length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="회사명, 지하철역, 도로명을 입력하세요"
+          // 브라우저 기본 검색기록 드롭다운이 커스텀 자동완성 위에 겹쳐 뜨는(모바일 더블링) 현상 차단
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           className="w-full pl-9 pr-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated-hover border-0 rounded-card text-sm text-ink-primary dark:text-ink-primary-dark placeholder:text-ink-tertiary dark:placeholder:text-ink-tertiary-dark focus:outline-none transition-all"
         />
       </div>
       {open && results.length > 0 && (
-        <ul className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark rounded-card shadow-card-hover overflow-hidden">
+        <ul className="list-none m-0 p-0 absolute z-30 top-full left-0 right-0 mt-1.5 bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark rounded-card shadow-card-hover overflow-hidden">
           {results.map((r, i) => (
             <li key={i}>
               <button
@@ -149,7 +163,7 @@ export function WorkplaceSearch() {
         </ul>
       )}
       {/* 퀵 칩 — 모바일: 한 줄 가로 스크롤 / 데스크톱: 줄바꿈 허용 */}
-      <div className="flex items-center gap-1.5 mt-2 overflow-x-auto scroll-x-thin md:flex-wrap">
+      <div ref={chipScrollRef} className="flex items-center gap-1.5 mt-2 overflow-x-auto scroll-x-slider md:flex-wrap">
         <span className="hidden sm:inline text-xs text-ink-tertiary dark:text-ink-tertiary-dark font-medium shrink-0 mr-0.5">
           인기 직장
         </span>
