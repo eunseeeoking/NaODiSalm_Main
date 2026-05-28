@@ -20,21 +20,52 @@
 | 서울 전체 히트맵으로 통근권 파악 | **Depth 2** — 지도 + 추천 카드 8선 |
 | 단지 클릭 → ARIMA 가격 안정성 차트 | **Depth 3** — 상세 분석 |
 
-### 📸 화면 (Day 7 첨부 예정)
+### 📸 화면
 
-> 마감 24시간 전 캡처. 아래 5장 슬롯에 `docs/screenshots/*.png` 경로로 첨부.
+#### 1. 랜딩 (`/intro`) — 5기관 데이터 융합 + CTA
 
-| 슬롯 | 화면 | 파일 (예정) |
-|---|---|---|
-| 1 | 메인 — 직장 입력 후 추천 8선 | `docs/screenshots/01-main.png` |
-| 2 | Depth 2 — 가중치 슬라이더 + 청년 프리셋 | `docs/screenshots/02-weights.png` |
-| 3 | Depth 3 — LH 행정동 배너 + ARIMA 도넛 | `docs/screenshots/03-detail.png` |
-| 4 | LSTM/ARIMA/MA-12 백테스트 비교 (ML repo Day 5 산출물) | ✅ `docs/screenshots/04-backtest.png` |
-| 5 | 모바일 반응형 (375px) | `docs/screenshots/05-mobile.png` |
+![나어디삶 인트로 — 데이터가 답하는 청년 주거 의사결정](docs/screenshots/01-intro.png)
+
+#### 2. 메인 추천 (`/`) — 강남역 입력 → 469개 행정동 중 8선
+
+![메인 추천 — 강남역 입력 후 통근 히트맵 + 추천 카드 8선 + 4축 가중합](docs/screenshots/02-main.png)
+
+> 좌측: 통근·예산·가중치·소득분위 슬라이더 / 중앙: 통근 가능권 히트맵 + 추천 행정동 핀 / 우측: 8선 카드(통합점수·통근·가격·주거비율 RIR·LH 배지)
+
+#### 3. Depth 3 — 단지 상세 + ARIMA 가격 안정성
+
+![Depth 3 단지 상세 — ARIMA 라인 차트 + 신뢰도 도넛 + 4축 메트릭](docs/screenshots/03-detail.png)
+
+> 단지별 ARIMA(2,1,2) 36개월 예측 + LSTM 변동성 보조 + 신뢰도 도넛(`dataScope: COMPLEX / LEGAL_DONG / SIGUNGU` 칩으로 정직 톤 표기) + 매물 8축 메트릭 + 통근/안전/생활 비교.
+
+#### 4. ARIMA / LSTM / MA-12 백테스트 종합
+
+![백테스트 종합 — MA-12·ARIMA·LSTM 비교 (3-panel: MAPE/RMSE/R²)](docs/screenshots/04-backtest.png)
+
+> _자세한 수치는 아래 [ARIMA 백테스트 결과](#arima-백테스트-결과) 섹션 참조._
+
+#### 5. 데이터 출처 (`/about/data`) — 4기관 실시간 적재 현황
+
+![about/data — 국토부·한국부동산원·LH·통계청+경찰청 4기관 실시간 적재 카드](docs/screenshots/05-data-sources.png)
+
+> 채점위원과 사용자 모두 `GET /api/meta/data-sources` 응답을 통해 row 수 실시간 확인 가능. (Phase 2-B 도입, 2026-05-27)
+
+#### 6. 모바일 반응형 (Galaxy 영역)
+
+<p align="left">
+  <img src="docs/screenshots/06-mobile-list.jpg" alt="모바일 추천 8선 리스트 — LH 배지 + 통근/가격/주거비 메트릭" width="48%" />
+  <img src="docs/screenshots/07-mobile-detail.jpg" alt="모바일 Depth 3 — 단지 ARIMA 차트 + 신뢰도 68 도넛" width="48%" />
+</p>
+
+> 좌: 추천 8선 카드 리스트 + LH 청년주택 배지 / 우: Depth 3 단지 ARIMA 예측 차트 + 신뢰도 도넛.
 
 ### 🎬 데모 영상
 
-> [채울 곳: 30~60초 데모 GIF 또는 YouTube unlisted 링크 — Day 7 작성]
+> 30~60초 데모 GIF. 촬영 콘티: [`server/doc/2026-05-28/video-shoot-plan.md`](server/doc/2026-05-28/video-shoot-plan.md)
+>
+> _`docs/screenshots/demo.gif` — D-Day 촬영 후 첨부._
+>
+> <!-- ![나어디삶 데모 영상](docs/screenshots/demo.gif) -->
 
 ---
 
