@@ -29,7 +29,7 @@
 | 1 | 메인 — 직장 입력 후 추천 8선 | `docs/screenshots/01-main.png` |
 | 2 | Depth 2 — 가중치 슬라이더 + 청년 프리셋 | `docs/screenshots/02-weights.png` |
 | 3 | Depth 3 — LH 행정동 배너 + ARIMA 도넛 | `docs/screenshots/03-detail.png` |
-| 4 | LSTM/ARIMA 비교 그래프 (ML repo backtest 산출물) | `docs/screenshots/04-backtest.png` |
+| 4 | LSTM/ARIMA/MA-12 백테스트 비교 (ML repo Day 5 산출물) | ✅ `docs/screenshots/04-backtest.png` |
 | 5 | 모바일 반응형 (375px) | `docs/screenshots/05-mobile.png` |
 
 ### 🎬 데모 영상
@@ -108,6 +108,11 @@ w₁ + w₂ + w₃ + w₄ = 100  (사용자 직접 조정)
 
 서울 5개 단지, **3년(36개월) horizon**, 실거래가 데이터 기준
 
+![백테스트 종합 — MA-12·ARIMA·LSTM 비교 (3-panel: MAPE/RMSE/R²)](docs/screenshots/04-backtest.png)
+
+> _Day 5 백테스트 산출물 — 원본 PNG `NaODiSalm_ML/reports/plots/summary.png`, raw CSV `NaODiSalm_ML/reports/backtest_results.csv` (5단지 × 3모델 15행)._
+> _R² 값은 3년 horizon multi-step 누적 평가 특성상 음수가 정상이며, 실용 지표는 MAPE/RMSE임. LSTM의 큰 오차는 단지 단위 시계열 표본 수 한계(단지당 examples 20~50개)가 그대로 노출된 결과로, 본 서비스는 **ARIMA(2,1,2)를 Depth 3 메인 모델로 채택하고 LSTM은 보조 모델**로 운영함._
+
 | 단지 | 자치구 | ARIMA MAPE | LSTM MAPE | MA-12 MAPE |
 |---|---|---|---|---|
 | 파크리오 | 송파구 신천동 | 15.0% | 24.7% | 15.9% |
@@ -118,7 +123,8 @@ w₁ + w₂ + w₃ + w₄ = 100  (사용자 직접 조정)
 | **평균** | | **✅ 10.16%** | 20.41% | 10.88% |
 
 > ARIMA(2,1,2) 가 multi-step 누적 오차 없이 LSTM 대비 절반 오차 달성  
-> → Depth 3 메인 모델로 채택
+> → Depth 3 메인 모델로 채택  
+> _※ 단지별 forecast 곡선 10장(파크리오·SK북한산시티 등) 및 모델별 월 예측 raw CSV는 ML 레포 `reports/plots/` · `reports/predictions/` 에서 확인 가능._
 
 ---
 
