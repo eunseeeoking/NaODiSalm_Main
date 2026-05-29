@@ -111,34 +111,44 @@ export function MapPanel() {
       setMatrixStats(null);
       return;
     }
-    let cancelled = false;
-    setMatrixLoading(true);
-    setMatrix(null); // 이전 직장 매트릭스 비우기 → Haversine fallback 으로 즉시 색칠
+    // 직장이 바뀌면 즉시 이전 매트릭스 비우고 Haversine fallback 으로 색칠
+    setMatrix(null);
     setMatrixStats(null);
+    setMatrixLoading(true);
 
-    fetchCommuteMatrix(
-      { lat: workplace.lat, lng: workplace.lng, label: workplace.label },
-      centroids.map((c) => ({ code: c.code, lat: c.lat, lng: c.lng })),
-    )
-      .then((resp) => {
-        if (cancelled) return;
-        setMatrix(resp.matrix);
-        setMatrixStats({
-          hit: resp.cacheHit,
-          nearby: resp.cacheNearby,
-          miss: resp.cacheMiss,
-          elapsedMs: resp.elapsedMs,
+    // 빠른 직장 전환 시 버려질 검색이 서버(ODsay 호출 + DB 쓰기)에 도달하지 않도록
+    //   1) 400ms 디바운스 — 연타 전환 중 마지막 직장만 실제 요청
+    //   2) AbortController — 디바운스 후 떠난 요청도 다음 전환 시 중단
+    const controller = new AbortController();
+    const debounceId = window.setTimeout(() => {
+      fetchCommuteMatrix(
+        { lat: workplace.lat, lng: workplace.lng, label: workplace.label },
+        centroids.map((c) => ({ code: c.code, lat: c.lat, lng: c.lng })),
+        controller.signal,
+      )
+        .then((resp) => {
+          if (controller.signal.aborted) return;
+          setMatrix(resp.matrix);
+          setMatrixStats({
+            hit: resp.cacheHit,
+            nearby: resp.cacheNearby,
+            miss: resp.cacheMiss,
+            elapsedMs: resp.elapsedMs,
+          });
+        })
+        .catch((e) => {
+          // 의도된 중단(AbortError)은 조용히 무시
+          if (controller.signal.aborted) return;
+          console.error('[commute matrix] fail:', e);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setMatrixLoading(false);
         });
-      })
-      .catch((e) => {
-        console.error('[commute matrix] fail:', e);
-      })
-      .finally(() => {
-        if (!cancelled) setMatrixLoading(false);
-      });
+    }, 400);
 
     return () => {
-      cancelled = true;
+      window.clearTimeout(debounceId);
+      controller.abort();
     };
   }, [workplace, centroids]);
 

@@ -63,6 +63,29 @@ interface MatrixRequestBody {
   targets: Target[];
 }
 
+/**
+ * in-flight 락 (cacheKey 단위)
+ *  - 같은 origin(=cacheKey) 으로 빠르게 연달아 들어온 /matrix 요청을 직렬화.
+ *  - 디바운스/abort 가 빠져나간 동시 요청이 ODsay 호출 + DB INSERT 를 중복으로
+ *    터뜨리는 걸 방지 (먼저 끝난 요청이 캐시를 채우면, 뒤 요청은 캐시 hit 로 흡수).
+ *  - 결과를 공유하지 않고 "순차 실행"만 보장 → 뒤 요청은 앞 요청이 쓴 캐시를 읽음.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+
+async function withCacheKeyLock<T>(
+  cacheKey: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = inFlight.get(cacheKey) ?? Promise.resolve();
+  const next = prev.catch(() => {}).then(fn);
+  inFlight.set(cacheKey, next);
+  // 가장 마지막 요청이면 settle 후 정리 (메모리 누수 방지)
+  next.finally(() => {
+    if (inFlight.get(cacheKey) === next) inFlight.delete(cacheKey);
+  });
+  return next;
+}
+
 commuteRouter.post('/matrix', async (req: Request, res: Response) => {
   const started = Date.now();
   const body = req.body as Partial<MatrixRequestBody>;
@@ -99,78 +122,87 @@ commuteRouter.post('/matrix', async (req: Request, res: Response) => {
   const targets = body.targets;
   const cacheKey = makeCacheKey(origin.lat, origin.lng);
 
-  // ── 1) 9격자 KNN 캐시 조회 ─────────────────────────────────
-  const cached = await findCachedMatrix(
-    origin,
-    targets.map((t) => t.code),
-  );
+  try {
+    // 같은 cacheKey 요청은 직렬화 → 앞 요청이 캐시를 채우면 뒤 요청은 hit 로 흡수
+    const payload = await withCacheKeyLock(cacheKey, async () => {
+      // ── 1) 9격자 KNN 캐시 조회 ─────────────────────────────────
+      const cached = await findCachedMatrix(
+        origin,
+        targets.map((t) => t.code),
+      );
 
-  // 정확 일치 / 근접 흡수 카운트 분리
-  let exactHits = 0;
-  let nearbyHits = 0;
-  for (const entry of cached.values()) {
-    if (entry.exactMatch) exactHits += 1;
-    else nearbyHits += 1;
-  }
+      // 정확 일치 / 근접 흡수 카운트 분리
+      let exactHits = 0;
+      let nearbyHits = 0;
+      for (const entry of cached.values()) {
+        if (entry.exactMatch) exactHits += 1;
+        else nearbyHits += 1;
+      }
 
-  const missTargets = targets.filter((t) => !cached.has(t.code));
-  let writtenCount = 0;
+      const missTargets = targets.filter((t) => !cached.has(t.code));
+      let writtenCount = 0;
 
-  // ── 2) cache miss 만 ODsay 호출 ─────────────────────────────
-  if (missTargets.length > 0) {
-    const odsayResults = await fetchOdsayBatch(
-      origin,
-      missTargets.map((t) => ({ lat: t.lat, lng: t.lng })),
-    );
+      // ── 2) cache miss 만 ODsay 호출 ─────────────────────────────
+      if (missTargets.length > 0) {
+        const odsayResults = await fetchOdsayBatch(
+          origin,
+          missTargets.map((t) => ({ lat: t.lat, lng: t.lng })),
+        );
 
-    const upsertEntries = missTargets.map((t, i) => {
-      const transit = odsayResults[i];
-      const carMin = estimateCarMinutes(origin, t);
-      const transitMinutes =
-        transit?.transitMinutes ?? Math.round(carMin * 1.4);
-      const entry: CommuteEntry = {
-        legalDongCode: t.code,
-        transitMinutes,
-        transitTransfers: transit?.transitTransfers ?? null,
-        transitCostWon: transit?.transitCostWon ?? null,
-        carMinutes: carMin,
-        exactMatch: true, // 방금 정확 cacheKey 로 저장하니까
-      };
-      cached.set(t.code, entry);
+        const upsertEntries = missTargets.map((t, i) => {
+          const transit = odsayResults[i];
+          const carMin = estimateCarMinutes(origin, t);
+          const transitMinutes =
+            transit?.transitMinutes ?? Math.round(carMin * 1.4);
+          const entry: CommuteEntry = {
+            legalDongCode: t.code,
+            transitMinutes,
+            transitTransfers: transit?.transitTransfers ?? null,
+            transitCostWon: transit?.transitCostWon ?? null,
+            carMinutes: carMin,
+            exactMatch: true, // 방금 정확 cacheKey 로 저장하니까
+          };
+          cached.set(t.code, entry);
+          return {
+            legalDongCode: t.code,
+            transitMinutes,
+            transitTransfers: transit?.transitTransfers ?? null,
+            transitCostWon: transit?.transitCostWon ?? null,
+            carMinutes: carMin,
+            workLat: origin.lat,
+            workLng: origin.lng,
+            workLabel: origin.label ?? null,
+          };
+        });
+
+        writtenCount = await upsertCommuteEntries(cacheKey, upsertEntries);
+      }
+
+      // ── 3) 응답 조립 ───────────────────────────────────────────
+      const matrix: Record<string, Omit<CommuteEntry, 'exactMatch'>> = {};
+      for (const t of targets) {
+        const entry = cached.get(t.code);
+        if (entry) {
+          const { exactMatch: _omit, ...rest } = entry;
+          matrix[t.code] = rest;
+        }
+      }
+
       return {
-        legalDongCode: t.code,
-        transitMinutes,
-        transitTransfers: transit?.transitTransfers ?? null,
-        transitCostWon: transit?.transitCostWon ?? null,
-        carMinutes: carMin,
-        workLat: origin.lat,
-        workLng: origin.lng,
-        workLabel: origin.label ?? null,
+        cacheKey,
+        cacheHit: exactHits,
+        cacheNearby: nearbyHits,
+        cacheMiss: missTargets.length,
+        written: writtenCount,
+        matrix,
       };
     });
 
-    writtenCount = await upsertCommuteEntries(cacheKey, upsertEntries);
+    res.json({ ...payload, elapsedMs: Date.now() - started });
+  } catch (e) {
+    console.error('[commute/matrix] fail:', e);
+    res.status(500).json({ error: 'commute matrix failed' });
   }
-
-  // ── 3) 응답 조립 ───────────────────────────────────────────
-  const matrix: Record<string, Omit<CommuteEntry, 'exactMatch'>> = {};
-  for (const t of targets) {
-    const entry = cached.get(t.code);
-    if (entry) {
-      const { exactMatch: _omit, ...rest } = entry;
-      matrix[t.code] = rest;
-    }
-  }
-
-  res.json({
-    cacheKey,
-    cacheHit: exactHits,
-    cacheNearby: nearbyHits,
-    cacheMiss: missTargets.length,
-    written: writtenCount,
-    elapsedMs: Date.now() - started,
-    matrix,
-  });
 });
 
 // ─── GET /api/commute/compare ─────────────────────────────────────────────────

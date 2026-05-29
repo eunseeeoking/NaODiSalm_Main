@@ -97,43 +97,35 @@ export async function findCachedMatrix(
 }
 
 /**
- * 신규 매트릭스 항목 일괄 upsert (정확 일치 키 기준으로만 저장)
+ * 신규 매트릭스 항목 일괄 저장 (정확 일치 키 기준으로만 저장)
  *  - 격자 확장은 조회용 — 새 데이터는 항상 입력 좌표의 정확 cacheKey 로 저장
  *  - 같은 행정동에 대한 여러 워크포인트 캐시가 누적되어 KNN 정확도 ↑
+ *
+ *  ▷ 성능 (v1.2)
+ *    - 기존: 행마다 await prisma.upsert → 미스 검색 1회당 DB 왕복 최대 ~1000번
+ *    - 변경: createMany({ skipDuplicates }) 한 번 → DB 왕복 N→1
+ *    - 미스 경로에서만 호출되므로 (cacheKey, legalDongCode) 행은 정의상 아직 없음.
+ *      드물게 동시 요청으로 먼저 생긴 행은 skipDuplicates(=INSERT IGNORE)로 건너뜀.
+ *    - 기존 행 갱신(update/computedAt)은 제거 — 캐시이므로 stale 은 TTL/재시드로 처리.
  */
 export async function upsertCommuteEntries(
   cacheKey: string,
   entries: UpsertEntry[],
 ): Promise<number> {
-  let written = 0;
-  for (const e of entries) {
-    await prisma.commuteMatrix.upsert({
-      where: {
-        cacheKey_legalDongCode: {
-          cacheKey,
-          legalDongCode: e.legalDongCode,
-        },
-      },
-      create: {
-        cacheKey,
-        workLat: e.workLat,
-        workLng: e.workLng,
-        workLabel: e.workLabel ?? null,
-        legalDongCode: e.legalDongCode,
-        transitMinutes: e.transitMinutes,
-        transitTransfers: e.transitTransfers,
-        transitCostWon: e.transitCostWon,
-        carMinutes: e.carMinutes,
-      },
-      update: {
-        transitMinutes: e.transitMinutes,
-        transitTransfers: e.transitTransfers,
-        transitCostWon: e.transitCostWon,
-        carMinutes: e.carMinutes,
-        computedAt: new Date(),
-      },
-    });
-    written += 1;
-  }
-  return written;
+  if (entries.length === 0) return 0;
+  const result = await prisma.commuteMatrix.createMany({
+    data: entries.map((e) => ({
+      cacheKey,
+      workLat: e.workLat,
+      workLng: e.workLng,
+      workLabel: e.workLabel ?? null,
+      legalDongCode: e.legalDongCode,
+      transitMinutes: e.transitMinutes,
+      transitTransfers: e.transitTransfers,
+      transitCostWon: e.transitCostWon,
+      carMinutes: e.carMinutes,
+    })),
+    skipDuplicates: true,
+  });
+  return result.count;
 }

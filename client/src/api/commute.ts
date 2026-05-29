@@ -57,11 +57,13 @@ const CHUNK_SIZE = 900; // 가드 1000 보다 여유 100 (안전 마진)
 export async function fetchCommuteMatrix(
   origin: { lat: number; lng: number; label?: string },
   targets: CommuteTarget[],
+  signal?: AbortSignal,
 ): Promise<MatrixResponse> {
   if (targets.length <= CHUNK_SIZE) {
     return apiFetch<MatrixResponse>('/api/commute/matrix', {
       method: 'POST',
       json: { origin, targets },
+      signal,
     });
   }
 
@@ -81,6 +83,7 @@ export async function fetchCommuteMatrix(
     const resp = await apiFetch<MatrixResponse>('/api/commute/matrix', {
       method: 'POST',
       json: { origin, targets: chunk },
+      signal,
     });
 
     // 결과 병합

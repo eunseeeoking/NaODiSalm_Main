@@ -142,7 +142,7 @@ export function WorkplaceSearch() {
         />
       </div>
       {open && results.length > 0 && (
-        <ul className="list-none m-0 p-0 absolute z-30 top-full left-0 right-0 mt-1.5 bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark rounded-card shadow-card-hover overflow-hidden">
+        <ul className="list-none m-0 p-0 absolute z-50 top-full left-0 right-0 mt-1.5 bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark rounded-card shadow-card-hover overflow-hidden">
           {results.map((r, i) => (
             <li key={i}>
               <button
