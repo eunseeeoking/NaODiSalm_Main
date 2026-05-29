@@ -22,7 +22,7 @@
 
 ### 📸 화면
 
-#### 1. 랜딩 (`/intro`) — 5기관 데이터 융합 + CTA
+#### 1. 랜딩 (`/intro`) — 6기관 데이터 융합 + CTA
 
 ![나어디삶 인트로 — 데이터가 답하는 청년 주거 의사결정](docs/screenshots/01-intro.png)
 
@@ -46,7 +46,7 @@
 
 #### 5. 데이터 출처 (`/about/data`) — 4기관 실시간 적재 현황
 
-![about/data — 국토부·한국부동산원·LH·통계청+경찰청 4기관 실시간 적재 카드](docs/screenshots/05-data-sources.png)
+![about/data — 국토부·한국부동산원·LH·TAGO·경찰청·통계청 6기관 실시간 적재 카드](docs/screenshots/05-data-sources.png)
 
 > 채점위원과 사용자 모두 `GET /api/meta/data-sources` 응답을 통해 row 수 실시간 확인 가능. (Phase 2-B 도입, 2026-05-27)
 
@@ -161,15 +161,15 @@ w₁ + w₂ + w₃ + w₄ = 100  (사용자 직접 조정)
 
 ## 융합 데이터 출처 (6개 기관)
 
-> 📊 **실시간 적재 현황**: 운영 중인 서비스의 [`/about/data`](https://example.com/about/data) 페이지에서
+> 📊 **실시간 적재 현황**: 운영 중인 서비스의 [`/about/data`](https://naodisalm.kr/about/data) 페이지에서
 > `GET /api/meta/data-sources` 응답으로 항상 최신 row 수 확인 가능. (Phase 2-B 도입, 2026-05-27)
 
 | 기관 | 데이터 | 규모 (2026-05-27 스냅샷) |
 |---|---|---|
 | 국토교통부 | RTMS 아파트 실거래가 | ~130만 건 (2020~2025) |
 | 한국부동산원 (R-ONE) | 공동주택 매매·전세 가격지수 | 4,216건 (서울 25구 월별) |
-| 한국토지주택공사 (LH) | 행복주택·청년매입임대 공급 현황 | 행정동 정밀화 ([채울 곳: row 수 — about/data]) |
-| 국가대중교통정보센터 (TAGO) | 버스정류장·배차간격 | [채울 곳: row 수 — about/data] |
+| 한국토지주택공사 (LH) | 행복주택·청년매입임대 공급 현황 | 3,950건 (행복주택 3,725 + 전세임대 225) |
+| 국가대중교통정보센터 (TAGO) | 버스정류장·배차간격 | 33개 행정동 (t_transit_route_summary) |
 | 경찰청·서울시 | 범죄율·CCTV·가로등 안전지표 | 469개 행정동 |
 | 통계청 | 가구소득 분위 (2023) | 5분위 |
 
@@ -255,7 +255,7 @@ NaODiSalm_Main/
 
 ## 관련 저장소
 
-- **ML 파이프라인**: [2026_MOLIT_ML](../2026_MOLIT_ML) — LSTM 학습 + ARIMA 백테스트
+- **ML 파이프라인**: [NaODiSalm_ML](https://github.com/eunseeeoking/NaODiSalm_ML) — LSTM 학습 + ARIMA 백테스트
   - `npm run train:stats` — 학습 결과 통계 (confidence NULL 분포 등)
   - `npm run train:backfill` — t_training_result.confidence NULL → MAPE 기반 자동 산출
   - `npm run backtest` — MA-12 / ARIMA / LSTM / LSTM-REB 4모델 비교 (PNG 산출)
