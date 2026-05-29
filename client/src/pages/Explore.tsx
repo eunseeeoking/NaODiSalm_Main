@@ -60,7 +60,7 @@ export function ExplorePage() {
         onSigunguChange={setSigunguCode}
       />
       <main className={s.mapArea}>
-        <Link to="/" className={s.backLink}>
+        <Link to="/home" className={s.backLink}>
           ← 지역 추천으로
         </Link>
         <KakaoMap markers={markers} onMarkerClick={setSelected} />

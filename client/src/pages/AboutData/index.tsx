@@ -132,7 +132,7 @@ export function AboutDataPage() {
       <header className="sticky top-0 z-10 bg-surface dark:bg-surface-dark border-b border-line-light dark:border-line-dark">
         <div className="max-w-5xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3">
           <Link
-            to="/"
+            to="/home"
             className="text-sm text-ink-secondary hover:text-ink-primary dark:text-ink-secondary-dark"
           >
             ← 나어디삶

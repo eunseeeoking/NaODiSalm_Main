@@ -395,7 +395,7 @@ export function LandingPage() {
               데이터 출처
             </Link>
             <Link
-              to="/"
+              to="/home"
               className="text-xs md:text-sm font-semibold px-3 py-1.5 rounded-md bg-brand text-white hover:bg-brand-600 transition-colors"
             >
               지금 사용해보기
@@ -427,7 +427,7 @@ export function LandingPage() {
             {/* CTA */}
             <div className="mt-6 md:mt-8 flex flex-col sm:flex-row items-center justify-center gap-2.5">
               <Link
-                to="/"
+                to="/home"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-cardlg bg-brand text-white text-sm md:text-base font-semibold shadow-card hover:shadow-card-hover hover:bg-brand-600 transition-all"
               >
                 지금 추천 받기
@@ -622,7 +622,7 @@ export function LandingPage() {
                 1위 카드 클릭 → 단지별 ARIMA 가격 안정성·통근 비교·LH 청년주택 배너까지.
               </p>
               <Link
-                to="/"
+                to="/home"
                 className="mt-5 md:mt-6 inline-flex items-center justify-center gap-1.5 px-6 py-3 rounded-cardlg bg-white text-brand text-sm md:text-base font-bold shadow-card hover:shadow-card-hover transition-all"
               >
                 지금 강남역 데모 실행
@@ -653,7 +653,7 @@ export function LandingPage() {
                 </div>
               </div>
               <nav className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <Link to="/" className="hover:text-brand">메인 (Depth 2)</Link>
+                <Link to="/home" className="hover:text-brand">메인 (Depth 2)</Link>
                 <Link to="/about/data" className="hover:text-brand">데이터 출처</Link>
                 <a
                   href="https://www.data.go.kr"

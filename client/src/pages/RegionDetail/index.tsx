@@ -172,7 +172,7 @@ export function RegionDetailPage() {
           존재하지 않는 지역입니다.
         </p>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/home')}
           className="px-4 py-2 rounded-card bg-brand text-white text-sm font-semibold hover:bg-brand-600 transition-colors"
         >
           추천 페이지로 돌아가기
@@ -187,7 +187,7 @@ export function RegionDetailPage() {
     <div className="w-screen h-screen flex flex-col bg-surface dark:bg-surface-dark overflow-hidden text-ink-primary dark:text-ink-primary-dark font-sans">
       <RegionDetailHeader
         region={region}
-        onBack={() => navigate('/')}
+        onBack={() => navigate('/home')}
         isDemoData={complexesSource === 'mock'}
       />
 
