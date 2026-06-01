@@ -9,44 +9,35 @@
 
 ---
 
-## ▶ 다음 세션 시작점 (인계)  — 갱신 2026-06-01 (provider 코드 세션 + SH 적재 착수)
+## ▶ 다음 세션 시작점 (인계)  — 갱신 2026-06-02 (수도권 데이터·시드 전부 적재 완료)
 
 - **이 문서가 메인.** 참조: `docs/known-issues.md`(KI 추적), `docs/depth3-design.md`(Depth 3 설계).
-- **§3 수도권 실거래 데이터 = 완료.** LAWD 코드(자동생성·검증)·APT/OFFI/VILLA 2년치 적재 + **OFFI·VILLA 지오코딩 완료** +
-  **🟢 SH(단독·다가구) 수도권 적재 완료(2026-06-01)**: 1968/1968 step · 실패 0 · 이번 실행 누적 rents 595,312 · 단지 257,972
-  (전월세만·좌표 없음=동 centroid 근사). ⚠️ 최종 t_sh_rent/t_sh_complex **테이블 총행은 DB SELECT 로 확정** 필요(아래 §"세션 산출물" 스냅샷 갱신용).
+- **커밋**: 이번 세션 전체가 브랜치 **`feat/capital-mvp`**(`d9a2ba0`)에 커밋됨. ⚠️ **main 미머지**(클라이언트 연계 전 — main 머지 시 빌드/배포 트리거). push 는 아직 안 함.
 
-- **▶ 2026-06-01 세션 요약(코드 작업 2건 완료, typecheck OK):**
-  - **안전 코드(KI-5/17)**: `seedSafetyIndex.ts` v3 — `SIGUNGU_SAFETY` 키 5자리 코드 전환(인천↔서울 동명 충돌 차단) +
-    경기·인천 57개 점수표 추가 + 수도권 dong 조회. → `seed:safety` 실행만 남음(API 불필요).
-  - **교통 provider(KI-6/17)**: `transitProvider.ts`(디스패처) + `seoulTopisClient.ts`(서울 TOPIS, 신규) +
-    `tagoClient.fetchTagoTransitSummary`(경기·인천). `seedTransitSummary` 수도권 확장. → 프로브 검증 후 `seed:transit`.
+- **▶ 2026-06-02 세션 = 수도권 데이터/시드 마무리. 시드 적재 현황:**
+  | 축 | 상태 |
+  |----|------|
+  | 실거래 APT/OFFI/VILLA/SH | 🟢 2년치 적재·지오코딩 완료 (SH 1968/1968·실패 0) |
+  | 안전(safety) | 🟢 **1187** (skip 0) |
+  | 생활(life) | 🟢 **1187** (평균 43.2) |
+  | 교통(transit) | 🟡 **662**(경기·인천, 평균 47.3) — **서울은 TOPIS 승인 대기** |
 
-- **▶ 다음 세션 첫 작업 (순서대로):**
-  0. ~~**SH 적재**~~ → 🟢 **완료(2026-06-01)**: `--type=SH --region=capital` 1968/1968 step·실패 0. 좌표 없음=동 centroid 근사.
-     (확인 SQL: `SELECT COUNT(*) FROM t_sh_rent; SELECT COUNT(*) FROM t_sh_complex;` → "세션 산출물" 스냅샷 갱신.)
-  1. **POI/생활 재시드 (코드 준비됨, 실행만)** — **선행** `npm run seed:legal-dong`(t_legal_dong 수도권 1187동) →
-     `npm run seed:life`. ⚠️ `seed:life` 출력 **"대상 행정동 N개"** 확인 — 기대(최대 1187)보다 많이 적으면
-     행정동(centroids)↔법정동(apt legal_dong) 명칭 매칭 보정 필요(§5 메모).
-  2. ~~**안전 재시드 (코드 수정 필요)**~~ → 🟢 **코드 완료(2026-06-01)**: `seedSafetyIndex.ts` v3 — `SIGUNGU_SAFETY`
-     키를 **5자리 코드**로 전환(인천↔서울 동명 충돌 차단) + **경기·인천 57개 점수표** 추가 + 수도권 dong 조회. typecheck OK.
-     **잔여=실행만**: `npm run seed:safety`(API 불필요).
-  3. ~~**교통 재시드 (블로커, KI-17)**~~ → 🟢 **코드 완료(2026-06-01)**: `transitProvider.ts`(디스패처) +
-     `seoulTopisClient.ts`(서울 TOPIS, 신규) + `tagoClient`(경기·인천). `seedTransitSummary` 수도권 확장. typecheck OK.
-     **잔여**: 프로브 검증(`TAGO_DEBUG=1`/`SEOUL_TOPIS_DEBUG=1` 좌표 1곳, TOPIS 필드매핑·TAGO 경기인천 커버리지 확정) → `seed:transit`.
+- **▶ 이번 세션 핵심 코드 변경(전부 typecheck OK):**
+  - **KI-20 해결** — `t_legal_dong` 에 `lat/lng` 추가 + `seed:legal-dong --prune`(레거시 1377 삭제→1187 clean).
+    POI/transit centroid 출처를 `t_apt_complex` 이름조인 → **`t_legal_dong.lat/lng` 직접 사용**(인천·경기 누락 해소: life 424→1187).
+  - **provider 추상화(KI-6/17)** — `transitProvider`(서울 TOPIS / 경기·인천 TAGO). 정류장 노선조회 병렬화. **TAGO 경기·인천 커버리지 프로브 검증 완료.**
+  - **안전(KI-5)** — `SIGUNGU_SAFETY` 5자리 코드 키 + 경기·인천 점수표 + 구개편/레거시 umbrella 별칭.
 
-- **착수 전 확인**: POI/safety/transit 시드 모두 동 조회를 `WHERE ld.sido IN (서울·인천·경기)`로 확장 완료(코드).
-  safety provider(코드키)·transit provider(TOPIS/TAGO)도 코드 완료 — **남은 건 실행(+transit 프로브)뿐.**
-  ODsay 쿼터(§4)는 **추천 서빙 직전**에만 필요(§8).
-- **빌라 좌표 주의**: VILLA 좌표 중 ~24%는 **법정동 centroid 근사치**(`--fallback-dong`로 채움, 같은 법정동=동일 좌표).
-  추천 universe·동 집계엔 정상이나 **지도 핀엔 부정확** → "건물 시세 카드"(depth3 §5) 갈 때 그 단지만 정밀 재지오코딩 필요. (coordSource 플래그 후속 — KI 메모)
+- **▶ 다음 세션 작업 (우선순위):**
+  1. **🚧 클라이언트 본작업** (현재 진행 중, `feat/capital-mvp` 브랜치) — 거래유형/매물종류 필터 등 UI 연계.
+  2. **서울 transit 마무리** — data.go.kr 서울 정류소/노선 활용신청 **승인 전파(2026-06-02 신청) 후** `npm run seed:transit` 재실행.
+     ⚠️ 활성 직후 서울 좌표 1곳 `SEOUL_TOPIS_DEBUG=1` 프로브로 **응답 필드명(arsId/busRouteId/firstBusTm) 확정** 필요(엔드포인트·파라미터는 명세대로 정정됨). 키는 MOLIT_SERVICE_KEY 재사용.
+  3. **KI-19 — 수도권 추천 서빙 (MVP 블로커)**: 시드는 다 찼지만 추천은 아직 **서울만 서빙**(`fetchRegionAggregates` prefix='11').
+     → prefix 다중화(11·28·41)/제거가 필요한데, **§4 ODsay 쿼터 구조개선이 선행**(후보 3배 → 통근 매트릭스 미스 폭증, §8). **수도권 추천이 실제로 뜨는 것의 게이트.**
 
-- 🆕 **KI-19 발견(2026-06-01) — 수도권 MVP 블로커**: 수도권 데이터 적재 후에도 추천은 **서울 동만** 반환.
-  재현=강남역·전세·2.3억·75분·전체 → 0건(서울 동은 보증금 median 초과로 예산 게이트 제외 + 2.3억 가능한 수도권 외곽 동은
-  universe 부재). 원인=`fetchRegionAggregates(..., sigunguCodePrefix='11')` 기본값 + 라우트가 prefix 미전달.
-  **면적 제한과 무관**(매매·전세 경로 모두 `area_m2 9~330` = KI-16 완료). → 해소=**§4 ODsay 쿼터 선행 후 prefix 다중화(11·28·41)/제거**.
-  (확인 지표: 응답 `meta.budgetFilteredCount`.) 상세: `known-issues.md` KI-19.
-- **본인 환경 1회 필수**: `npm run typecheck`(샌드박스 tsc 불가, KI-15). prisma 스키마 변동 없음(테이블 재사용).
+- **빌라 좌표 주의**: VILLA 좌표 중 ~24%는 **법정동 centroid 근사치**(같은 법정동=동일 좌표). 추천 universe·동 집계엔 정상이나
+  **지도 핀엔 부정확** → "건물 시세 카드"(depth3 §5) 갈 때 그 단지만 정밀 재지오코딩 필요. (coordSource 플래그 후속)
+- **환경 메모**: ⚠️ **prisma 스키마 변경됨**(`LegalDong.lat/lng` 추가) → 다른 환경/머신에선 `prisma db push`+`generate` 필요. `npm run typecheck`(client·server) 1회 권장(KI-15).
 
 ---
 
