@@ -59,6 +59,7 @@ export function MapPanel() {
   const recommendations = useRecommendationStore((s) => s.recommendations);
   const hoveredRegion = useRecommendationStore((s) => s.hoveredRegion);
   const setHovered = useRecommendationStore((s) => s.setHovered);
+  const isLoading = useRecommendationStore((s) => s.isLoading);
   const setHoveredRef = useRef(setHovered);
   setHoveredRef.current = setHovered;
 
@@ -218,6 +219,9 @@ export function MapPanel() {
     regionOverlaysRef.current.forEach((o) => o.setMap(null));
     regionOverlaysRef.current = [];
 
+    // 조회 중에는 핀을 그리지 않음 — 이전 추천 핀이 잔류해 혼동되는 문제 방지
+    if (isLoading) return;
+
     // 순위별 핀 색상: 1위=파랑, 2~3위=인디고, 4~8위=보라
     const PIN_COLORS = ['#2563EB', '#4F46E5', '#4F46E5', '#7C3AED', '#7C3AED', '#7C3AED', '#7C3AED', '#7C3AED'];
 
@@ -315,7 +319,7 @@ export function MapPanel() {
       overlay.setMap(mapInstance);
       regionOverlaysRef.current.push(overlay);
     });
-  }, [recommendations, mapInstance, status]);
+  }, [recommendations, mapInstance, status, isLoading]);
 
   // ─── 좌상단 진행 배지 텍스트 결정 ──────────────────────────
   let badgeText: string | null = null;
@@ -371,6 +375,21 @@ export function MapPanel() {
             </div>
             <div className="text-base font-bold text-ink-primary dark:text-ink-primary-dark mb-1">직장을 먼저 입력해주세요</div>
             <div className="text-sm text-ink-tertiary dark:text-ink-tertiary-dark">상단 검색창 또는 인기 직장 칩</div>
+          </div>
+        </div>
+      )}
+
+      {/* 추천 조회 중 — 지도 중앙 로딩 표시 (핀이 제거된 동안 "조회중" 안내) */}
+      {isLoading && workplace && status === 'ready' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 6 }}>
+          <div className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-elevated/95 dark:bg-surface-dark-elevated/95 border border-line-light dark:border-line-dark rounded-cardlg shadow-card-hover">
+            <span
+              className="w-4 h-4 rounded-full border-2 border-brand/30 border-t-brand animate-spin"
+              aria-hidden="true"
+            />
+            <span className="text-sm font-semibold text-ink-secondary dark:text-ink-secondary-dark">
+              추천 지역 조회 중…
+            </span>
           </div>
         </div>
       )}

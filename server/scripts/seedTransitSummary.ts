@@ -1,32 +1,37 @@
 /**
- * TAGO 대중교통 품질 요약 수집 스크립트 (Day 2)
+ * 수도권 대중교통 품질 요약 수집 스크립트 (Day 2 → 2026-06-01 provider 추상화)
  *
  *  ▷ 목적
- *    서울 전체 행정동의 centroid 좌표 기준
- *    반경 1km 버스정류장·배차간격·첫막차 → t_transit_route_summary 적재
- *    통근 점수 보정 (transitScore → commuteScore 가중합)
+ *    수도권(서울·인천·경기) 행정동 centroid 좌표 기준 버스정류장·배차간격·첫막차
+ *    → t_transit_route_summary 적재. 통근 점수 보정(transitScore → commuteScore 가중합).
+ *
+ *  ▷ Provider 분기 (KI-6 / KI-17, transitProvider.ts)
+ *    · 서울(11***)        → TOPIS(seoulTopisClient) — TAGO 서울 시내버스 미등재 보완.
+ *    · 그 외(인천·경기)    → TAGO(tagoClient).
+ *    분기는 행정동 코드 prefix 로 자동 수행 — 호출부는 fetchTransitSummary(lat,lng,code) 단일 시그니처.
  *
  *  ▷ 실행
- *    cd C:\git\2026_MOLIT_CONTEST\server
+ *    cd server
  *    npm run seed:transit
  *
  *    # 특정 행정동만:
  *    npm run seed:transit -- --dongCode=1168010100
+ *    # provider 응답 진단(적재 전 권장): TAGO_DEBUG=1 / SEOUL_TOPIS_DEBUG=1
  *
  *  ▷ 사전 조건
- *    - server/.env 에 MOLIT_SERVICE_KEY=<발급키>
- *    - 발급: https://www.data.go.kr → "국가대중교통정보센터 TAGO"
- *      신청 API: 버스정류장정보 조회 서비스 / 버스노선정보 조회 서비스
+ *    - server/.env 에 MOLIT_SERVICE_KEY=<발급키> (TAGO·경기인천)
+ *      + (서울) SEOUL_TOPIS_KEY=<발급키> 미설정 시 MOLIT_SERVICE_KEY 재사용.
+ *      data.go.kr 신청: TAGO 버스정류장/노선정보 + 서울특별시 정류소/버스노선정보.
  *    - npx prisma db push (t_transit_route_summary 테이블 생성)
+ *    ⚠️ 경기·인천 TAGO 커버리지·서울 TOPIS 필드매핑은 프로브 검증 대상(KI-17 §5).
  *
  *  ▷ 결과 확인 (MySQL)
  *    SELECT AVG(transit_score), MIN(transit_score), MAX(transit_score)
  *    FROM t_transit_route_summary;
  */
 import 'dotenv/config';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../src/services/db';
-import { fetchTransitSummary } from '../src/services/external/tagoClient';
+import { fetchTransitSummary, resolveTransitRegion } from '../src/services/external/transitProvider';
 
 /* ─── CLI 파라미터 ─────────────────────────────────────────── */
 
@@ -52,49 +57,49 @@ async function main() {
     process.exit(1);
   }
 
-  // 행정동 centroid 조회
-  // $queryRaw 중첩 불가 → Prisma.sql / Prisma.empty 로 조건 분기
-  const dongFilter = targetDongCode
-    ? Prisma.sql`AND ld.code = ${targetDongCode}`
-    : Prisma.empty;
-
-  const dongs = await prisma.$queryRaw<
-    Array<{ legal_dong_code: string; lat: number; lng: number; dong_name: string }>
-  >`
-    SELECT
-      ld.code           AS legal_dong_code,
-      ld.dong           AS dong_name,
-      AVG(ac.lat)       AS lat,
-      AVG(ac.lng)       AS lng
-    FROM t_legal_dong ld
-    JOIN t_apt_complex ac
-      ON ac.sigungu_code = SUBSTRING(ld.code, 1, 5)
-      AND ac.legal_dong  = ld.dong
-    WHERE ld.sido = '서울특별시'
-      AND ld.dong IS NOT NULL
-      AND ac.lat IS NOT NULL
-      AND ac.lng IS NOT NULL
-      ${dongFilter}
-    GROUP BY ld.code, ld.dong
-    HAVING COUNT(ac.id) >= 1
-    ORDER BY ld.code
-  `;
+  // 행정동 centroid 조회 — t_legal_dong.lat/lng 직접 사용
+  //  (2026-06-01 KI-20: apt_complex 이름조인 폐기 → 인천·경기 누락 해소. seed:legal-dong 이 좌표 적재.)
+  const dongs = (
+    await prisma.legalDong.findMany({
+      where: {
+        OR: [
+          { code: { startsWith: '11' } },
+          { code: { startsWith: '28' } },
+          { code: { startsWith: '41' } },
+        ],
+        dong: { not: null },
+        lat: { not: null },
+        lng: { not: null },
+        ...(targetDongCode ? { code: targetDongCode } : {}),
+      },
+      select: { code: true, dong: true, lat: true, lng: true },
+      orderBy: { code: 'asc' },
+    })
+  ).map((d) => ({
+    legal_dong_code: d.code,
+    dong_name: d.dong as string,
+    lat: d.lat as number,
+    lng: d.lng as number,
+  }));
 
   console.log(`  대상 행정동: ${dongs.length}개`);
   if (dongs.length === 0) {
-    console.warn('  행정동 centroid 없음 — t_legal_dong + t_apt_complex 데이터 확인 필요');
+    console.warn('  행정동 centroid 없음 — seed:legal-dong 으로 t_legal_dong 좌표 적재 먼저 실행 필요');
     return;
   }
 
   let processed = 0;
   let upserted = 0;
+  const providerCount = { seoul: 0, tago: 0 }; // provider 분기 가시화(프로브용)
 
   for (const dong of dongs) {
     const { legal_dong_code, lat, lng, dong_name } = dong;
     process.stdout.write(`\r  [${++processed}/${dongs.length}] ${dong_name} (${lat.toFixed(4)}, ${lng.toFixed(4)})...`);
+    providerCount[resolveTransitRegion(legal_dong_code)]++;
 
     try {
-      const summary = await fetchTransitSummary(lat, lng);
+      // regionCode(행정동 10자리) prefix 로 provider 자동 선택: 서울→TOPIS, 경기·인천→TAGO
+      const summary = await fetchTransitSummary(lat, lng, legal_dong_code);
 
       // stationCount=0 → 광역버스 미경유 행정동
       // DB에 0을 넣으면 commuteScore 패널티 발생 → 행 미적재로 null fallback 처리
@@ -133,7 +138,7 @@ async function main() {
   }
 
   console.log(`\n\n=== 완료 ===`);
-  console.log(`  처리: ${processed}개 행정동`);
+  console.log(`  처리: ${processed}개 행정동 (서울/TOPIS ${providerCount.seoul} · 경기인천/TAGO ${providerCount.tago})`);
   console.log(`  적재: ${upserted}건`);
 
   const stats = await prisma.$queryRaw<

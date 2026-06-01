@@ -67,6 +67,8 @@ model LegalDong {
   sido     String  @db.VarChar(40) /// 시도명 (예: "서울특별시", "경기도")
   sigungu  String  @db.VarChar(60) /// 시군구명 (예: "강남구", "수원시 영통구")
   dong     String? @db.VarChar(60) /// 읍면동명 (선택, 10자리 코드일 때만 저장, 예: "강남동")
+  lat      Float? /// 동 centroid 위도 (capital-centroids.json, 2026-06-01 KI-20). NULL=레거시/미적재 행
+  lng      Float? /// 동 centroid 경도 (capital-centroids.json). POI/transit 시드가 직접 사용(이름조인 폐기)
   isActive Boolean @default(true) @map("is_active") /// 활성 구역 여부 (폐지/통합된 행정구역은 false)
 
   @@map("t_legal_dong")
@@ -142,6 +144,175 @@ model AptRent {
   @@unique([complexId, contractDate, areaM2, floor, depositManwon, monthlyManwon], map: "uniq_rent")
   @@index([complexId, contractDate])
   @@map("t_apt_rent")
+}
+
+// ══════════════════════════════════════════════════════════════
+//  비-아파트 실거래 (유형별 분리 테이블)
+//  - 청년 타깃 전월세 보강 (오피스텔/연립다세대/단독다가구)
+//  - 아파트와 동일한 스키마 형태를 유지해 ingest/조회/ML 코드를 재사용
+//  - 활용승인 현황: OFFI ✅ / VILLA·SH 미승인(키 발급 후 실행)
+// ══════════════════════════════════════════════════════════════
+
+// ── 오피스텔 (offiNm, aptSeq 없음) ──────────────────────────────
+model OffiComplex {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(120)
+  sigunguCode String   @map("sigungu_code") @db.VarChar(5)
+  legalDong   String   @map("legal_dong") @db.VarChar(60)
+  jibun       String?  @db.VarChar(60)
+  roadAddr    String?  @map("road_addr") @db.VarChar(200)
+  builtYear   Int?     @map("built_year")
+  lat         Float?
+  lng         Float?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  trades OffiTrade[]
+  rents  OffiRent[]
+
+  @@unique([sigunguCode, legalDong, name, builtYear], map: "uniq_offi_complex")
+  @@index([sigunguCode, legalDong])
+  @@map("t_offi_complex")
+}
+
+model OffiTrade {
+  id          Int      @id @default(autoincrement())
+  complexId   Int      @map("complex_id")
+  dealDate    DateTime @map("deal_date") @db.Date
+  priceManwon Int      @map("price_manwon")
+  areaM2      Float    @map("area_m2")
+  floor       Int?
+  builtYear   Int?     @map("built_year")
+  rawPayload  Json?    @map("raw_payload")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  complex OffiComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
+
+  @@unique([complexId, dealDate, areaM2, floor, priceManwon], map: "uniq_offi_trade")
+  @@index([complexId, dealDate])
+  @@map("t_offi_trade")
+}
+
+model OffiRent {
+  id            Int      @id @default(autoincrement())
+  complexId     Int      @map("complex_id")
+  contractDate  DateTime @map("contract_date") @db.Date
+  depositManwon Int      @map("deposit_manwon")
+  monthlyManwon Int      @default(0) @map("monthly_manwon")
+  contractType  RentType @map("contract_type")
+  areaM2        Float    @map("area_m2")
+  floor         Int?
+  builtYear     Int?     @map("built_year")
+  rawPayload    Json?    @map("raw_payload")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  complex OffiComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
+
+  @@unique([complexId, contractDate, areaM2, floor, depositManwon, monthlyManwon], map: "uniq_offi_rent")
+  @@index([complexId, contractDate])
+  @@map("t_offi_rent")
+}
+
+// ── 연립/다세대(빌라) (mhouseNm) ────────────────────────────────
+model VillaComplex {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(120)
+  sigunguCode String   @map("sigungu_code") @db.VarChar(5)
+  legalDong   String   @map("legal_dong") @db.VarChar(60)
+  jibun       String?  @db.VarChar(60)
+  roadAddr    String?  @map("road_addr") @db.VarChar(200)
+  builtYear   Int?     @map("built_year")
+  lat         Float?
+  lng         Float?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  trades VillaTrade[]
+  rents  VillaRent[]
+
+  @@unique([sigunguCode, legalDong, name, builtYear], map: "uniq_villa_complex")
+  @@index([sigunguCode, legalDong])
+  @@map("t_villa_complex")
+}
+
+model VillaTrade {
+  id          Int      @id @default(autoincrement())
+  complexId   Int      @map("complex_id")
+  dealDate    DateTime @map("deal_date") @db.Date
+  priceManwon Int      @map("price_manwon")
+  areaM2      Float    @map("area_m2")
+  floor       Int?
+  builtYear   Int?     @map("built_year")
+  rawPayload  Json?    @map("raw_payload")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  complex VillaComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
+
+  @@unique([complexId, dealDate, areaM2, floor, priceManwon], map: "uniq_villa_trade")
+  @@index([complexId, dealDate])
+  @@map("t_villa_trade")
+}
+
+model VillaRent {
+  id            Int      @id @default(autoincrement())
+  complexId     Int      @map("complex_id")
+  contractDate  DateTime @map("contract_date") @db.Date
+  depositManwon Int      @map("deposit_manwon")
+  monthlyManwon Int      @default(0) @map("monthly_manwon")
+  contractType  RentType @map("contract_type")
+  areaM2        Float    @map("area_m2")
+  floor         Int?
+  builtYear     Int?     @map("built_year")
+  rawPayload    Json?    @map("raw_payload")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  complex VillaComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
+
+  @@unique([complexId, contractDate, areaM2, floor, depositManwon, monthlyManwon], map: "uniq_villa_rent")
+  @@index([complexId, contractDate])
+  @@map("t_villa_rent")
+}
+
+// ── 단독/다가구 (건물명·aptSeq·층 없음, 면적=연면적) ─────────────
+//   "complex" = 법정동+지번 단위로 합성. name 은 "법정동 지번" 으로 채움.
+model ShComplex {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(120)
+  sigunguCode String   @map("sigungu_code") @db.VarChar(5)
+  legalDong   String   @map("legal_dong") @db.VarChar(60)
+  jibun       String?  @db.VarChar(60)
+  roadAddr    String?  @map("road_addr") @db.VarChar(200)
+  builtYear   Int?     @map("built_year")
+  lat         Float?
+  lng         Float?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  rents ShRent[]
+
+  @@unique([sigunguCode, legalDong, name, builtYear], map: "uniq_sh_complex")
+  @@index([sigunguCode, legalDong])
+  @@map("t_sh_complex")
+}
+
+model ShRent {
+  id            Int      @id @default(autoincrement())
+  complexId     Int      @map("complex_id")
+  contractDate  DateTime @map("contract_date") @db.Date
+  depositManwon Int      @map("deposit_manwon")
+  monthlyManwon Int      @default(0) @map("monthly_manwon")
+  contractType  RentType @map("contract_type")
+  areaM2        Float    @map("area_m2") /// 단독/다가구는 연면적(totalFloorAr)
+  floor         Int?
+  builtYear     Int?     @map("built_year")
+  rawPayload    Json?    @map("raw_payload")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  complex ShComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
+
+  @@unique([complexId, contractDate, areaM2, floor, depositManwon, monthlyManwon], map: "uniq_sh_rent")
+  @@index([complexId, contractDate])
+  @@map("t_sh_rent")
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -279,6 +450,28 @@ model SafetyIndex {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("t_safety_index")
+}
+
+/// 행정동 생활편의(POI) 요약 (KI-4, 2026-05-31 — Sprint D 생활 점수)
+///  - 동 centroid 반경 500m 카카오 로컬 카테고리 검색 결과 카운트
+///  - lifeScore → scoreRegion 의 life 축으로 사용 (0~100, 높을수록 편의 우수)
+///  - 배치 적재: npm run seed:life
+model PoiSummary {
+  legalDongCode  String   @id @map("legal_dong_code") @db.VarChar(10)
+  /// 반경 내 POI 개수 (카카오 카테고리 그룹별)
+  subwayCount       Int  @default(0) @map("subway_count")        /// SW8 지하철역
+  martCount         Int  @default(0) @map("mart_count")          /// MT1 대형마트
+  convenienceCount  Int  @default(0) @map("convenience_count")   /// CS2 편의점
+  cafeCount         Int  @default(0) @map("cafe_count")          /// CE7 카페
+  restaurantCount   Int  @default(0) @map("restaurant_count")    /// FD6 음식점
+  hospitalCount     Int  @default(0) @map("hospital_count")      /// HP8 병원
+  pharmacyCount     Int  @default(0) @map("pharmacy_count")      /// PM9 약국
+  bankCount         Int  @default(0) @map("bank_count")          /// BK9 은행
+  /// 합성 생활 점수 (0~100). 카테고리별 forwardLinear 정규화 후 가중합.
+  lifeScore      Float    @map("life_score")
+  computedAt     DateTime @default(now()) @map("computed_at")
+
+  @@map("t_poi_summary")
 }
 
 /// 통계청 가계금융복지조사 — 소득 분위별 평균 월소득 (1회 시드)

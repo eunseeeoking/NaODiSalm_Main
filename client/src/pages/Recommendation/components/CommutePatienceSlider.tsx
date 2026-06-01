@@ -5,6 +5,7 @@
  *  - 컴포넌트 명은 호환을 위해 CommutePatienceSlider 유지 (LeftPanel/index.tsx 호출부 다수)
  */
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
+import { BUDGET_SLIDER, MONTHLY_RENT_SLIDER } from '../../../types/recommendation';
 
 /**
  * 예산(만원) → 사람이 읽는 한글 표기
@@ -28,14 +29,37 @@ function formatBudget(manwon: number): string {
   return `${eok}억 ${rest.toLocaleString()}만`;
 }
 
-export function CommutePatienceSlider() {
+/**
+ * 거래유형별 예산의 의미 — 슬라이더가 실제로 무엇을 제한하는지 명시.
+ *  · 전세/월세 → 보증금(자본) 상한. 동 보증금 중위값이 이를 넘으면 후보 제외.
+ *  · 매매     → 매매가 상한.
+ */
+const BUDGET_CAPTION: Record<string, string> = {
+  SALE: '매매가 한도',
+  JEONSE: '보증금 한도',
+  MONTHLY: '보증금 한도',
+};
+
+export function CommutePatienceSlider({ bare = false }: { bare?: boolean }) {
   const patience = useRecommendationStore((s) => s.patience);
   const setPatience = useRecommendationStore((s) => s.setPatience);
   const budget = useRecommendationStore((s) => s.budget);
   const setBudget = useRecommendationStore((s) => s.setBudget);
+  const dealType = useRecommendationStore((s) => s.dealType);
+  const monthlyRentCap = useRecommendationStore((s) => s.monthlyRentCap);
+  const setMonthlyRentCap = useRecommendationStore((s) => s.setMonthlyRentCap);
+
+  const budgetCfg = BUDGET_SLIDER[dealType];
+  const rentCfg = MONTHLY_RENT_SLIDER;
 
   return (
-    <div className="px-4 py-3.5 bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark rounded-cardlg shadow-card shrink-0 flex flex-col gap-3.5">
+    <div
+      className={
+        bare
+          ? 'flex flex-col gap-3.5'
+          : 'px-4 py-3.5 bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark rounded-cardlg shadow-card shrink-0 flex flex-col gap-3.5'
+      }
+    >
       {/* 통근 인내심 */}
       <div>
         <div className="flex items-center justify-between mb-2 whitespace-nowrap">
@@ -69,32 +93,79 @@ export function CommutePatienceSlider() {
       {/* 구분선 */}
       <div className="h-px bg-line-light dark:bg-line-dark" aria-hidden="true" />
 
-      {/* 예산 */}
+      {/* 예산 (보증금/매매가) — 거래유형별 한도, 최대 위치는 무제한(전체 매물) */}
       <div>
         <div className="flex items-center justify-between mb-2 whitespace-nowrap">
-          <span className="text-sm text-ink-secondary dark:text-ink-secondary-dark font-medium shrink-0">
+          <span className="text-sm text-ink-secondary dark:text-ink-secondary-dark font-medium shrink-0 flex items-baseline gap-1.5">
             예산
+            <span className="text-xs text-ink-tertiary dark:text-ink-tertiary-dark font-normal">
+              {BUDGET_CAPTION[dealType] ?? '한도'}
+            </span>
           </span>
           <span className="text-xl font-bold text-ink-primary dark:text-ink-primary-dark tabular-nums shrink-0">
-            {formatBudget(budget)}
+            {budget >= budgetCfg.max ? '최대' : formatBudget(budget)}
           </span>
         </div>
         <input
           type="range"
-          min={1000}
-          max={150000}
-          step={1000}
-          value={budget}
+          min={budgetCfg.min}
+          max={budgetCfg.max}
+          step={budgetCfg.step}
+          value={Math.min(budget, budgetCfg.max)}
           onChange={(e) => setBudget(Number(e.target.value))}
           className="w-full"
           aria-label="예산"
         />
         <div className="flex justify-between text-xs text-ink-tertiary dark:text-ink-tertiary-dark mt-1 tabular-nums font-medium">
-          <span>1천만</span>
-          <span>7.5억</span>
-          <span>15억</span>
+          {budgetCfg.labels.map((l) => (
+            <span key={l}>{l}</span>
+          ))}
         </div>
       </div>
+
+      {/* 월세 한도 — 거래유형이 '월세' 일 때만 노출 (보증금 한도와 별개) */}
+      {dealType === 'MONTHLY' && (
+        <>
+          <div className="h-px bg-line-light dark:bg-line-dark" aria-hidden="true" />
+          <div>
+            <div className="flex items-center justify-between mb-2 whitespace-nowrap">
+              <span className="text-sm text-ink-secondary dark:text-ink-secondary-dark font-medium shrink-0 flex items-baseline gap-1.5">
+                월세 한도
+                <span className="text-xs text-ink-tertiary dark:text-ink-tertiary-dark font-normal">
+                  월 임대료
+                </span>
+              </span>
+              <span className="text-xl font-bold text-ink-primary dark:text-ink-primary-dark tabular-nums shrink-0">
+                {monthlyRentCap >= rentCfg.max ? (
+                  '최대'
+                ) : (
+                  <>
+                    {monthlyRentCap}
+                    <span className="text-sm text-ink-tertiary dark:text-ink-tertiary-dark ml-1 font-medium">
+                      만원
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={rentCfg.min}
+              max={rentCfg.max}
+              step={rentCfg.step}
+              value={Math.min(monthlyRentCap, rentCfg.max)}
+              onChange={(e) => setMonthlyRentCap(Number(e.target.value))}
+              className="w-full"
+              aria-label="월세 한도 (월 임대료, 만원)"
+            />
+            <div className="flex justify-between text-xs text-ink-tertiary dark:text-ink-tertiary-dark mt-1 tabular-nums font-medium">
+              {rentCfg.labels.map((l) => (
+                <span key={l}>{l}</span>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

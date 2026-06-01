@@ -10,7 +10,8 @@
  *    BULK_START_YM=201501            (시작월 YYYYMM)
  *    BULK_END_YM=201912              (종료월 YYYYMM)
  *    BULK_SLEEP_MS=500               (호출 간 슬립, 기본 1000)
- *    BULK_SIGUNGU_CODES=11680,11650  (콤마구분, 생략 시 서울 25구 전체)
+ *    BULK_SIGUNGU_CODES=11680,11650  (콤마구분, 생략 시 --region 사용)
+ *    BULK_REGION=capital             (seoul|capital|incheon|gyeonggi, 생략 시 seoul)
  *    BULK_RETRY=2                    (실패 시 재시도 횟수, 기본 2)
  *
  *  ▷ 실행
@@ -21,6 +22,10 @@
  *
  *    # env 변수만 사용
  *    npm run ingest:apt:bulk
+ *
+ *    # ⭐ 수도권 전체(서울+인천+경기 82개) 2년치 — 코드 수동 입력 불필요
+ *    npm run ingest:apt:bulk -- --from=202406 --to=202605 --region=capital
+ *    # (--region=seoul|capital|incheon|gyeonggi, 생략 시 seoul. BULK_REGION env 도 지원)
  *
  *    # 단일 시군구 테스트
  *    npm run ingest:apt:bulk -- --from=201501 --to=201503 --codes=11680
@@ -46,7 +51,11 @@ import fs from 'fs';
 import path from 'path';
 import { ingestSigunguMonth } from '../src/services/ingest/aptIngest';
 import { buildMonthRange } from '../src/services/ingest/bulkRunner';
-import { SEOUL_LAWD_CODES } from '../src/data/seoulLawdCodes';
+import {
+  lawdCodesByRegion,
+  LAWD_REGIONS,
+  type LawdRegion,
+} from '../src/data/seoulLawdCodes';
 import { prisma } from '../src/services/db';
 
 /* ─── CLI 인수 파싱 ──────────────────────────────────────── */
@@ -60,6 +69,7 @@ const has = (name: string) => process.argv.includes(`--${name}`);
 const fromYM = arg('from') ?? process.env.BULK_START_YM;
 const toYM   = arg('to')   ?? process.env.BULK_END_YM;
 const codesArg = arg('codes') ?? process.env.BULK_SIGUNGU_CODES;
+const regionArg = (arg('region') ?? process.env.BULK_REGION ?? 'seoul').toLowerCase();
 const sleepMs  = parseInt(arg('sleep') ?? process.env.BULK_SLEEP_MS ?? '1000', 10);
 const retryMax = parseInt(arg('retry') ?? process.env.BULK_RETRY ?? '2', 10);
 const dryRun   = has('dry');
@@ -88,15 +98,23 @@ if (months.length === 0) {
   process.exit(1);
 }
 
-const allCodes = SEOUL_LAWD_CODES.map((s) => s.code);
+// 코드 결정 우선순위: --codes(가장 구체적) > --region > 기본 seoul
+if (!codesArg && !LAWD_REGIONS.includes(regionArg as LawdRegion)) {
+  console.error(`[ERROR] --region 은 ${LAWD_REGIONS.join('|')} 중 하나 (기본 seoul)`);
+  process.exit(1);
+}
 const codes = codesArg
   ? codesArg.split(',').map((c) => c.trim()).filter((c) => /^\d{5}$/.test(c))
-  : allCodes;
+  : lawdCodesByRegion(regionArg as LawdRegion);
 
 if (codes.length === 0) {
   console.error('[ERROR] 유효한 시군구코드 없음');
   process.exit(1);
 }
+console.log(
+  `[bulk:apt] 대상 시군구 ${codes.length}개 ` +
+    (codesArg ? '(--codes 지정)' : `(--region=${regionArg})`),
+);
 
 /* ─── 체크포인트 ─────────────────────────────────────────── */
 
@@ -269,7 +287,7 @@ async function main() {
 
   saveCheckpoint(cp);
 
-  const elapsed = ((Date.now() - t0) / 60).toFixed(1);
+  const elapsed = ((Date.now() - t0) / 60000).toFixed(1); // ms → 분 (60,000ms = 1분)
   console.log('\n=== 적재 완료 ===');
   console.log(`  상태:       ${aborted ? 'ABORTED' : 'DONE'}`);
   console.log(`  처리 step:  ${processedNow}/${total - completedSet.size} (전체 진행 ${cp.completed.length}/${total})`);

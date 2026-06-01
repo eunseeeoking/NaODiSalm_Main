@@ -18,36 +18,67 @@ const parser = new XMLParser({
 });
 
 const ENDPOINTS = {
+  // 아파트 (활용승인 OK)
   aptTrade:
     'https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev',
   aptRent:
     'https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent',
+  // 오피스텔 (활용승인 OK)
   offiTrade:
     'https://apis.data.go.kr/1613000/RTMSDataSvcOffiTrade/getRTMSDataSvcOffiTrade',
   offiRent:
     'https://apis.data.go.kr/1613000/RTMSDataSvcOffiRent/getRTMSDataSvcOffiRent',
+  // 연립/다세대(빌라) (활용승인 OK)
+  villaTrade:
+    'https://apis.data.go.kr/1613000/RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade',
+  villaRent:
+    'https://apis.data.go.kr/1613000/RTMSDataSvcRHRent/getRTMSDataSvcRHRent',
+  // 단독/다가구 (활용승인 OK)
+  shTrade:
+    'https://apis.data.go.kr/1613000/RTMSDataSvcSHTrade/getRTMSDataSvcSHTrade',
+  shRent:
+    'https://apis.data.go.kr/1613000/RTMSDataSvcSHRent/getRTMSDataSvcSHRent',
 } as const;
+
+/**
+ * 매물 유형. 분리 테이블 전략과 ingest config 의 키로 사용.
+ *  - APT   : 아파트 (단지명 aptNm, 단지 고유 aptSeq 보유)
+ *  - OFFI  : 오피스텔 (단지명 offiNm, aptSeq 없음)
+ *  - VILLA : 연립/다세대 (건물명 mhouseNm, aptSeq 없음)
+ *  - SH    : 단독/다가구 (건물명/aptSeq/층 없음, 면적은 연면적 totalFloorAr)
+ */
+export type PropertyType = 'APT' | 'OFFI' | 'VILLA' | 'SH';
+
+export const PROPERTY_ENDPOINTS: Record<
+  PropertyType,
+  { trade: string; rent: string }
+> = {
+  APT: { trade: ENDPOINTS.aptTrade, rent: ENDPOINTS.aptRent },
+  OFFI: { trade: ENDPOINTS.offiTrade, rent: ENDPOINTS.offiRent },
+  VILLA: { trade: ENDPOINTS.villaTrade, rent: ENDPOINTS.villaRent },
+  SH: { trade: ENDPOINTS.shTrade, rent: ENDPOINTS.shRent },
+};
 
 /** 매매 자료 원본 row (필요 필드만) */
 interface RawAptTrade {
-  aptNm?: string;          // 단지명
-  aptSeq?: string;         // 단지 고유 ID (예: "11680-3621")
-  aptDong?: string;        // 동
+  aptNm?: string;
+  aptSeq?: string;
+  aptDong?: string;
   buildYear?: string;
-  dealAmount?: string;     // "187,000" (만원)
+  dealAmount?: string;
   dealYear?: string;
   dealMonth?: string;
   dealDay?: string;
-  excluUseAr?: string;     // 전용면적
+  excluUseAr?: string;
   floor?: string;
   jibun?: string;
   bonbun?: string;
   bubun?: string;
   roadnm?: string;
-  sggCd?: string;          // 시군구코드(5자리)
-  umdNm?: string;          // 읍면동명(법정동)
-  dealingGbn?: string;     // 거래유형
-  cdealType?: string;      // 해제 거래 구분
+  sggCd?: string;
+  umdNm?: string;
+  dealingGbn?: string;
+  cdealType?: string;
   [key: string]: string | undefined;
 }
 
@@ -59,8 +90,8 @@ interface RawAptRent {
   dealYear?: string;
   dealMonth?: string;
   dealDay?: string;
-  deposit?: string;        // 보증금 (만원)
-  monthlyRent?: string;    // 월세 (만원, 전세=0)
+  deposit?: string;
+  monthlyRent?: string;
   excluUseAr?: string;
   floor?: string;
   jibun?: string;
@@ -68,7 +99,7 @@ interface RawAptRent {
   sggCd?: string;
   umdNm?: string;
   contractTerm?: string;
-  contractType?: string;   // "신규" | "갱신"
+  contractType?: string;
   preDeposit?: string;
   preMonthlyRent?: string;
   [key: string]: string | undefined;
@@ -78,7 +109,7 @@ export interface NormalizedTrade {
   sigunguCode: string;
   legalDong: string;
   name: string;
-  aptSeq: string | null;   // 단지 고유 ID
+  aptSeq: string | null;
   dealDate: Date;
   priceManwon: number;
   areaM2: number;
@@ -105,7 +136,7 @@ export interface NormalizedRent {
   raw: RawAptRent;
 }
 
-// ─── 유틸 ────────────────────────────────────────────────────
+// 유틸
 
 function toIntMoney(s?: string): number {
   if (!s) return 0;
@@ -137,7 +168,33 @@ function asArray<T>(x: T | T[] | undefined): T[] {
   return Array.isArray(x) ? x : [x];
 }
 
-// ─── 호출 ────────────────────────────────────────────────────
+/**
+ * 단지/건물명 추출 - 유형마다 태그가 다르다.
+ *   아파트=aptNm, 오피스텔=offiNm, 연립다세대=mhouseNm, 단독다가구=명칭 없음
+ * 단독다가구는 이름이 없어 houseType 으로 대체, 그것도 없으면 법정동+지번.
+ */
+function pickName(row: Record<string, string | undefined>): string | null {
+  // 1) 명시적 건물명만 이름으로 인정 (houseType 은 "다가구/다세대" 분류값이라 제외)
+  const explicit = row.aptNm ?? row.offiNm ?? row.mhouseNm ?? row.bldgNm;
+  if (explicit && explicit.trim()) return explicit.trim();
+  // 2) 단독/다가구: 건물명 없음 → 법정동+지번, 지번도 없으면 법정동+유형
+  const dong = row.umdNm?.trim();
+  const jibun = row.jibun?.trim();
+  const htype = row.houseType?.trim();
+  if (dong && jibun) return `${dong} ${jibun}`;     // "대치동 9**"
+  if (dong && htype) return `${dong} ${htype}`;      // "역삼동 다가구"
+  return dong ?? htype ?? null;
+}
+
+/**
+ * 전용면적 추출. 아파트/오피스텔/연립은 excluUseAr,
+ * 단독/다가구는 전용면적이 없고 연면적(totalFloorAr)을 사용.
+ */
+function pickArea(row: Record<string, string | undefined>): number {
+  return toFloat(row.excluUseAr ?? row.totalFloorAr ?? row.plottageAr);
+}
+
+// 호출
 
 async function fetchRaw<T>(
   endpoint: string,
@@ -203,18 +260,14 @@ async function fetchRaw<T>(
   return { items, totalCount };
 }
 
-// ─── 정규화 ──────────────────────────────────────────────────
+// 정규화
 
 function normalizeTrade(row: RawAptTrade, lawdCd: string): NormalizedTrade | null {
   const dealDate = buildDate(row.dealYear, row.dealMonth, row.dealDay);
-  const name = row.aptNm?.trim();
-  // sggCd 가 비어있으면 호출 시 사용한 LAWD_CD 로 대체
+  const name = pickName(row);
   const sigunguCode = (row.sggCd?.trim() || lawdCd).slice(0, 5);
   const legalDong = row.umdNm?.trim() ?? '';
   if (!dealDate || !name) return null;
-
-  // 해제거래(취소된 거래)는 제외하고 싶다면: row.cdealType 가 'O' 또는 값이 있으면 skip
-  // 현재는 모두 포함
 
   return {
     sigunguCode,
@@ -223,7 +276,7 @@ function normalizeTrade(row: RawAptTrade, lawdCd: string): NormalizedTrade | nul
     aptSeq: row.aptSeq?.trim() ?? null,
     dealDate,
     priceManwon: toIntMoney(row.dealAmount),
-    areaM2: toFloat(row.excluUseAr),
+    areaM2: pickArea(row),
     floor: toIntOrNull(row.floor),
     builtYear: toIntOrNull(row.buildYear),
     jibun: row.jibun?.trim() ?? null,
@@ -234,7 +287,7 @@ function normalizeTrade(row: RawAptTrade, lawdCd: string): NormalizedTrade | nul
 
 function normalizeRent(row: RawAptRent, lawdCd: string): NormalizedRent | null {
   const contractDate = buildDate(row.dealYear, row.dealMonth, row.dealDay);
-  const name = row.aptNm?.trim();
+  const name = pickName(row);
   const sigunguCode = (row.sggCd?.trim() || lawdCd).slice(0, 5);
   const legalDong = row.umdNm?.trim() ?? '';
   if (!contractDate || !name) return null;
@@ -249,7 +302,7 @@ function normalizeRent(row: RawAptRent, lawdCd: string): NormalizedRent | null {
     depositManwon: toIntMoney(row.deposit),
     monthlyManwon,
     contractType: monthlyManwon > 0 ? 'WOLSE' : 'JEONSE',
-    areaM2: toFloat(row.excluUseAr),
+    areaM2: pickArea(row),
     floor: toIntOrNull(row.floor),
     builtYear: toIntOrNull(row.buildYear),
     jibun: row.jibun?.trim() ?? null,
@@ -257,17 +310,20 @@ function normalizeRent(row: RawAptRent, lawdCd: string): NormalizedRent | null {
   };
 }
 
-// ─── Public API ──────────────────────────────────────────────
+// Public API
 
-export async function fetchAptTrades(
+/** 유형별 매매 수집 (전 페이지 순회 + 정규화). */
+export async function fetchTradesByType(
+  type: PropertyType,
   lawdCd: string,
   yyyymm: string,
 ): Promise<NormalizedTrade[]> {
+  const endpoint = PROPERTY_ENDPOINTS[type].trade;
   const out: NormalizedTrade[] = [];
   let pageNo = 1;
   while (true) {
     const { items, totalCount } = await fetchRaw<RawAptTrade>(
-      ENDPOINTS.aptTrade,
+      endpoint,
       lawdCd,
       yyyymm,
       pageNo,
@@ -283,15 +339,18 @@ export async function fetchAptTrades(
   return out;
 }
 
-export async function fetchAptRents(
+/** 유형별 전월세 수집 (전 페이지 순회 + 정규화). */
+export async function fetchRentsByType(
+  type: PropertyType,
   lawdCd: string,
   yyyymm: string,
 ): Promise<NormalizedRent[]> {
+  const endpoint = PROPERTY_ENDPOINTS[type].rent;
   const out: NormalizedRent[] = [];
   let pageNo = 1;
   while (true) {
     const { items, totalCount } = await fetchRaw<RawAptRent>(
-      ENDPOINTS.aptRent,
+      endpoint,
       lawdCd,
       yyyymm,
       pageNo,
@@ -306,3 +365,9 @@ export async function fetchAptRents(
   }
   return out;
 }
+
+// 하위호환 래퍼 (기존 aptIngest.ts 가 사용)
+export const fetchAptTrades = (lawdCd: string, yyyymm: string) =>
+  fetchTradesByType('APT', lawdCd, yyyymm);
+export const fetchAptRents = (lawdCd: string, yyyymm: string) =>
+  fetchRentsByType('APT', lawdCd, yyyymm);
