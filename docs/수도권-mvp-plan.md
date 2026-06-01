@@ -12,7 +12,15 @@
 ## ▶ 다음 세션 시작점 (인계)  — 갱신 2026-06-02 (수도권 데이터·시드 전부 적재 완료)
 
 - **이 문서가 메인.** 참조: `docs/known-issues.md`(KI 추적), `docs/depth3-design.md`(Depth 3 설계).
-- **커밋**: 이번 세션 전체가 브랜치 **`feat/capital-mvp`**(`d9a2ba0`)에 커밋됨. ⚠️ **main 미머지**(클라이언트 연계 전 — main 머지 시 빌드/배포 트리거). push 는 아직 안 함.
+- **커밋**: 브랜치 **`feat/capital-mvp`** (최신 `83c1e22`). ⚠️ **main 미머지·미push**(클라이언트 연계 전 — main 머지 시 빌드/배포 트리거).
+
+- **🔥 2026-06-02 심야 디버깅 결과 — 전월세 추천 0건 완전 해결(KI-21):**
+  - **진짜 원인**: `fetchRentCostByRegion` rent 쿼리에 `${RATE}` 파라미터 embed → Prisma 바인딩 순서 꼬임 → rent 0행 → 전월세 후보 전멸. (KI-19 universe/예산이 아니었음.) → RATE 리터럴 인라인으로 해결.
+  - **데이터**: 행정동 centroid 접근 폐기·**법정동 기반 복귀**(`seed:bjd` 전국 법정동 + POI/transit 법정동 complex-join). KI-20 반전 참조.
+  - **환경**: `.env` `connection_limit=1→10` (pool timeout 해소). ⚠️ 로컬 .env만 — 새 환경은 동일 설정 필요(.env.example 가이드 추가 후보).
+  - **검증**: 강남역·전세 추천 정상(totalCandidates 230, safety/life 실값, estimatedAxes=[]).
+
+- **▶▶ 다음 세션 1순위 = 쿼리 성능 최적화 (사용자 지정)**: rent/price median 쿼리가 매 요청 **전 수도권 실거래를 스캔**해 느림(연결 늘려 500은 막았지만 수 초 소요). → `fetchRentCostByRegion`·`fetchRepresentativePrices`를 **후보 동(targetAggs) 필터**로 좁혀 수 배 단축. 같은 RATE-embed 패턴 다른 쿼리도 감사. (상세: KI-21 후속)
 
 - **▶ 2026-06-02 세션 = 수도권 데이터/시드 마무리. 시드 적재 현황:**
   | 축 | 상태 |
