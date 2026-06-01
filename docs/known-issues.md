@@ -173,7 +173,27 @@
      수도권 10자리 레거시 행 삭제(코드 입도 단일화).
   2. `seedPoiSummary`·`seedTransitSummary` 가 `t_apt_complex` 이름조인 대신 **`ld.lat/ld.lng` 직접 사용** → 1187 전수 커버.
   3. 재실행: `prisma db push`+`generate` → `seed:legal-dong -- --prune` → `seed:safety`(1187 clean) → `seed:life`/`seed:transit`.
-- **연계**: 정리 후 t_legal_dong = centroids universe(1187) 로 일관 → KI-19(서빙 universe)·serving centroid 정합에도 기반.
+- **⚠️ 반전(2026-06-02) — 위 "행정동 centroid" 접근은 폐기**: prune로 법정동 행을 지우니 **추천 serving이 깨짐**.
+  serving(`fetchRegionAggregates`)은 complex(RTMS=**법정동**명)를 t_legal_dong에 이름매칭하는데, t_legal_dong을 행정동만 남기니
+  매칭 345→82로 붕괴 → 후보 0. **진짜 정답은 `seed:bjd`(kr-legal-dong 전국 법정동)** 였음 — 원래 424(인천경기 누락)도
+  t_legal_dong에 수도권 **법정동**이 없어서였지 행정동 전환이 필요했던 게 아님.
+- **최종 해결(2026-06-02)**: ① `seed:bjd`로 전국 법정동 복원(345→342 매칭) ② `seedPoiSummary`/`seedTransitSummary`를
+  **법정동 complex-join으로 복귀**(seed:bjd가 수도권 법정동 제공 → 인천경기도 매칭). 전부 **법정동 단일 키**로 정합.
+  (schema `lat/lng`·`--prune`는 잔존하나 미사용·무해.) → KI-19(서빙 universe)는 여전히 prefix='11' 서울 한정으로 남음.
+
+### KI-21 · 전월세 추천 항상 0건 — rent median 쿼리 RATE 파라미터 바인딩 버그 + connection_limit 🟢 해결 (2026-06-02)
+- **증상**: JEONSE/MONTHLY 추천이 **항상 0건**(예: 강남 전세, 예산 무관). `meta.totalCandidates=0, budgetFilteredCount=0`.
+  그동안 KI-19(universe/예산)로 의심했으나 실제는 **별개의 숨은 쿼리 버그**. (SALE은 정상이라 더 늦게 발견.)
+- **진단 경로**: aggregates=396·priceMap=1411 정상인데 **rentMap=0** → `fetchRentCostByRegion` 런타임 0행.
+  생SQL(literal 파라미터)은 1078행 정상 반환 → **Prisma 파라미터 바인딩 문제**로 좁힘.
+- **원인(핵심)**: `costExpr = Prisma.sql\`p.deposit_manwon * ${RATE}\`` 를 SELECT에 embed → 그 뒤 `contract_type`×3·`cutoff`
+  파라미터가 붙으며 **Prisma `$queryRaw`의 파라미터 바인딩 순서가 placeholder 순서와 어긋남** → `deposit*'JEONSE'`·`contract_date>=숫자`
+  꼴이 되어 **에러 없이 0행**. (매매가 쿼리는 cutoff 1개뿐이라 무사 → priceMap 1411.)
+- **해결**: RATE는 상수(`0.045/12`)라 **SQL 리터럴 인라인**(`Prisma.raw`)으로 파라미터 제거 → rows 0→1078. semiJeonseFilter도 동일 인라인.
+- **2차(노출된) 이슈**: 위 수정으로 rent 쿼리가 실제 실행되니, **`connection_limit=1`** + `Promise.all` 4쿼리에서
+  느린 rent median(전 수도권 실거래 스캔)이 단일 커넥션 점유 → **pool timeout(10s) → 500**. → DATABASE_URL `connection_limit=10`으로 해소.
+- **교훈/후속**: ① Prisma.sql에 **상수는 파라미터로 두지 말고 인라인**, embed된 fragment 파라미터 순서 주의(유사 패턴 감사 권장).
+  ② rent/price median이 매 요청 전 수도권 스캔 → **후보 동(targetAggs) 필터로 최적화**하면 수 배 빨라짐(perf 후속).
 
 ---
 

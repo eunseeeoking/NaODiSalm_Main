@@ -26,6 +26,7 @@
  *    SELECT ROUND(AVG(life_score),1), MIN(life_score), MAX(life_score) FROM t_poi_summary;
  */
 import 'dotenv/config';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../src/services/db';
 import { fetchPoiSummary } from '../src/services/external/kakaoPoiClient';
 
@@ -51,35 +52,38 @@ async function main() {
     process.exit(1);
   }
 
-  // 행정동 centroid 조회 — t_legal_dong.lat/lng 직접 사용
-  //  (2026-06-01 KI-20: apt_complex 이름조인 폐기 → 법정동↔행정동 명칭 불일치로 인천·경기 누락하던 문제 해소.
-  //   좌표는 seed:legal-dong 이 capital-centroids.json 에서 채움. lat IS NOT NULL 이라 5자리 마스터 row 자동 제외.)
-  const dongs = (
-    await prisma.legalDong.findMany({
-      where: {
-        OR: [
-          { code: { startsWith: '11' } },
-          { code: { startsWith: '28' } },
-          { code: { startsWith: '41' } },
-        ],
-        dong: { not: null },
-        lat: { not: null },
-        lng: { not: null },
-        ...(targetDongCode ? { code: targetDongCode } : {}),
-      },
-      select: { code: true, dong: true, lat: true, lng: true },
-      orderBy: { code: 'asc' },
-    })
-  ).map((d) => ({
-    legal_dong_code: d.code,
-    dong_name: d.dong as string,
-    lat: d.lat as number,
-    lng: d.lng as number,
-  }));
+  // 동 centroid 조회 — t_legal_dong(법정동) × complex 이름조인, 단지 좌표 AVG
+  //  (2026-06-02: 법정동 기반으로 복귀. seed:bjd 가 전국 법정동을 적재하므로 수도권 complex 도 매칭됨.
+  //   serving(fetchRegionAggregates)·시세 집계와 동일한 법정동 키 → POI/serving 정합.)
+  const dongFilter = targetDongCode
+    ? Prisma.sql`AND ld.code = ${targetDongCode}`
+    : Prisma.empty;
+
+  const dongs = await prisma.$queryRaw<
+    Array<{ legal_dong_code: string; lat: number; lng: number; dong_name: string }>
+  >`
+    SELECT
+      ld.code           AS legal_dong_code,
+      ld.dong           AS dong_name,
+      AVG(ac.lat)       AS lat,
+      AVG(ac.lng)       AS lng
+    FROM t_legal_dong ld
+    JOIN t_apt_complex ac
+      ON ac.sigungu_code = SUBSTRING(ld.code, 1, 5)
+      AND ac.legal_dong  = ld.dong
+    WHERE ld.sido IN ('서울특별시', '인천광역시', '경기도')
+      AND ld.dong IS NOT NULL
+      AND ac.lat IS NOT NULL
+      AND ac.lng IS NOT NULL
+      ${dongFilter}
+    GROUP BY ld.code, ld.dong
+    HAVING COUNT(ac.id) >= 1
+    ORDER BY ld.code
+  `;
 
   console.log(`  대상 행정동: ${dongs.length}개`);
   if (dongs.length === 0) {
-    console.warn('  행정동 centroid 없음 — seed:legal-dong 으로 t_legal_dong 좌표 적재 먼저 실행 필요');
+    console.warn('  동 centroid 없음 — seed:bjd(전국 법정동) + 실거래 적재 확인 필요');
     return;
   }
 

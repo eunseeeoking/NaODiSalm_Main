@@ -262,6 +262,31 @@ export function RegionCard({ region, rank }: Props) {
               />
             </span>
           </div>
+
+          {/* 4축 미니 막대 — 실데이터(안전·생활) 변별을 리스트에서도 노출. 라벨은 hover 툴팁. */}
+          <div className="mt-2 grid grid-cols-4 gap-1.5" aria-label="통근·부담·안전·생활 점수">
+            {METRIC_BARS.map((m) => {
+              const estimated = estimatedSet.has(m.axis);
+              return (
+                <div
+                  key={m.label}
+                  title={`${m.label} ${estimated ? '추정(총점 미반영)' : region[m.key]}`}
+                  className={estimated ? 'opacity-40' : ''}
+                >
+                  <div className="h-1 bg-surface dark:bg-surface-dark rounded-full overflow-hidden">
+                    <div
+                      className={
+                        estimated
+                          ? 'h-full bg-line-dark/40 rounded-full transition-all'
+                          : 'h-full bg-brand/70 rounded-full transition-all'
+                      }
+                      style={{ width: `${region[m.key]}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </>
       )}
     </div>

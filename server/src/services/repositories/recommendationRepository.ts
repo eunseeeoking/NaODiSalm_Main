@@ -362,11 +362,14 @@ async function fetchRentCostByRegion(
     ' UNION ALL ',
   );
 
-  // 건별 환산 월주거비 — 전세/월세 분기
+  // 건별 환산 월주거비 — 전세/월세 분기.
+  //  ⚠️ RATE 는 상수(0.00375)이므로 **SQL 리터럴로 인라인**(Prisma.raw). 파라미터로 두면 embed 된
+  //  costExpr 의 ? 가 다른 ?(contract_type×3·cutoff)와 바인딩 순서가 꼬여 런타임에 0행이 되던 버그 차단.
+  const rateLit = String(RATE); // 숫자 상수 → 안전하게 인라인
   const costExpr =
     dealType === 'JEONSE'
-      ? Prisma.sql`p.deposit_manwon * ${RATE}`
-      : Prisma.sql`p.monthly_manwon + p.deposit_manwon * ${RATE}`;
+      ? Prisma.raw(`p.deposit_manwon * ${rateLit}`)
+      : Prisma.raw(`p.monthly_manwon + p.deposit_manwon * ${rateLit}`);
 
   // KI-10 (2026-05-31): 반전세(준전세) 분리. WOLSE 버킷에 보증금이 큰 반전세가 섞이면
   //  순수 월세 median(monthly)은 끌어내리고 deposit median 은 끌어올려 통계 왜곡.
@@ -377,7 +380,7 @@ async function fetchRentCostByRegion(
   const semiJeonseFilter =
     dealType === 'JEONSE'
       ? Prisma.empty
-      : Prisma.sql`AND p.monthly_manwon >= p.deposit_manwon * ${RATE}`;
+      : Prisma.raw(`AND p.monthly_manwon >= p.deposit_manwon * ${rateLit}`);
 
   type MedRow = {
     sigungu_code: string;
@@ -390,7 +393,7 @@ async function fetchRentCostByRegion(
 
   // 중위값: 동별 정렬 후 가운데 1~2건 평균 (홀수=1건, 짝수=2건 평균). MySQL 8 윈도우 함수.
   //  cost(환산 월주거비)·deposit(보증금)·monthly(순수 월세) 3종 중위값을 한 쿼리에 산출.
-  const rows = await prisma.$queryRaw<MedRow[]>(Prisma.sql`
+  const rentQuery = Prisma.sql`
     WITH pooled AS (
       SELECT sigungu_code, legal_dong, deposit_manwon, monthly_manwon, (${costExpr}) AS cost
       FROM ( ${unioned} ) p
@@ -418,7 +421,8 @@ async function fetchRentCostByRegion(
     FROM ranked
     GROUP BY sigungu_code, legal_dong
     HAVING MAX(cnt) >= 5
-  `).catch((e: unknown) => {
+  `;
+  const rows = await prisma.$queryRaw<MedRow[]>(rentQuery).catch((e: unknown) => {
     console.warn('[recommendations] 전월세 집계 실패 → 매매가 합성 폴백:', e);
     return [] as MedRow[];
   });
