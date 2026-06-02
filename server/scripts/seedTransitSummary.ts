@@ -58,8 +58,8 @@ async function main() {
     process.exit(1);
   }
 
-  // 동 centroid 조회 — t_legal_dong(법정동) × complex 이름조인, 단지 좌표 AVG
-  //  (2026-06-02: 법정동 기반으로 복귀. seed:bjd 전국 법정동 → 수도권 complex 매칭, serving 과 정합.)
+  // 동 centroid 조회 — t_legal_dong(법정동) × **4종 단지 UNION** 이름조인, 좌표 AVG.
+  //  (2026-06-XX KI-19 후속: serving universe(4종)와 맞춰 빌라·오피만 있는 동도 커버 → transit 미적재로 인한 누락 방지.)
   const dongFilter = targetDongCode
     ? Prisma.sql`AND ld.code = ${targetDongCode}`
     : Prisma.empty;
@@ -68,21 +68,24 @@ async function main() {
     Array<{ legal_dong_code: string; lat: number; lng: number; dong_name: string }>
   >`
     SELECT
-      ld.code           AS legal_dong_code,
-      ld.dong           AS dong_name,
-      AVG(ac.lat)       AS lat,
-      AVG(ac.lng)       AS lng
+      ld.code     AS legal_dong_code,
+      ld.dong     AS dong_name,
+      AVG(c.lat)  AS lat,
+      AVG(c.lng)  AS lng
     FROM t_legal_dong ld
-    JOIN t_apt_complex ac
-      ON ac.sigungu_code = SUBSTRING(ld.code, 1, 5)
-      AND ac.legal_dong  = ld.dong
+    JOIN (
+      SELECT sigungu_code, legal_dong, lat, lng FROM t_apt_complex   WHERE lat IS NOT NULL AND lng IS NOT NULL
+      UNION ALL SELECT sigungu_code, legal_dong, lat, lng FROM t_offi_complex  WHERE lat IS NOT NULL AND lng IS NOT NULL
+      UNION ALL SELECT sigungu_code, legal_dong, lat, lng FROM t_villa_complex WHERE lat IS NOT NULL AND lng IS NOT NULL
+      UNION ALL SELECT sigungu_code, legal_dong, lat, lng FROM t_sh_complex    WHERE lat IS NOT NULL AND lng IS NOT NULL
+    ) c
+      ON c.sigungu_code = SUBSTRING(ld.code, 1, 5)
+      AND c.legal_dong  = ld.dong
     WHERE ld.sido IN ('서울특별시', '인천광역시', '경기도')
       AND ld.dong IS NOT NULL
-      AND ac.lat IS NOT NULL
-      AND ac.lng IS NOT NULL
       ${dongFilter}
     GROUP BY ld.code, ld.dong
-    HAVING COUNT(ac.id) >= 1
+    HAVING COUNT(*) >= 1
     ORDER BY ld.code
   `;
 
