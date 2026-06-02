@@ -60,21 +60,28 @@ interface RegionAggregate {
  */
 const SALE_TRADE_TYPES: readonly PropertyType[] = ['APT', 'OFFI', 'VILLA'];
 
+/** 수도권 등 다중 시군구 prefix → `(sigungu_code LIKE '11%' OR ...)` 필터 (KI-19). */
+function sigunguPrefixFilter(prefixes: readonly string[]): Prisma.Sql {
+  return Prisma.join(
+    prefixes.map((p) => Prisma.sql`sigungu_code LIKE ${p + '%'}`),
+    ' OR ',
+  );
+}
+
 /**
  * 매물종류 → complex 테이블 (sigungu_code, legal_dong, lat, lng) — 후보 universe 산출용 (KI-1).
- *  4종 단지 테이블을 동일 컬럼으로 노출해 UNION ALL 풀링 가능.
+ *  4종 단지 테이블을 동일 컬럼으로 노출해 UNION ALL 풀링 가능. prefixFilter 로 지역(수도권) 한정.
  */
-function complexSource(type: PropertyType, prefix: string): Prisma.Sql {
-  const like = prefix + '%';
+function complexSource(type: PropertyType, prefixFilter: Prisma.Sql): Prisma.Sql {
   switch (type) {
     case 'APT':
-      return Prisma.sql`SELECT sigungu_code, legal_dong, lat, lng FROM t_apt_complex WHERE lat IS NOT NULL AND lng IS NOT NULL AND sigungu_code LIKE ${like}`;
+      return Prisma.sql`SELECT sigungu_code, legal_dong, lat, lng FROM t_apt_complex WHERE lat IS NOT NULL AND lng IS NOT NULL AND (${prefixFilter})`;
     case 'OFFI':
-      return Prisma.sql`SELECT sigungu_code, legal_dong, lat, lng FROM t_offi_complex WHERE lat IS NOT NULL AND lng IS NOT NULL AND sigungu_code LIKE ${like}`;
+      return Prisma.sql`SELECT sigungu_code, legal_dong, lat, lng FROM t_offi_complex WHERE lat IS NOT NULL AND lng IS NOT NULL AND (${prefixFilter})`;
     case 'VILLA':
-      return Prisma.sql`SELECT sigungu_code, legal_dong, lat, lng FROM t_villa_complex WHERE lat IS NOT NULL AND lng IS NOT NULL AND sigungu_code LIKE ${like}`;
+      return Prisma.sql`SELECT sigungu_code, legal_dong, lat, lng FROM t_villa_complex WHERE lat IS NOT NULL AND lng IS NOT NULL AND (${prefixFilter})`;
     case 'SH':
-      return Prisma.sql`SELECT sigungu_code, legal_dong, lat, lng FROM t_sh_complex WHERE lat IS NOT NULL AND lng IS NOT NULL AND sigungu_code LIKE ${like}`;
+      return Prisma.sql`SELECT sigungu_code, legal_dong, lat, lng FROM t_sh_complex WHERE lat IS NOT NULL AND lng IS NOT NULL AND (${prefixFilter})`;
   }
 }
 
@@ -114,55 +121,32 @@ function tradeSource(type: PropertyType, dongFilter: Prisma.Sql): Prisma.Sql {
  * 1단계 — 후보 행정동의 메타 (centroid + 단지 수) 일괄 조회.
  *
  *  - 단지가 1개 미만인 행정동은 제외 (centroid 부정확 + 대표값 무의미)
- *  - sigunguCodePrefix 로 지역 한정 (예: '11' = 서울. 전국 확장 시 prefix 제거)
+ *  - sigunguCodePrefixes 로 지역 한정 (기본 수도권 11·28·41. KI-19: 서울 → 수도권 확장)
  *  - t_legal_dong 의 풀(10자리) 코드만 사용 (5자리 시군구 row 는 제외)
+ *  - ⚠️ 매칭은 **시군구 코드(5자리) + 동명** 기반 (KI-19): 이전 sigungu **이름** 매칭은
+ *    수도권 확장 시 인천 중구↔서울 중구 등 동명 시군구가 충돌 → 코드 prefix 로 교체.
  */
 async function fetchRegionAggregates(
   propertyTypes: readonly PropertyType[],
-  sigunguCodePrefix = '11',
+  sigunguCodePrefixes: readonly string[] = ['11', '28', '41'],
 ): Promise<RegionAggregate[]> {
   const types = propertyTypes.length > 0 ? propertyTypes : ALL_PROPERTY_TYPES;
-  // raw query — t_apt_complex (sigungu_code + legal_dong 이름) JOIN t_legal_dong (10자리 code)
-  // 다음 조건 모두 충족:
-  //  · t_apt_complex.lat/lng IS NOT NULL
-  //  · t_legal_dong.code LENGTH = 10  (행정동 풀 코드)
-  //  · t_legal_dong.sigungu 가 시군구 코드 prefix 와 매칭 — sigungu_code 도 같이 비교
-  //
-  // 주의: t_legal_dong 마스터에 sigungu_code 컬럼이 없으므로 (sigungu name 만)
-  // sigungu name 매칭을 위해 자기 join 또는 별도 lookup 필요.
-  // 단순화: sigungu_code prefix → name set 미리 lookup
-  const sigunguNames = await prisma.legalDong.findMany({
-    where: {
-      code: { startsWith: sigunguCodePrefix },
-    },
-    select: { code: true, sigungu: true },
-    distinct: ['sigungu'],
-  });
-  if (sigunguNames.length === 0) return [];
-  const sigunguSet = new Set(sigunguNames.map((s) => s.sigungu));
 
-  // 행정동 마스터: 10자리 + sigungu set 매칭
+  // 행정동 마스터 (10자리) — 지역(수도권) prefix 로 한정
   const dongMaster = await prisma.legalDong.findMany({
     where: {
-      sigungu: { in: Array.from(sigunguSet) },
+      OR: sigunguCodePrefixes.map((p) => ({ code: { startsWith: p } })),
       dong: { not: null },
     },
     select: { code: true, sigungu: true, dong: true },
   });
-  if (dongMaster.length === 0) return [];
-
-  // 10자리 코드만 살림 (5자리는 시군구 마스터 row)
   const dongRows = dongMaster.filter((d) => d.code.length === 10 && d.dong);
   if (dongRows.length === 0) return [];
 
-  // 단지 집계 — sigungu name 으로 매칭하려면 sigungu_code 가 필요
-  // t_apt_complex.sigungu_code 가 sigungu name 과 1:N 일 수 있으므로
-  // sigungu_code → sigungu name 매핑 캐시 사용
-  const sigunguCodeToName = new Map<string, string>();
-  for (const s of sigunguNames) {
-    // s.code 는 시군구(5자리) 또는 10자리 모두 포함됨 — 앞 5자리만 키로
-    const five = s.code.slice(0, 5);
-    if (!sigunguCodeToName.has(five)) sigunguCodeToName.set(five, s.sigungu);
+  // (시군구 5자리 코드 | 동명) → 마스터 row. 코드 기반이라 동명 시군구 충돌 없음(KI-19).
+  const dongByCodeKey = new Map<string, (typeof dongRows)[number]>();
+  for (const d of dongRows) {
+    dongByCodeKey.set(`${d.code.slice(0, 5)}|${d.dong}`, d);
   }
 
   // 단지 집계 (sigungu_code + legal_dong) — 선택 매물종류 complex 테이블 UNION (KI-1)
@@ -174,8 +158,9 @@ async function fetchRegionAggregates(
     centroid_lng: number;
     complex_count: bigint;
   };
+  const prefixFilter = sigunguPrefixFilter(sigunguCodePrefixes);
   const complexUnion = Prisma.join(
-    types.map((t) => complexSource(t, sigunguCodePrefix)),
+    types.map((t) => complexSource(t, prefixFilter)),
     ' UNION ALL ',
   );
   const groups = await prisma.$queryRaw<ComplexGroup[]>(Prisma.sql`
@@ -190,21 +175,16 @@ async function fetchRegionAggregates(
     HAVING COUNT(*) >= 1
   `);
 
-  // (sigungu_code + legal_dong이름) → t_legal_dong.code 매핑
-  // sigungu_code → sigungu name → dong rows
+  // 시군구 코드 + 동명 으로 마스터 매칭 (동명 시군구 충돌 차단)
   const aggregates: RegionAggregate[] = [];
   for (const g of groups) {
-    const sigunguName = sigunguCodeToName.get(g.sigungu_code);
-    if (!sigunguName) continue;
-    const masterRow = dongRows.find(
-      (d) => d.sigungu === sigunguName && d.dong === g.legal_dong,
-    );
-    if (!masterRow) continue; // 마스터에 없는 동은 일단 제외 (work-log 명시)
+    const masterRow = dongByCodeKey.get(`${g.sigungu_code}|${g.legal_dong}`);
+    if (!masterRow) continue; // 마스터에 없는 동은 제외
 
     aggregates.push({
       legalDongCode: masterRow.code,
       sigunguCode: g.sigungu_code,
-      sigungu: sigunguName,
+      sigungu: masterRow.sigungu,
       dong: g.legal_dong,
       centroidLat: Number(g.centroid_lat),
       centroidLng: Number(g.centroid_lng),
@@ -564,7 +544,8 @@ export async function fetchRegionCandidates(
   workplace: { lat: number; lng: number },
   patience: number,
   options: {
-    sigunguCodePrefix?: string;
+    /** 지역 한정 시군구 코드 prefix 목록. 미지정 시 수도권(11·28·41). KI-19. */
+    sigunguCodePrefixes?: readonly string[];
     maxKm?: number;
     dealType?: DealType;
     budget?: number;
@@ -605,7 +586,7 @@ export async function fetchRegionCandidates(
     return r;
   };
   // 1) 기본 메타 — 선택 매물종류 단지 universe
-  const aggregates = await timed('aggregates', fetchRegionAggregates(effectiveUniverse, options.sigunguCodePrefix));
+  const aggregates = await timed('aggregates', fetchRegionAggregates(effectiveUniverse, options.sigunguCodePrefixes));
   if (aggregates.length === 0) return { candidates: [], budgetFilteredCount };
 
   // 2) workplace 와 거리 계산 → 1차 필터 (직선 거리 상한)
