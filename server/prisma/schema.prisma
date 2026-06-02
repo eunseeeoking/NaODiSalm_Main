@@ -109,7 +109,6 @@ model AptTrade {
   areaM2      Float    @map("area_m2") /// 전용면적 (㎡, 소수점 가능, 예: 59.8)
   floor       Int? /// 층수 (선택, 1~40 등의 범위)
   builtYear   Int?     @map("built_year") /// 준공년도 (선택, 거래 당시 단지 나이)
-  rawPayload  Json?    @map("raw_payload") /// 원본 응답 JSON (디버깅/감사 추적용, 선택)
   createdAt   DateTime @default(now()) @map("created_at") /// 데이터 수집/저장 시각
 
   complex AptComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
@@ -136,7 +135,6 @@ model AptRent {
   areaM2        Float    @map("area_m2") /// 전용면적 (㎡, 소수점 가능, 예: 59.8)
   floor         Int? /// 층수 (선택, 1~40 등의 범위)
   builtYear     Int?     @map("built_year") /// 준공년도 (선택, 계약 당시 단지 나이)
-  rawPayload    Json?    @map("raw_payload") /// 원본 응답 JSON (디버깅/감사 추적용, 선택)
   createdAt     DateTime @default(now()) @map("created_at") /// 데이터 수집/저장 시각
 
   complex AptComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
@@ -183,7 +181,6 @@ model OffiTrade {
   areaM2      Float    @map("area_m2")
   floor       Int?
   builtYear   Int?     @map("built_year")
-  rawPayload  Json?    @map("raw_payload")
   createdAt   DateTime @default(now()) @map("created_at")
 
   complex OffiComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
@@ -203,7 +200,6 @@ model OffiRent {
   areaM2        Float    @map("area_m2")
   floor         Int?
   builtYear     Int?     @map("built_year")
-  rawPayload    Json?    @map("raw_payload")
   createdAt     DateTime @default(now()) @map("created_at")
 
   complex OffiComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
@@ -243,7 +239,6 @@ model VillaTrade {
   areaM2      Float    @map("area_m2")
   floor       Int?
   builtYear   Int?     @map("built_year")
-  rawPayload  Json?    @map("raw_payload")
   createdAt   DateTime @default(now()) @map("created_at")
 
   complex VillaComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
@@ -263,7 +258,6 @@ model VillaRent {
   areaM2        Float    @map("area_m2")
   floor         Int?
   builtYear     Int?     @map("built_year")
-  rawPayload    Json?    @map("raw_payload")
   createdAt     DateTime @default(now()) @map("created_at")
 
   complex VillaComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)
@@ -305,7 +299,6 @@ model ShRent {
   areaM2        Float    @map("area_m2") /// 단독/다가구는 연면적(totalFloorAr)
   floor         Int?
   builtYear     Int?     @map("built_year")
-  rawPayload    Json?    @map("raw_payload")
   createdAt     DateTime @default(now()) @map("created_at")
 
   complex ShComplex @relation(fields: [complexId], references: [id], onDelete: Cascade)

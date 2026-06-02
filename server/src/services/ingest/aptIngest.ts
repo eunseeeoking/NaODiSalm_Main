@@ -183,7 +183,6 @@ export async function ingestSigunguMonth(
         areaM2: t.areaM2,
         floor: t.floor,
         builtYear: t.builtYear,
-        rawPayload: t.raw as object,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -218,7 +217,6 @@ export async function ingestSigunguMonth(
         areaM2: r.areaM2,
         floor: r.floor,
         builtYear: r.builtYear,
-        rawPayload: r.raw as object,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);

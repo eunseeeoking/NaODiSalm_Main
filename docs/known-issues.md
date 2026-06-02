@@ -192,8 +192,14 @@
 - **해결**: RATE는 상수(`0.045/12`)라 **SQL 리터럴 인라인**(`Prisma.raw`)으로 파라미터 제거 → rows 0→1078. semiJeonseFilter도 동일 인라인.
 - **2차(노출된) 이슈**: 위 수정으로 rent 쿼리가 실제 실행되니, **`connection_limit=1`** + `Promise.all` 4쿼리에서
   느린 rent median(전 수도권 실거래 스캔)이 단일 커넥션 점유 → **pool timeout(10s) → 500**. → DATABASE_URL `connection_limit=10`으로 해소.
-- **교훈/후속**: ① Prisma.sql에 **상수는 파라미터로 두지 말고 인라인**, embed된 fragment 파라미터 순서 주의(유사 패턴 감사 권장).
-  ② rent/price median이 매 요청 전 수도권 스캔 → **후보 동(targetAggs) 필터로 최적화**하면 수 배 빨라짐(perf 후속).
+- **교훈**: Prisma.sql에 **상수는 파라미터로 두지 말고 인라인**, embed된 fragment 파라미터 순서 주의(유사 패턴 감사 권장).
+- **perf 최적화 적용(2026-06-XX)**: rent/price median 쿼리에
+  ① **후보 동(targetAggs) 튜플 IN 필터**(`dongTupleFilter`) ② **STRAIGHT_JOIN**(complex 작은 테이블을 driver 강제 →
+  rent 풀스캔 회피) ③ **JEONSE 단일정렬**(cost=deposit×RATE 단조 → 정렬 3→1, cost는 JS 환산) ④ **cutoff MAX 10분 캐시**
+  (`cachedCutoff`) ⑤ **raw_payload 컬럼 DROP**(행 축소, 별도 archive 후). + DB `connection_limit=10`.
+  → cold 7s → **warm ~2.7s**(patience 75=서울 전체 worst-case; 현실 patience 는 후보 적어 더 빠름).
+- **잔여(서브초 (필요 시))**: worst-case 는 매 요청 "raw 거래 median 재계산"이 본질 한계 → 쿼리 튜닝으로는 ~2.7s 가 바닥.
+  **동별 (dealType×매물종류) median 을 배치 summary 테이블로 사전집계**(POI/safety 패턴) → 런타임 조회 ~10ms 가 유일한 근본 해법. (미착수)
 
 ---
 

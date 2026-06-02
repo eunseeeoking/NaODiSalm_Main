@@ -79,16 +79,32 @@ function complexSource(type: PropertyType, prefix: string): Prisma.Sql {
 }
 
 /**
- * 매물종류 → trade×complex JOIN (대표 매매가 산출용, KI-2). SH 는 매매 거래 없음 → 호출 금지.
+ * 후보 동(sigungu_code, legal_dong) 튜플 IN 필터 — complex 스캔을 후보 동으로 한정(성능, KI-21 후속).
+ *  실거래 집계가 전 수도권을 스캔하던 것을 후보 ~수백 동으로 좁혀 매 요청 비용을 수 배 절감.
+ *  ⚠️ 호출부는 aggregates.length>0 을 보장해야 함(빈 배열이면 IN () 문법오류).
  */
-function tradeSource(type: PropertyType): Prisma.Sql {
+function dongTupleFilter(aggregates: RegionAggregate[]): Prisma.Sql {
+  const tuples = Prisma.join(
+    aggregates.map((a) => Prisma.sql`(${a.sigunguCode}, ${a.dong})`),
+    ', ',
+  );
+  return Prisma.sql`(c.sigungu_code, c.legal_dong) IN (${tuples})`;
+}
+
+/**
+ * 매물종류 → trade×complex JOIN (대표 매매가 산출용, KI-2). SH 는 매매 거래 없음 → 호출 금지.
+ *  dongFilter 로 후보 동만 스캔(성능).
+ */
+function tradeSource(type: PropertyType, dongFilter: Prisma.Sql): Prisma.Sql {
+  // ⚠️ STRAIGHT_JOIN: complex(작음·sigungu_code+legal_dong 인덱스)를 driver 로 강제해 후보 동만 거른 뒤
+  //  complex_id 인덱스로 trade 를 조인. 일반 JOIN 은 옵티마이저가 trade(수백만)를 먼저 풀스캔해 느림(KI-21 후속).
   switch (type) {
     case 'APT':
-      return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, t.price_manwon, t.deal_date, t.area_m2 FROM t_apt_trade t JOIN t_apt_complex c ON c.id = t.complex_id`;
+      return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, t.price_manwon, t.deal_date, t.area_m2 FROM t_apt_complex c STRAIGHT_JOIN t_apt_trade t ON t.complex_id = c.id WHERE ${dongFilter}`;
     case 'OFFI':
-      return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, t.price_manwon, t.deal_date, t.area_m2 FROM t_offi_trade t JOIN t_offi_complex c ON c.id = t.complex_id`;
+      return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, t.price_manwon, t.deal_date, t.area_m2 FROM t_offi_complex c STRAIGHT_JOIN t_offi_trade t ON t.complex_id = c.id WHERE ${dongFilter}`;
     case 'VILLA':
-      return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, t.price_manwon, t.deal_date, t.area_m2 FROM t_villa_trade t JOIN t_villa_complex c ON c.id = t.complex_id`;
+      return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, t.price_manwon, t.deal_date, t.area_m2 FROM t_villa_complex c STRAIGHT_JOIN t_villa_trade t ON t.complex_id = c.id WHERE ${dongFilter}`;
     case 'SH':
       return Prisma.empty; // 매매 거래 테이블 없음 (호출부에서 SALE_TRADE_TYPES 로 사전 필터)
   }
@@ -219,6 +235,18 @@ async function fetchRegionAggregates(
  *    → "최신 거래일 - 1년" 으로 정의해 ingest 주기와 자연스럽게 맞춤.
  *    거래가 0건이면 cutoff 가 null → 전체 거래로 fallback (안전망).
  */
+// cutoff(최신 거래일 −1년) 캐시 — MAX(date) 가 인덱스 미사용 풀스캔이라 매 요청 반복하면 비쌈.
+//  ingest 주기 대비 충분히 짧은 10분 TTL. 실패 시 null(전체 fallback).
+const CUTOFF_TTL_MS = 10 * 60 * 1000;
+const _cutoffCache = new Map<string, { value: Date | null; at: number }>();
+async function cachedCutoff(key: string, compute: () => Promise<Date | null>): Promise<Date | null> {
+  const hit = _cutoffCache.get(key);
+  if (hit && Date.now() - hit.at < CUTOFF_TTL_MS) return hit.value;
+  const value = await compute().catch(() => null);
+  _cutoffCache.set(key, { value, at: Date.now() });
+  return value;
+}
+
 async function fetchRepresentativePrices(
   aggregates: RegionAggregate[],
   propertyTypes: readonly PropertyType[],
@@ -229,20 +257,23 @@ async function fetchRepresentativePrices(
   const tradeTypes = propertyTypes.filter((t) => SALE_TRADE_TYPES.includes(t));
   if (tradeTypes.length === 0) return new Map();
 
-  // 최신 거래일 조회 (apt 기준 — 가장 크고 최신인 데이터셋. offi/villa 가 >1년 stale 면
-  //  일부 누락 가능하나 대표 매매가는 보조 지표라 허용. cutoff 없으면 전체 fallback)
-  const latest = await prisma.aptTrade.aggregate({ _max: { dealDate: true } });
-  let cutoff: Date | null = null;
-  if (latest._max.dealDate) {
-    cutoff = new Date(latest._max.dealDate);
-    cutoff.setFullYear(cutoff.getFullYear() - 1);
-  }
+  // 최신 거래일 조회 (apt 기준 — 가장 크고 최신인 데이터셋. cutoff 없으면 전체 fallback).
+  //  ⚡ MAX(deal_date)는 인덱스 미사용 풀스캔이라 캐시(10분)로 매 요청 반복 제거(KI-21 후속).
+  const cutoff = await cachedCutoff('apt_trade_deal', async () => {
+    const latest = await prisma.aptTrade.aggregate({ _max: { dealDate: true } });
+    if (!latest._max.dealDate) return null;
+    const c = new Date(latest._max.dealDate);
+    c.setFullYear(c.getFullYear() - 1);
+    return c;
+  });
 
   type PriceRow = { sigungu_code: string; legal_dong: string; median_price: number | null };
 
   // 선택 종류 trade×complex 풀링. 전체 면적(9~330 sanity) + 동별 median (KI-16/KI-8).
+  //  후보 동 필터로 complex 스캔 한정(성능, KI-21 후속).
+  const dongFilter = dongTupleFilter(aggregates);
   const tradeUnion = Prisma.join(
-    tradeTypes.map((t) => tradeSource(t)),
+    tradeTypes.map((t) => tradeSource(t, dongFilter)),
     ' UNION ALL ',
   );
   // 중위값: 동별 price 정렬 후 가운데 1~2건 평균 (홀수=1건, 짝수=2건 평균). MySQL 8 윈도우 함수.
@@ -295,21 +326,23 @@ export interface RentStat {
   sampleCount: number;
 }
 
-/** 매물종류별 실거래 전월세 소스 (rent 테이블 + complex 테이블 JOIN). */
-function rentSource(type: PropertyType, contractType: string): Prisma.Sql {
+/** 매물종류별 실거래 전월세 소스 (rent 테이블 + complex 테이블 JOIN). dongFilter 로 후보 동만 스캔(성능). */
+function rentSource(type: PropertyType, contractType: string, dongFilter: Prisma.Sql): Prisma.Sql {
+  // ⚠️ STRAIGHT_JOIN: complex 를 driver 로 강제(후보 동만) → complex_id 인덱스로 rent 조인.
+  //  일반 JOIN 은 rent(수백만, contract_type 인덱스 없음)를 먼저 풀스캔해 6.8s → STRAIGHT_JOIN 으로 수백 ms.
   switch (type) {
     case 'APT':
       return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, r.deposit_manwon, r.monthly_manwon, r.contract_date, r.area_m2
-        FROM t_apt_rent r JOIN t_apt_complex c ON c.id = r.complex_id WHERE r.contract_type = ${contractType}`;
+        FROM t_apt_complex c STRAIGHT_JOIN t_apt_rent r ON r.complex_id = c.id WHERE ${dongFilter} AND r.contract_type = ${contractType}`;
     case 'OFFI':
       return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, r.deposit_manwon, r.monthly_manwon, r.contract_date, r.area_m2
-        FROM t_offi_rent r JOIN t_offi_complex c ON c.id = r.complex_id WHERE r.contract_type = ${contractType}`;
+        FROM t_offi_complex c STRAIGHT_JOIN t_offi_rent r ON r.complex_id = c.id WHERE ${dongFilter} AND r.contract_type = ${contractType}`;
     case 'VILLA':
       return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, r.deposit_manwon, r.monthly_manwon, r.contract_date, r.area_m2
-        FROM t_villa_rent r JOIN t_villa_complex c ON c.id = r.complex_id WHERE r.contract_type = ${contractType}`;
+        FROM t_villa_complex c STRAIGHT_JOIN t_villa_rent r ON r.complex_id = c.id WHERE ${dongFilter} AND r.contract_type = ${contractType}`;
     case 'SH':
       return Prisma.sql`SELECT c.sigungu_code, c.legal_dong, r.deposit_manwon, r.monthly_manwon, r.contract_date, r.area_m2
-        FROM t_sh_rent r JOIN t_sh_complex c ON c.id = r.complex_id WHERE r.contract_type = ${contractType}`;
+        FROM t_sh_complex c STRAIGHT_JOIN t_sh_rent r ON r.complex_id = c.id WHERE ${dongFilter} AND r.contract_type = ${contractType}`;
   }
 }
 
@@ -341,24 +374,24 @@ async function fetchRentCostByRegion(
     return map;
   }
 
-  const contractType = dealType === 'JEONSE' ? 'JEONSE' : 'WOLSE';
+  const isJeonse = dealType === 'JEONSE';
+  const contractType = isJeonse ? 'JEONSE' : 'WOLSE';
   const RATE = JEONSE_TO_MONTHLY_RATE;
 
-  // 최신 계약일 - 1년 cutoff (fetchRepresentativePrices 동적 cutoff 전략과 동일)
-  let cutoff: Date | null = null;
-  try {
+  // 최신 계약일 - 1년 cutoff (fetchRepresentativePrices 와 동일 전략 + 캐시).
+  //  ⚡ MAX(contract_date)는 인덱스 미사용 풀스캔(t_apt_rent 3.6M)이라 10분 캐시로 매 요청 반복 제거(KI-21 후속).
+  const cutoff = await cachedCutoff('apt_rent_contract', async () => {
     const latest = await prisma.aptRent.aggregate({ _max: { contractDate: true } });
-    if (latest._max.contractDate) {
-      cutoff = new Date(latest._max.contractDate);
-      cutoff.setFullYear(cutoff.getFullYear() - 1);
-    }
-  } catch {
-    cutoff = null; // 안전망
-  }
+    if (!latest._max.contractDate) return null;
+    const c = new Date(latest._max.contractDate);
+    c.setFullYear(c.getFullYear() - 1);
+    return c;
+  });
 
-  // 선택된 매물종류만 동적 UNION ALL
+  // 선택된 매물종류만 동적 UNION ALL — 후보 동 필터로 complex 스캔 한정(성능, KI-21 후속)
+  const dongFilter = dongTupleFilter(aggregates);
   const unioned = Prisma.join(
-    propertyTypes.map((t) => rentSource(t, contractType)),
+    propertyTypes.map((t) => rentSource(t, contractType, dongFilter)),
     ' UNION ALL ',
   );
 
@@ -392,45 +425,74 @@ async function fetchRentCostByRegion(
   };
 
   // 중위값: 동별 정렬 후 가운데 1~2건 평균 (홀수=1건, 짝수=2건 평균). MySQL 8 윈도우 함수.
-  //  cost(환산 월주거비)·deposit(보증금)·monthly(순수 월세) 3종 중위값을 한 쿼리에 산출.
-  const rentQuery = Prisma.sql`
-    WITH pooled AS (
-      SELECT sigungu_code, legal_dong, deposit_manwon, monthly_manwon, (${costExpr}) AS cost
-      FROM ( ${unioned} ) p
-      WHERE p.area_m2 BETWEEN 9 AND 330
-      ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
-      ${semiJeonseFilter}
-    ),
-    ranked AS (
+  //  ⚡ 성능(KI-21 후속): JEONSE 는 cost = deposit×RATE(단조증가) → median(cost)=median(deposit)×RATE,
+  //   monthly=0. 즉 **정렬 1개(deposit)만으로 충분**(median_cost 는 JS 에서 ×RATE 환산). 정렬 3→1 로 ~3배↓.
+  //   MONTHLY 는 cost·deposit·monthly 가 독립이라 3개 유지(반전세 제외 필터 포함).
+  const rentQuery = isJeonse
+    ? Prisma.sql`
+      WITH pooled AS (
+        SELECT sigungu_code, legal_dong, deposit_manwon
+        FROM ( ${unioned} ) p
+        WHERE p.area_m2 BETWEEN 9 AND 330
+        ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
+      ),
+      ranked AS (
+        SELECT sigungu_code, legal_dong, deposit_manwon,
+          ROW_NUMBER() OVER (PARTITION BY sigungu_code, legal_dong ORDER BY deposit_manwon) AS rn_dep,
+          COUNT(*)     OVER (PARTITION BY sigungu_code, legal_dong) AS cnt
+        FROM pooled
+        WHERE deposit_manwon > 0
+      )
       SELECT
-        sigungu_code, legal_dong, deposit_manwon, monthly_manwon, cost,
-        ROW_NUMBER() OVER (PARTITION BY sigungu_code, legal_dong ORDER BY cost) AS rn_cost,
-        ROW_NUMBER() OVER (PARTITION BY sigungu_code, legal_dong ORDER BY deposit_manwon) AS rn_dep,
-        ROW_NUMBER() OVER (PARTITION BY sigungu_code, legal_dong ORDER BY monthly_manwon) AS rn_mon,
-        COUNT(*)     OVER (PARTITION BY sigungu_code, legal_dong) AS cnt
-      FROM pooled
-      WHERE cost > 0
-    )
-    SELECT
-      sigungu_code,
-      legal_dong,
-      AVG(CASE WHEN rn_cost IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2)) THEN cost END)           AS median_cost,
-      AVG(CASE WHEN rn_dep  IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2)) THEN deposit_manwon END)  AS median_deposit,
-      AVG(CASE WHEN rn_mon  IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2)) THEN monthly_manwon END)  AS median_monthly,
-      MAX(cnt) AS sample_count
-    FROM ranked
-    GROUP BY sigungu_code, legal_dong
-    HAVING MAX(cnt) >= 5
-  `;
+        sigungu_code,
+        legal_dong,
+        NULL AS median_cost,
+        AVG(CASE WHEN rn_dep IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2)) THEN deposit_manwon END) AS median_deposit,
+        0 AS median_monthly,
+        MAX(cnt) AS sample_count
+      FROM ranked
+      GROUP BY sigungu_code, legal_dong
+      HAVING MAX(cnt) >= 5
+    `
+    : Prisma.sql`
+      WITH pooled AS (
+        SELECT sigungu_code, legal_dong, deposit_manwon, monthly_manwon, (${costExpr}) AS cost
+        FROM ( ${unioned} ) p
+        WHERE p.area_m2 BETWEEN 9 AND 330
+        ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
+        ${semiJeonseFilter}
+      ),
+      ranked AS (
+        SELECT
+          sigungu_code, legal_dong, deposit_manwon, monthly_manwon, cost,
+          ROW_NUMBER() OVER (PARTITION BY sigungu_code, legal_dong ORDER BY cost) AS rn_cost,
+          ROW_NUMBER() OVER (PARTITION BY sigungu_code, legal_dong ORDER BY deposit_manwon) AS rn_dep,
+          ROW_NUMBER() OVER (PARTITION BY sigungu_code, legal_dong ORDER BY monthly_manwon) AS rn_mon,
+          COUNT(*)     OVER (PARTITION BY sigungu_code, legal_dong) AS cnt
+        FROM pooled
+        WHERE cost > 0
+      )
+      SELECT
+        sigungu_code,
+        legal_dong,
+        AVG(CASE WHEN rn_cost IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2)) THEN cost END)           AS median_cost,
+        AVG(CASE WHEN rn_dep  IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2)) THEN deposit_manwon END)  AS median_deposit,
+        AVG(CASE WHEN rn_mon  IN (FLOOR((cnt + 1) / 2), FLOOR((cnt + 2) / 2)) THEN monthly_manwon END)  AS median_monthly,
+        MAX(cnt) AS sample_count
+      FROM ranked
+      GROUP BY sigungu_code, legal_dong
+      HAVING MAX(cnt) >= 5
+    `;
   const rows = await prisma.$queryRaw<MedRow[]>(rentQuery).catch((e: unknown) => {
     console.warn('[recommendations] 전월세 집계 실패 → 매매가 합성 폴백:', e);
     return [] as MedRow[];
   });
 
   for (const r of rows) {
-    const cost = Number(r.median_cost ?? 0);
     const deposit = Math.round(Number(r.median_deposit ?? 0));
-    const monthly = Math.round(Number(r.median_monthly ?? 0));
+    // JEONSE 는 SQL 정렬 1개로 축소(median_cost=NULL) → JS 에서 cost = deposit×RATE 환산, monthly=0.
+    const cost = isJeonse ? deposit * RATE : Number(r.median_cost ?? 0);
+    const monthly = isJeonse ? 0 : Math.round(Number(r.median_monthly ?? 0));
     if (cost > 0) {
       map.set(`${r.sigungu_code}|${r.legal_dong}`, {
         monthlyCost: Math.round(cost * 100) / 100,
@@ -534,8 +596,16 @@ export async function fetchRegionCandidates(
   );
   // 예산 상한으로 제외된 후보 수 (거리·통근 통과했으나 예산 초과)
   let budgetFilteredCount = 0;
+  // 진단: REC_DEBUG=1 일 때 단계별 소요시간 출력 (성능 병목 추적, KI-21 후속)
+  const REC_DEBUG = process.env.REC_DEBUG === '1';
+  const timed = async <T>(label: string, p: Promise<T>): Promise<T> => {
+    const t = Date.now();
+    const r = await p;
+    if (REC_DEBUG) console.log(`[perf] ${label}: ${Date.now() - t}ms`);
+    return r;
+  };
   // 1) 기본 메타 — 선택 매물종류 단지 universe
-  const aggregates = await fetchRegionAggregates(effectiveUniverse, options.sigunguCodePrefix);
+  const aggregates = await timed('aggregates', fetchRegionAggregates(effectiveUniverse, options.sigunguCodePrefix));
   if (aggregates.length === 0) return { candidates: [], budgetFilteredCount };
 
   // 2) workplace 와 거리 계산 → 1차 필터 (직선 거리 상한)
@@ -555,14 +625,17 @@ export async function fetchRegionCandidates(
   // 3) 가격 + 수익률 + (전월세 시) 실거래 월주거비 일괄 조회
   const targetAggs = withDistance.map((x) => x.agg);
   const [priceMap, returnMap, commuteMap, rentCostMap] = await Promise.all([
-    fetchRepresentativePrices(targetAggs, priceTypes),
-    fetchExpectedReturns(targetAggs),
-    findCachedMatrix(
-      workplace,
-      targetAggs.map((a) => a.legalDongCode),
-    ) as Promise<Map<string, CommuteEntry>>,
-    fetchRentCostByRegion(targetAggs, dealType, propertyTypes),
+    timed('price', fetchRepresentativePrices(targetAggs, priceTypes)),
+    timed('returns', fetchExpectedReturns(targetAggs)),
+    timed(
+      'commute',
+      findCachedMatrix(workplace, targetAggs.map((a) => a.legalDongCode)) as Promise<
+        Map<string, CommuteEntry>
+      >,
+    ),
+    timed('rent', fetchRentCostByRegion(targetAggs, dealType, propertyTypes)),
   ]);
+  if (REC_DEBUG) console.log(`[perf] candidates=${targetAggs.length}`);
 
   // 4) 합치기 — RegionCandidate 배열 (1차: 통근 필터)
   /** 3년 수익률 baseYm = 현재 기준 36개월 전 */

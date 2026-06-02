@@ -20,7 +20,11 @@
   - **환경**: `.env` `connection_limit=1→10` (pool timeout 해소). ⚠️ 로컬 .env만 — 새 환경은 동일 설정 필요(.env.example 가이드 추가 후보).
   - **검증**: 강남역·전세 추천 정상(totalCandidates 230, safety/life 실값, estimatedAxes=[]).
 
-- **▶▶ 다음 세션 1순위 = 쿼리 성능 최적화 (사용자 지정)**: rent/price median 쿼리가 매 요청 **전 수도권 실거래를 스캔**해 느림(연결 늘려 500은 막았지만 수 초 소요). → `fetchRentCostByRegion`·`fetchRepresentativePrices`를 **후보 동(targetAggs) 필터**로 좁혀 수 배 단축. 같은 RATE-embed 패턴 다른 쿼리도 감사. (상세: KI-21 후속)
+- **🟢 쿼리 성능 최적화 완료(2026-06-XX)**: 후보 동 튜플 IN 필터 · STRAIGHT_JOIN(complex driver) · JEONSE 단일정렬 ·
+  cutoff MAX 10분 캐시 · **raw_payload 컬럼 DROP**(7.3M행 archive 후, 용량↓·행축소) · `connection_limit=10`.
+  → cold 7s → **warm ~2.7s**(patience 75=서울 전체 worst-case). 상세: KI-21.
+  **남은 서브초 해법(미착수)**: 동별 median 배치 **사전집계 summary 테이블**(런타임 조회 ~10ms). 필요 시 별도 세션.
+  ⚠️ raw_payload archive 파일은 `server/archive/`(gitignore) 로컬 보관.
 
 - **▶ 2026-06-02 세션 = 수도권 데이터/시드 마무리. 시드 적재 현황:**
   | 축 | 상태 |

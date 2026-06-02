@@ -27,6 +27,7 @@
     "seed:income": "tsx scripts/seedIncomeQuintile.ts",
     "seed:safety": "tsx scripts/seedSafetyIndex.ts",
     "seed:life": "tsx scripts/seedPoiSummary.ts",
+    "archive:raw": "tsx scripts/archiveRawPayload.ts",
     "db:snapshot": "tsx scripts/dbSnapshot.ts",
     "diagnose:depth3": "tsx scripts/diagnoseDept3.ts",
     "diagnose:confidence": "tsx scripts/diagnoseConfidence.ts",
