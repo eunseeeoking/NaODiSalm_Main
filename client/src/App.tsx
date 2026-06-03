@@ -5,7 +5,7 @@
  *  /intro         → 서비스 소개 + 데모 노출 랜딩 (Phase 7, 2026-05-28)
  *  /home          → Depth 2 · 추천 메인 (실제 메인 페이지)
  *  /region/:code  → Depth 3 · 단지 상세
- *  /about/data    → 4기관 데이터 융합 현황
+ *  /about/data    → 6개 공공기관 + 민간 API 데이터 융합 현황
  *  *              → /home 으로 리다이렉트 (미지정 경로)
  *
  *  2026-05-29: intro 게이트 전면화 — bare "/" 진입은 최초/재방문 구분 없이 항상 /intro.
@@ -20,6 +20,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useThemeStore } from './stores/useThemeStore';
+import { useGtmPageViews } from './hooks/useGtmPageViews';
 import { RecommendationPage } from './pages/Recommendation';
 // import { ExplorePage } from './pages/Explore'; // 2026-05-28: 로그인 미사용, 401 방지
 import { RegionDetailPage } from './pages/RegionDetail';
@@ -28,6 +29,9 @@ import { LandingPage } from './pages/Landing';
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
+
+  // SPA 라우트 전환을 GTM(dataLayer)에 page_view 로 전달 (최초 로드는 GTM 기본 pageview 가 담당)
+  useGtmPageViews();
 
   // 테마 → <html> 클래스 동기화
   useEffect(() => {

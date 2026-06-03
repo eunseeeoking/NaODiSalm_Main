@@ -117,7 +117,7 @@ export function ComplexCardList({ complexes, selectedId, onSelect }: Props) {
         카드를 선택하면 가격 안정성 분석이 표시돼요
       </p>
 
-      {/* 데이터 출처 footer — 가점 어필 (4기관 데이터 융합) */}
+      {/* 데이터 출처 footer — 공공데이터 융합 (6개 공공기관 + 민간 API) */}
       <div className="mt-2 px-1 flex items-center gap-2 flex-wrap text-2xs text-ink-tertiary dark:text-ink-tertiary-dark">
         <span className="font-semibold text-ink-secondary dark:text-ink-secondary-dark shrink-0">데이터</span>
         <span>국토부 RTMS {complexes.length > 0 ? `· ${complexes.length}단지` : ''}</span>

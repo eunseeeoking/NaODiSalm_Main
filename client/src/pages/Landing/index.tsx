@@ -8,11 +8,11 @@
  *    - IntersectionObserver 기반 SectionReveal — 섹션이 뷰포트 진입 시 아래에서 올라오는 fade-in
  *
  *  구성:
- *    1) Hero       — 한 줄 정의 + 두 CTA + 4기관 배지
+ *    1) Hero       — 한 줄 정의 + 두 CTA + 공공기관 배지 (6곳 + 민간 API)
  *    2) Pain       — 청년 주거 위기 4 통계 (§2 사회적 가치 골자)
  *    3) Flow       — Depth 1 → 2 → 3 사용 흐름 (mock 시각화)
- *    4) Diff       — 4축 가중합 + ARIMA 10.16% + 5기관 융합
- *    5) Numbers    — 19년치 / 130만 거래 / 9,621 단지 / ARIMA 10.16%
+ *    4) Diff       — 4축 가중합 + ARIMA 10.16% + 6개 공공기관 융합
+ *    5) Numbers    — 20년치 / 7.3M 거래 / 20,589 단지 / ARIMA 10.16%
  *    6) DemoCTA    — 시연 동선 추천 + 큰 버튼
  *    7) Footer     — about/data, 기획서, ML repo 링크
  */
@@ -21,18 +21,20 @@ import { Link } from 'react-router-dom';
 
 /* ────────────────────────── 상수 ────────────────────────── */
 
-const HERO_BADGES: ReadonlyArray<{ label: string; tone: 'brand' | 'positive' | 'amber' | 'purple' }> = [
+const HERO_BADGES: ReadonlyArray<{ label: string; tone: 'brand' | 'positive' | 'amber' | 'purple' | 'cyan' }> = [
   { label: '국토교통부 RTMS', tone: 'brand' },
   { label: '한국부동산원 R-ONE', tone: 'positive' },
   { label: 'LH 청년주택', tone: 'amber' },
   { label: '통계청 · 경찰청', tone: 'purple' },
+  { label: '국가대중교통 TAGO', tone: 'cyan' },
 ];
 
-const TONE_BG: Record<'brand' | 'positive' | 'amber' | 'purple', string> = {
+const TONE_BG: Record<'brand' | 'positive' | 'amber' | 'purple' | 'cyan', string> = {
   brand:    'bg-brand/10 text-brand',
   positive: 'bg-positive/10 text-positive',
   amber:    'bg-amber-500/10 text-amber-600',
   purple:   'bg-purple-500/10 text-purple-600',
+  cyan:     'bg-cyan-500/10 text-cyan-600',
 };
 
 const NUMBER_TONE_TEXT: Record<'brand' | 'positive' | 'amber' | 'purple', string> = {
@@ -58,7 +60,7 @@ const FLOW_STEPS: ReadonlyArray<{ step: string; title: string; desc: string }> =
   {
     step: 'Depth 2',
     title: '지도 + 추천 동네 8선',
-    desc: '서울 469개 행정동 히트맵 + 다축 점수 기반 추천 카드. RIR 색상 코딩 + LH 청년주택 배지.',
+    desc: '수도권 1,187개 행정동 히트맵 + 다축 점수 기반 추천 카드. RIR 색상 코딩 + LH 청년주택 배지.',
   },
   {
     step: 'Depth 3',
@@ -68,10 +70,10 @@ const FLOW_STEPS: ReadonlyArray<{ step: string; title: string; desc: string }> =
 ];
 
 const NUMBER_CARDS: ReadonlyArray<{ value: string; unit: string; label: string; tone: 'brand' | 'positive' | 'amber' | 'purple' }> = [
-  { value: '19',    unit: '년치',  label: 'RTMS 시계열 (2006~2025)', tone: 'brand' },
-  { value: '1.3M',  unit: '거래',  label: '국토부 RTMS 적재량',         tone: 'positive' },
-  { value: '9,621', unit: '단지',  label: 'fingerprint 매칭',          tone: 'amber' },
-  { value: '10.16', unit: '%',     label: 'ARIMA MAPE (5단지 평균)',   tone: 'purple' },
+  { value: '20',     unit: '년치',  label: 'RTMS 시계열 (2006~2026)',     tone: 'brand' },
+  { value: '7.3M',   unit: '거래',  label: '수도권 RTMS 실거래 적재량',    tone: 'positive' },
+  { value: '20,589', unit: '단지',  label: '수도권 아파트 단지',           tone: 'amber' },
+  { value: '10.16',  unit: '%',     label: 'ARIMA MAPE (5단지 평균)',     tone: 'purple' },
 ];
 
 /* ────────────────────────── 스크롤 리빌 훅 ────────────────────────── */
@@ -418,9 +420,9 @@ export function LandingPage() {
               <span className="text-brand"> 데이터가 답하는 청년 주거 의사결정</span>
             </h1>
             <p className="mt-4 md:mt-5 text-base md:text-lg text-ink-secondary leading-[1.75] max-w-2xl mx-auto">
-              직장·예산·통근·안전 4축을 한 번에 분석해 서울 469개 행정동 중 나에게 맞는 동네를 추천합니다.
+              직장·예산·통근·안전 4축을 한 번에 분석해 수도권 1,187개 행정동 중 나에게 맞는 동네를 추천합니다.
               <br />
-              <strong className="text-ink-primary font-semibold">5개 공공기관 데이터를 융합</strong>해
+              <strong className="text-ink-primary font-semibold">6개 공공기관 데이터에 민간 API(ODsay·카카오)를 융합</strong>해
               "분석은 우리가, 결정은 당신이" 의 도구를 만들었습니다.
             </p>
 
@@ -461,7 +463,7 @@ export function LandingPage() {
             <div className="text-center mb-6 md:mb-8">
               <span className="font-aggro text-2xs md:text-xs font-bold text-negative tracking-widest uppercase">사회적 가치</span>
               <h2 className="font-aggro mt-2 text-2xl md:text-3xl font-bold text-ink-primary tracking-tight">
-                서울 청년 73만 명이 직면한 정보 격차
+                수도권 청년이 직면한 주거 정보 격차
               </h2>
               <p className="mt-2 text-xs md:text-sm text-ink-secondary">
                 개별 매물 시세는 도처에 있지만, "내 통근·소득·안전을 종합한 동네 추천"은 없었습니다.
@@ -534,7 +536,7 @@ export function LandingPage() {
             <div className="text-center mb-6 md:mb-8">
               <span className="font-aggro text-2xs md:text-xs font-bold text-positive tracking-widest uppercase">차별점</span>
               <h2 className="font-aggro mt-2 text-2xl md:text-3xl font-bold text-ink-primary tracking-tight">
-                직방·다방·바로(2024 대상)과 무엇이 다른가
+                기존 부동산 앱과 무엇이 다른가
               </h2>
             </div>
 
@@ -557,10 +559,10 @@ export function LandingPage() {
                 },
                 {
                   emoji: '🏛️',
-                  title: '5개 기관 데이터 융합',
+                  title: '6개 공공기관 데이터 융합',
                   descNode: (
                     <>
-                      국토부 · 한국부동산원 · LH · 통계청 · 경찰청. 가점 +5 데이터 융합 충족.
+                      국토부 · 한국부동산원 · LH · 통계청 · 경찰청 · 국가대중교통(TAGO) 6개 공공기관에 ODsay · 카카오 민간 API 까지.
                       <Link to="/about/data" className="ml-1 text-brand hover:underline">
                         실시간 적재 현황 →
                       </Link>
@@ -590,7 +592,7 @@ export function LandingPage() {
             <div className="text-center mb-6 md:mb-8">
               <span className="font-aggro text-2xs md:text-xs font-bold text-amber-600 tracking-widest uppercase">규모</span>
               <h2 className="font-aggro mt-2 text-2xl md:text-3xl font-bold text-ink-primary tracking-tight">실측 데이터 — 운영 DB 스냅샷</h2>
-              <p className="mt-2 text-xs md:text-sm text-ink-secondary">2026-05-27 기준</p>
+              <p className="mt-2 text-xs md:text-sm text-ink-secondary">2026-06-04 기준</p>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">

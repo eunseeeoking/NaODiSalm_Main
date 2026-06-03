@@ -1,18 +1,18 @@
 /**
- * /about/data — 4기관 공공데이터 융합 현황 페이지
+ * /about/data — 공공데이터 융합 현황 페이지 (공공기관 6곳 + 민간 API ODsay·카카오)
  *  - 공모전 채점위원 + 일반 사용자 대상
  *  - GET /api/meta/data-sources 실시간 row 수 + 마지막 갱신일
  *  - 미응답 시 fallback (정적 카드 + 0 row 표시)
  *
- *  Phase 2-B (2026-05-27): 신설.
- *  - 가점 +5 (주관기관 데이터 융합) 가시화
- *  - 컨셉 전환(2026-05-22)의 "4기관 융합" 어필 정직 시각화
+ *  Phase 2-B (2026-05-27): 신설 — 주관기관 4기관 융합 가시화.
+ *  2026-06-04 갱신: 수도권 MVP 반영 — 서울→수도권, APT→APT/OFFI/VILLA/SH 4종,
+ *    통근(ODsay·카카오)·교통품질(TAGO·국토부 정류소)·생활편의(카카오 POI) 카드 추가.
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 export interface DataSourceMeta {
-  id: 'molit-rtms' | 'reb-rone' | 'lh-youth' | 'safety-income';
+  id: 'molit-rtms' | 'reb-rone' | 'lh-youth' | 'safety-income' | 'commute-transit' | 'life-poi';
   agency: string;
   agencyEn: string;
   name: string;
@@ -40,14 +40,14 @@ const FALLBACK: DataSourcesDto = {
       id: 'molit-rtms',
       agency: '국토교통부',
       agencyEn: 'MOLIT',
-      name: '아파트 실거래가 공개시스템 (RTMS)',
+      name: '실거래가 공개시스템 (RTMS)',
       description:
-        '서울 25개 자치구 매매·전월세 실거래 내역. 단지 단위 현재가 + LSTM/ARIMA 시계열 학습의 원천 데이터.',
+        '수도권(서울·인천·경기) 아파트·오피스텔·연립다세대·단독다가구 매매·전월세 실거래. 동 단위 시세 분포 + 아파트 단지 ARIMA 시계열 학습의 원천.',
       rowCount: 0,
       rowLabel: '서버 미응답',
       lastUpdated: null,
       apiUrl: 'https://rt.molit.go.kr/',
-      tables: ['t_apt_trade', 't_apt_rent', 't_apt_complex'],
+      tables: ['t_apt_trade', 't_apt_rent', 't_offi_trade', 't_offi_rent', 't_villa_trade', 't_villa_rent', 't_sh_rent'],
       badge: '주관기관',
     },
     {
@@ -55,7 +55,7 @@ const FALLBACK: DataSourcesDto = {
       agency: '한국부동산원',
       agencyEn: 'REB',
       name: 'R-ONE 부동산 통계정보 시스템',
-      description: '시군구별 월간 공동주택 실거래가지수 — LSTM 정규화에 사용.',
+      description: '시군구별 월간 공동주택 실거래가지수 — ARIMA·LSTM 예측 정규화에 사용.',
       rowCount: 0,
       rowLabel: '서버 미응답',
       lastUpdated: null,
@@ -68,7 +68,7 @@ const FALLBACK: DataSourcesDto = {
       agency: '한국토지주택공사',
       agencyEn: 'LH',
       name: 'LH 임대주택단지 조회 서비스',
-      description: '행복주택·청년매입임대·전세임대. Phase 2-B Kakao 지오코딩으로 행정동 정밀도 확보.',
+      description: '수도권 행복주택·청년매입임대·전세임대. 카카오 지오코딩으로 행정동 정밀도 확보.',
       rowCount: 0,
       rowLabel: '서버 미응답',
       lastUpdated: null,
@@ -78,10 +78,10 @@ const FALLBACK: DataSourcesDto = {
     },
     {
       id: 'safety-income',
-      agency: '통계청 · 경찰청 · 서울시',
+      agency: '통계청 · 경찰청 · 지자체',
       agencyEn: 'KOSTAT+',
       name: '5분위 소득 · 안전 합성 지표',
-      description: '가계금융복지조사 + 5대범죄·가로등·CCTV 합성. RIR + safety 축.',
+      description: '가계금융복지조사 + 수도권 자치구별 5대범죄·가로등·CCTV 합성. RIR + safety 축.',
       rowCount: 0,
       rowLabel: '서버 미응답',
       lastUpdated: null,
@@ -89,15 +89,45 @@ const FALLBACK: DataSourcesDto = {
       tables: ['t_safety_index', 't_income_quintile'],
       badge: '사회 가치',
     },
+    {
+      id: 'commute-transit',
+      agency: 'ODsay · 카카오 · 국가대중교통(TAGO) · 국토교통부',
+      agencyEn: 'ODsay·TAGO',
+      name: '통근 경로 · 대중교통 품질',
+      description:
+        '직장까지 ODsay(대중교통)·카카오(자차 실경로) 실측 통근. 교통 품질은 경기·인천 TAGO, 서울은 국토부 「전국 버스정류장 위치정보」 정적 좌표 밀도(지역별 provider 분기).',
+      rowCount: 0,
+      rowLabel: '서버 미응답',
+      lastUpdated: null,
+      apiUrl: 'https://www.data.go.kr/data/15067528/fileData.do',
+      tables: ['t_commute_matrix', 't_transit_route_summary'],
+      badge: '통근 정밀',
+    },
+    {
+      id: 'life-poi',
+      agency: '카카오',
+      agencyEn: 'Kakao',
+      name: '로컬 생활편의 (POI)',
+      description:
+        '동 centroid 반경 500m 카카오 로컬 카테고리(지하철·마트·편의점·카페·음식점·병원·약국·은행) 집계로 생활 점수 산출.',
+      rowCount: 0,
+      rowLabel: '서버 미응답',
+      lastUpdated: null,
+      apiUrl: 'https://developers.kakao.com/docs/latest/ko/local/dev-guide',
+      tables: ['t_poi_summary'],
+      badge: '생활편의',
+    },
   ],
 };
 
 /** 카드 톤 — id 마다 다른 좌측 보더 색 */
 const TONE: Record<DataSourceMeta['id'], string> = {
-  'molit-rtms':    'border-l-brand',
-  'reb-rone':      'border-l-positive',
-  'lh-youth':      'border-l-amber-500',
-  'safety-income': 'border-l-purple-500',
+  'molit-rtms':      'border-l-brand',
+  'reb-rone':        'border-l-positive',
+  'lh-youth':        'border-l-amber-500',
+  'safety-income':   'border-l-purple-500',
+  'commute-transit': 'border-l-cyan-500',
+  'life-poi':        'border-l-rose-500',
 };
 
 export function AboutDataPage() {
@@ -163,15 +193,19 @@ export function AboutDataPage() {
         {/* 인트로 */}
         <section className="mb-8">
           <h2 className="text-xl md:text-2xl font-bold text-ink-primary dark:text-ink-primary-dark">
-            공공데이터 4기관 융합
+            공공데이터 융합 — 6개 공공기관 + 민간 API
           </h2>
           <p className="mt-2 text-sm text-ink-secondary dark:text-ink-secondary-dark leading-relaxed">
             나어디삶은{' '}
             <strong className="text-ink-primary dark:text-ink-primary-dark">
-              국토교통부 · 한국부동산원 · 한국토지주택공사 · 통계청
+              국토교통부 · 한국부동산원 · 한국토지주택공사 · 통계청 · 경찰청 · 국가대중교통(TAGO)
             </strong>{' '}
-            4개 기관의 공공데이터를 융합해 청년·신혼부부의 주거 의사결정을 돕습니다.
-            아래 수치는 서버 DB의 실시간 적재 현황입니다.
+            6개 공공기관 데이터에{' '}
+            <strong className="text-ink-primary dark:text-ink-primary-dark">
+              ODsay · 카카오
+            </strong>{' '}
+            민간 통근·생활 API를 융합해, <strong className="text-ink-primary dark:text-ink-primary-dark">수도권(서울·인천·경기)</strong>{' '}
+            청년·신혼부부의 주거 의사결정을 돕습니다. 아래 수치는 서버 DB의 실시간 적재 현황입니다.
           </p>
           <p className="mt-2 text-xs text-ink-tertiary dark:text-ink-tertiary-dark">
             총 적재 row{' '}
@@ -182,7 +216,7 @@ export function AboutDataPage() {
           </p>
         </section>
 
-        {/* 4기관 카드 */}
+        {/* 데이터 출처 카드 (공공기관 6 + 민간 API) */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
           {data.sources.map((src) => (
             <article

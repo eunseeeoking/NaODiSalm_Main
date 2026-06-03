@@ -240,16 +240,18 @@ export function RecommendationPage() {
         <Link
           to="/about/data"
           className="text-2xs font-semibold text-ink-tertiary dark:text-ink-tertiary-dark hover:text-brand dark:hover:text-brand-300 underline underline-offset-2 shrink-0 mr-1 transition-colors"
-          title="공공데이터 4기관 융합 현황 보기"
+          title="6개 공공기관 + 민간 API 융합 현황 보기"
         >
           데이터 출처
         </Link>
         {[
-          { label: 'MOLIT RTMS',          desc: '국토부 실거래가 1.3M건 (2006~2025)' },
-          { label: '한국부동산원 R-ONE',   desc: '공동주택 매매·전세 지수 (2015~2026)' },
-          { label: '한국교통안전공단 TAGO', desc: '대중교통 품질 점수 (배차·야간·정류장)' },
-          { label: 'LH 청년주택',          desc: '행복주택·청년매입임대·전세임대' },
-          { label: '통계청',               desc: '청년 1인가구 소득 5분위' },
+          { label: 'MOLIT RTMS',        desc: '수도권 실거래 7.3M건 (2006~2026)' },
+          { label: '한국부동산원 R-ONE', desc: '공동주택 매매·전세 지수 (2015~2026)' },
+          { label: 'LH 청년주택',        desc: '행복주택·청년매입임대·전세임대' },
+          { label: '통계청',             desc: '청년 1인가구 소득 5분위' },
+          { label: '경찰청·지자체',       desc: '5대범죄·CCTV·가로등 안전지표' },
+          { label: '국가대중교통 TAGO',   desc: '경기·인천 대중교통 품질 (서울=국토부 정류소)' },
+          { label: 'ODsay · 카카오',     desc: '통근 경로 + 생활편의 POI (민간 API)' },
         ].map(({ label, desc }) => (
           <span
             key={label}
