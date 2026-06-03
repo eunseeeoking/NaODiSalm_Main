@@ -33,7 +33,8 @@ interface RegionCentroid {
 const GEOJSON_URL = '/data/capital-hjd-simplified.geojson';
 const CENTROIDS_URL = '/data/capital-centroids.json';
 
-export function MapPanel() {
+/** showLegend: 지도가 화면 메인일 때만 통근 범례 노출 (모바일 시트 펼침/입력 드로어 열림 시 false) */
+export function MapPanel({ showLegend = true }: { showLegend?: boolean } = {}) {
   const appKey = import.meta.env.VITE_KAKAO_MAP_KEY ?? '';
   const status = useKakaoLoader(appKey, ['services', 'clusterer']);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -413,11 +414,12 @@ export function MapPanel() {
         </div>
       )}
 
-      {/* 통근시간 범례 — absolute 하단 */}
+      {/* 통근시간 범례 — absolute 하단. 지도가 메인일 때만 노출 */}
+      {showLegend && (
       <div
         ref={legendScrollRef}
         style={{ zIndex: 5 }}
-        className="absolute bottom-0 left-0 right-0 px-4 py-2 bg-surface-elevated/90 dark:bg-surface-dark-elevated/90 backdrop-blur-sm border-t border-line-light dark:border-line-dark flex items-center gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark overflow-x-auto scroll-x-slider tabular-nums"
+        className="absolute bottom-0 left-0 right-0 h-9 px-4 bg-surface-elevated/90 dark:bg-surface-dark-elevated/90 backdrop-blur-sm border-t border-line-light dark:border-line-dark flex items-center gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark overflow-x-auto scroll-x-slider tabular-nums"
       >
         <span className="font-semibold shrink-0">추천지역 통근</span>
         <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 rounded-sm" style={{ background: '#16A34A' }} />20분 이내</span>
@@ -426,6 +428,7 @@ export function MapPanel() {
         <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 rounded-sm" style={{ background: '#F97316' }} />60분</span>
         <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 rounded-sm" style={{ background: '#EF4444' }} />60분 이상</span>
       </div>
+      )}
     </div>
   );
 }

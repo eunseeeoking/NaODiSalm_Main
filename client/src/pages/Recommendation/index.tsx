@@ -19,7 +19,7 @@
  *  기존 좌/우 슬라이드 패널 + 토글 버튼 동작 유지.
  * ──────────────────────────────────────────────────────────────
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useRecommendationStore } from '../../stores/useRecommendationStore';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -67,14 +67,174 @@ function useIsMobile(): boolean {
   return mobile;
 }
 
-/** 모바일 필터 바에 표시할 패널 목록 */
-type MobilePanel = 'commute' | 'weights' | 'regions';
+/** 모바일 필터 바에 표시할 '입력' 패널 목록 — 의미 단위로 분리.
+ *  결과(추천지역)는 입력이 아니므로 칩에서 제외하고 하단 ResultsSheet 로 분리. */
+type MobilePanel = 'commute' | 'dealType' | 'property' | 'weights';
 
 const MOBILE_FILTER_ITEMS: ReadonlyArray<{ key: MobilePanel; label: string }> = [
   { key: 'commute',  label: '통근·예산' },
-  { key: 'weights',  label: '가중치' },
-  { key: 'regions',  label: '추천지역' },
+  { key: 'dealType', label: '거래유형' },
+  { key: 'property', label: '매물종류' },
+  { key: 'weights',  label: '가중치·소득분위' },
 ];
+
+/**
+ * 모바일 탑-다운 드로어 핸들 — 패널 '하단'에 배치.
+ *  드로어가 위에서 내려오므로 사용자는 바닥의 핸들을 잡아 위로 당겨 닫으려 함(관찰됨).
+ *  → 탭 또는 위로 스와이프(>30px) 시 닫힘.
+ */
+function DrawerHandle({ onClose }: { onClose: () => void }) {
+  const startY = useRef<number | null>(null);
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      onPointerDown={(e) => { startY.current = e.clientY; }}
+      onPointerUp={(e) => {
+        const sy = startY.current;
+        startY.current = null;
+        if (sy != null && sy - e.clientY > 30) onClose(); // 위로 스와이프 → 닫기
+      }}
+      aria-label="패널 닫기 (탭하거나 위로 당기기)"
+      title="닫기"
+      className="shrink-0 w-full flex justify-center pt-1.5 pb-2.5 touch-none cursor-grab active:cursor-grabbing"
+    >
+      <span className="w-10 h-1 rounded-full bg-line-light dark:bg-line-dark" />
+    </button>
+  );
+}
+
+/**
+ * 모바일 탑-다운 드로어 — 콘텐츠(스크롤) + 하단 드래그 핸들.
+ *  flex-col + 콘텐츠 min-h-0 로, 짧으면 shrink-wrap(핸들이 콘텐츠 바로 아래),
+ *  길면 max-h-72vh 안에서 콘텐츠만 스크롤하고 핸들은 바닥에 고정.
+ */
+function MobileDrawer({
+  open,
+  onClose,
+  bare = false,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  bare?: boolean; // CardPanel 처럼 자체 패딩이 있는 콘텐츠는 패딩 제거
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={[
+        'absolute -top-px left-0 right-0 z-40',
+        'bg-surface dark:bg-surface-dark',
+        'max-h-[72vh] flex flex-col',
+        'transition-transform duration-300 ease-in-out',
+        'shadow-xl',
+        open ? 'translate-y-0' : '-translate-y-full',
+      ].join(' ')}
+      aria-hidden={!open}
+    >
+      <div className={['min-h-0 overflow-y-auto', bare ? '' : 'px-3 pt-3 pb-2'].join(' ')}>
+        {children}
+      </div>
+      <DrawerHandle onClose={onClose} />
+    </div>
+  );
+}
+
+/**
+ * 추천지역(결과) 바텀시트 — 입력 드로어(상단)와 분리해 화면 '하단'에서 올라옴.
+ *  - peek: 헤더(핸들 + 건수)만 노출 / 펼침: 화면 75% 높이로 CardPanel 표시.
+ *  - 헤더 탭 = 토글, 위/아래 드래그(>30px) = 펼침/접힘.
+ *  - 상단 입력 드로어가 열리면(hidden) 시트는 완전히 내려가 충돌 방지.
+ */
+function ResultsSheet({
+  expanded,
+  hidden,
+  onExpand,
+  onCollapse,
+}: {
+  expanded: boolean;
+  hidden: boolean;
+  onExpand: () => void;
+  onCollapse: () => void;
+}) {
+  const workplace = useRecommendationStore((s) => s.workplace);
+  const recommendations = useRecommendationStore((s) => s.recommendations);
+  const isLoading = useRecommendationStore((s) => s.isLoading);
+  const startY = useRef<number | null>(null);
+  const dragged = useRef(false);
+
+  if (!workplace) return null; // 직장 미입력 → 결과 없음, 시트 자체 숨김
+
+  const count = recommendations.length;
+  const label = isLoading
+    ? '추천 지역 조회 중…'
+    : count === 0
+    ? '조건에 맞는 지역 없음'
+    : `추천지역 ${count}곳`;
+
+  return (
+    <>
+      {/* 펼침 시 백드롭 (입력 드로어가 열린 상태에선 미표시) */}
+      <div
+        className={[
+          'absolute inset-0 z-30 bg-black/30 transition-opacity duration-300',
+          expanded && !hidden ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
+        ].join(' ')}
+        onClick={onCollapse}
+        aria-hidden="true"
+      />
+      <div
+        className={[
+          'absolute left-0 right-0 z-40 overflow-hidden',
+          // peek: 범례(h-9) 위에 제목 줄만(bottom-9) / 펼침: 범례 숨김 → 바닥까지(bottom-0)
+          // 높이 토글 방식: peek=헤더만(3.25rem), 펼침=75%, 입력 드로어 열림=0.
+          //   translateY 로 내리면 본문이 범례를 덮으므로 height 로 잘라냄.
+          expanded ? 'bottom-0' : 'bottom-9',
+          'bg-surface dark:bg-surface-dark rounded-t-2xl shadow-xl',
+          'flex flex-col transition-[height,bottom] duration-300 ease-in-out',
+        ].join(' ')}
+        style={{ height: hidden ? '0px' : expanded ? '75%' : '3.25rem' }}
+        aria-hidden={hidden}
+      >
+        {/* peek 헤더 — 핸들(상단) + 건수. 탭/드래그로 토글 */}
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={expanded ? '추천지역 접기' : '추천지역 펼치기'}
+          onPointerDown={(e) => { startY.current = e.clientY; dragged.current = false; }}
+          onPointerUp={(e) => {
+            const sy = startY.current;
+            startY.current = null;
+            if (sy == null) return;
+            const dy = e.clientY - sy;
+            if (dy > 30) { dragged.current = true; onCollapse(); }       // 아래로 드래그 → 접기
+            else if (dy < -30) { dragged.current = true; onExpand(); }   // 위로 드래그 → 펼치기
+          }}
+          onClick={() => {
+            if (dragged.current) { dragged.current = false; return; }     // 드래그였으면 클릭 무시
+            if (expanded) onCollapse(); else onExpand();
+          }}
+          className="shrink-0 w-full h-[3.25rem] flex flex-col items-center justify-center gap-1 px-4 touch-none cursor-grab active:cursor-grabbing border-b border-line-light dark:border-line-dark bg-surface-elevated dark:bg-surface-dark-elevated rounded-t-2xl"
+        >
+          <span className="w-10 h-1 rounded-full bg-line-light dark:bg-line-dark" />
+          <span className="flex items-center gap-1 text-sm font-semibold text-ink-primary dark:text-ink-primary-dark">
+            {label}
+            <svg
+              width="10" height="10" viewBox="0 0 10 10" fill="currentColor"
+              className={`transition-transform duration-200 ${expanded ? 'rotate-0' : 'rotate-180'}`}
+              aria-hidden="true"
+            >
+              <path d="M5 7 L1 3 L9 3 Z" />
+            </svg>
+          </span>
+        </button>
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <CardPanel />
+        </div>
+      </div>
+    </>
+  );
+}
 
 export function RecommendationPage() {
   const isMobile = useIsMobile();
@@ -90,16 +250,22 @@ export function RecommendationPage() {
   const [rightCollapsed, setRightCollapsed] = useState(true);
 
   // ─── 모바일 드로어 상태 ──────────────────────────────────────
-  // null = 모두 닫힘 / 'commute' | 'weights' | 'regions' = 해당 패널 열림
+  // null = 모두 닫힘 / 'commute' | 'dealType' | 'property' | 'weights' = 해당 입력 패널 열림
   const [mobileActivePanel, setMobileActivePanel] = useState<MobilePanel | null>(null);
+  // 추천지역(결과) 바텀시트 — peek(false) / 펼침(true)
+  const [resultsExpanded, setResultsExpanded] = useState(false);
 
   const toggleMobilePanel = (panel: MobilePanel) => {
     setMobileActivePanel((prev) => (prev === panel ? null : panel));
+    setResultsExpanded(false); // 입력 드로어 열면 결과 시트는 접음(충돌 방지)
   };
+  const closePanel = () => setMobileActivePanel(null);
+  const expandResults = () => { setResultsExpanded(true); setMobileActivePanel(null); };
+  const collapseResults = () => setResultsExpanded(false);
 
-  // 뷰포트 전환 시 모바일 드로어 닫기 (데스크톱으로 넓어졌을 때 잔여 상태 제거)
+  // 뷰포트 전환 시 모바일 드로어/시트 닫기 (데스크톱으로 넓어졌을 때 잔여 상태 제거)
   useEffect(() => {
-    if (!isMobile) setMobileActivePanel(null);
+    if (!isMobile) { setMobileActivePanel(null); setResultsExpanded(false); }
   }, [isMobile]);
 
   // ─── 스토어 ──────────────────────────────────────────────────
@@ -225,7 +391,7 @@ export function RecommendationPage() {
   const RIGHT_CLOSED = '8px';
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-surface dark:bg-surface-dark overflow-hidden text-ink-primary dark:text-ink-primary-dark font-sans">
+    <div className="w-screen h-full flex flex-col bg-surface dark:bg-surface-dark overflow-hidden text-ink-primary dark:text-ink-primary-dark font-sans">
       <RecommendationHeader />
 
       {/* 데이터 출처 배지 스트립 — 모바일 숨김 */}
@@ -267,7 +433,7 @@ export function RecommendationPage() {
         ── 모바일 필터 바 (md 미만에서만 노출) ─────────────────────
         검색 바 바로 하단에 고정. 가로 스크롤 가능.
       */}
-      <div ref={mobileFilterRef} className="md:hidden flex overflow-x-auto gap-2 px-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated shrink-0 scroll-x-slider">
+      <div ref={mobileFilterRef} className="md:hidden relative z-10 -mb-px flex overflow-x-auto gap-2 px-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated shrink-0 scroll-x-slider">
         {MOBILE_FILTER_ITEMS.map(({ key, label }) => {
           const active = mobileActivePanel === key;
           return (
@@ -310,7 +476,8 @@ export function RecommendationPage() {
 
         {/* ── Layer 0: 지도 ── */}
         <div className="absolute inset-0 flex flex-col z-0">
-          <MapPanel />
+          {/* 범례는 결과 시트를 '펼쳤을 때'만 숨김. 입력 드로어가 내려와도 범례는 유지. */}
+          <MapPanel showLegend={!isMobile || !resultsExpanded} />
         </div>
 
         {/*
@@ -377,70 +544,30 @@ export function RecommendationPage() {
               aria-hidden="true"
             />
 
-            {/* ── 드로어 A: 통근인내심 · 예산 ── */}
-            <div
-              className={[
-                'absolute -top-px left-0 right-0 z-40',
-                'bg-surface dark:bg-surface-dark',
-                'max-h-[72vh] overflow-y-auto',
-                'transition-transform duration-300 ease-in-out',
-                'shadow-xl',
-                mobileActivePanel === 'commute' ? 'translate-y-0' : '-translate-y-full',
-              ].join(' ')}
-              aria-hidden={mobileActivePanel !== 'commute'}
-            >
-              {/* 드래그 핸들 (시각 힌트만, 헤더 제거) */}
-              <div className="flex justify-center pt-2 pb-1 shrink-0">
-                <div className="w-8 h-1 rounded-full bg-line-light dark:bg-line-dark" />
-              </div>
-              <div className="px-3 pb-3">
-                <CommutePatienceSlider />
-              </div>
-            </div>
+            {/* ── 입력 드로어: 통근·예산 / 거래유형 / 매물종류 / 가중치·소득분위 ── */}
+            <MobileDrawer open={mobileActivePanel === 'commute'} onClose={closePanel}>
+              <CommutePatienceSlider />
+            </MobileDrawer>
 
-            {/* ── 드로어 B: 가중치 ── */}
-            <div
-              className={[
-                'absolute -top-px left-0 right-0 z-40',
-                'bg-surface dark:bg-surface-dark',
-                'max-h-[72vh] overflow-y-auto',
-                'transition-transform duration-300 ease-in-out',
-                'shadow-xl',
-                mobileActivePanel === 'weights' ? 'translate-y-0' : '-translate-y-full',
-              ].join(' ')}
-              aria-hidden={mobileActivePanel !== 'weights'}
-            >
-              <div className="flex justify-center pt-2 pb-1 shrink-0">
-                <div className="w-8 h-1 rounded-full bg-line-light dark:bg-line-dark" />
-              </div>
-              <div className="px-3 pb-3 flex flex-col gap-3">
-                <DealTypeToggle />
-                <PropertyTypeFilter />
-                <WeightSliders />
-              </div>
-            </div>
+            <MobileDrawer open={mobileActivePanel === 'dealType'} onClose={closePanel}>
+              <DealTypeToggle />
+            </MobileDrawer>
 
-            {/* ── 드로어 C: 추천지역 ── */}
-            <div
-              className={[
-                'absolute -top-px left-0 right-0 z-40',
-                'bg-surface dark:bg-surface-dark',
-                'max-h-[72vh] overflow-y-auto',
-                'transition-transform duration-300 ease-in-out',
-                'shadow-xl',
-                mobileActivePanel === 'regions' ? 'translate-y-0' : '-translate-y-full',
-              ].join(' ')}
-              aria-hidden={mobileActivePanel !== 'regions'}
-            >
-              {/* 드래그 핸들 */}
-              <div className="flex justify-center pt-2 pb-1 shrink-0">
-                <div className="w-8 h-1 rounded-full bg-line-light dark:bg-line-dark" />
-              </div>
-              {/* CardPanel은 h-full 기반이라 max-h 컨테이너 안에서 min-h 고정 */}
-              <div className="min-h-[200px]">
-                <CardPanel />
-              </div>
-            </div>
+            <MobileDrawer open={mobileActivePanel === 'property'} onClose={closePanel}>
+              <PropertyTypeFilter />
+            </MobileDrawer>
+
+            <MobileDrawer open={mobileActivePanel === 'weights'} onClose={closePanel}>
+              <WeightSliders />
+            </MobileDrawer>
+
+            {/* ── 추천지역(결과) = 출력 → 하단 바텀시트로 분리(입력 드로어와 성격 구분) ── */}
+            <ResultsSheet
+              expanded={resultsExpanded}
+              hidden={mobileActivePanel !== null}
+              onExpand={expandResults}
+              onCollapse={collapseResults}
+            />
           </>
         )}
 

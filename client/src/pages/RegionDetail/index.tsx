@@ -224,7 +224,9 @@ export function RegionDetailPage() {
   return (
     //  모바일(<md): main 내부 세로 스크롤 + 1열 stacking
     //  데스크톱(md+): 화면 고정 + 12-grid 2단 레이아웃
-    <div className="w-screen h-screen flex flex-col bg-surface dark:bg-surface-dark overflow-hidden text-ink-primary dark:text-ink-primary-dark font-sans">
+    //  h-full(=#root 100%) 사용: h-screen(100vh)은 모바일 동적 툴바 높이만큼 #root(overflow-hidden)
+    //  를 초과해 하단이 잘려 스크롤 끝에 도달 못 하는 문제가 있어 100% 체인으로 정확히 맞춤.
+    <div className="w-screen h-full flex flex-col bg-surface dark:bg-surface-dark overflow-hidden text-ink-primary dark:text-ink-primary-dark font-sans">
       <RegionDetailHeader
         region={region}
         onBack={() => navigate('/home')}
