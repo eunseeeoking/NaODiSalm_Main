@@ -24,10 +24,11 @@
   - 인트로 NUMBER_CARDS, 홈 chip, `README.md` 표/머메이드 모두 위 수치로 정정. 서울→수도권 표기 반영.
 - **부수 정합**: 홈 "데이터 출처" 툴팁·`App.tsx`·`ComplexCardList`·`server/.../meta.ts` 주석의 "4기관" 잔재 제거.
 
-### 1-3. GTM + SPA 추적
-- `client/index.html`: Google Tag Manager(`GTM-MPNDNB3Z`) 스니펫을 `<head>` 상단 + `<body>` 직후(noscript)에 배치. (`dist/index.html`은 빌드 산출물이라 미수정.)
-- `hooks/useGtmPageViews.ts`(신규): react-router 라우트 전환마다 `dataLayer.push({event:'page_view', …})`. **최초 마운트는 skip**(GTM 기본 pageview 와 중복 방지). `App`에서 1회 호출.
-  - ⚠️ GTM 대시보드에서 `page_view` 맞춤이벤트 트리거 + GA4 이벤트 태그 설정 필요(코드만으론 미완성).
+### 1-3. 애널리틱스 — GA4(gtag.js) + SPA 추적
+- 최초 GTM(`GTM-MPNDNB3Z`)으로 도입했다가 세션 후반 사용자가 **GA4 gtag.js 직접 방식**(`G-8WDEQHDE04`)으로 변경 → 반영.
+- `client/index.html`: `<head>` 상단에 gtag.js 스니펫(`gtag('config','G-8WDEQHDE04')`) 배치, GTM 스니펫·noscript 제거. (`dist/index.html`은 빌드 산출물이라 미수정.)
+- `hooks/useGaPageViews.ts`(GTM판 리네임): react-router 라우트 전환마다 `gtag('event','page_view',{page_path,…})`. **최초 마운트는 skip**(gtag config 기본 page_view 와 중복 방지). `App`에서 1회 호출.
+  - ⚠️ GA4 '향상된 측정 > 브라우저 기록 기반 페이지 변경'이 ON(기본)이면 본 훅과 **이중 집계** → 옵션 OFF(수동 훅) 또는 훅 제거(자동 측정) 중 택1.
 
 ---
 
@@ -74,17 +75,21 @@
 - `client/src/{App.tsx, pages/Landing/index.tsx, pages/AboutData/index.tsx, pages/Recommendation/index.tsx, pages/RegionDetail/components/ComplexCardList.tsx}`
 - `server/src/routes/domains/meta.ts`
 
-**모바일 개편 커밋 (본 세션 후속)**
+**모바일 개편 커밋 `b3c4569` (본 세션 후속)**
 - `client/src/pages/Recommendation/index.tsx`(MobileDrawer·DrawerHandle·ResultsSheet·칩 분리·seam·h-full)
 - `client/src/pages/Recommendation/components/MapPanel.tsx`(범례 하단 고정 + `showLegend`)
 - `client/src/pages/RegionDetail/index.tsx`(h-full 스크롤 수정)
 - `client/doc/2026-06-04/work-log.md`(본 문서)
+
+**애널리틱스 GA4 전환 커밋 (본 세션 후속)**
+- `client/index.html`(GTM → gtag.js `G-8WDEQHDE04`, noscript 제거)
+- `client/src/hooks/useGaPageViews.ts`(`useGtmPageViews` 리네임 + gtag 방식) · `client/src/App.tsx`(import/호출명)
 
 ---
 
 ## 5. 다음 세션 출발점 / 미처리
 
 1. **`server/doc/db-state.md` 갱신** (사용자 보류): 2026-05-29자 stale(safety 469·transit 33 → 실제 2,564·1,611). `npm run db:snapshot` 실행 전 **`scripts/dbSnapshot.ts`의 추천 행정동 쿼리 `ac.sigungu_code LIKE '11%'`(서울 한정)를 수도권(11·28·41)으로 수정** 후 실행할 것.
-2. **GTM GA4 태그 설정**(대시보드): `page_view` 맞춤이벤트 트리거 + GA4 이벤트 태그 연결.
+2. **GA4 이중 집계 점검**(대시보드): '향상된 측정 > 브라우저 기록 기반 페이지 변경'이 ON이면 `useGaPageViews` 와 SPA page_view 이중 집계 → 옵션 OFF(수동 훅 유지) 또는 훅 제거(자동 측정) 중 택1.
 3. **모바일 실기기 최종 점검**: peek↔펼침 전환, Depth 3 최하단 스크롤, 범례/seam.
 4. (선택) 결과 펼침 시 CardPanel 자체 헤더("추천 지역 N건")와 시트 제목("추천지역 N곳") 경미한 중복 — 필요 시 정리.

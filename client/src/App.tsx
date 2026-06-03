@@ -20,7 +20,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useThemeStore } from './stores/useThemeStore';
-import { useGtmPageViews } from './hooks/useGtmPageViews';
+import { useGaPageViews } from './hooks/useGaPageViews';
 import { RecommendationPage } from './pages/Recommendation';
 // import { ExplorePage } from './pages/Explore'; // 2026-05-28: 로그인 미사용, 401 방지
 import { RegionDetailPage } from './pages/RegionDetail';
@@ -30,8 +30,8 @@ import { LandingPage } from './pages/Landing';
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
 
-  // SPA 라우트 전환을 GTM(dataLayer)에 page_view 로 전달 (최초 로드는 GTM 기본 pageview 가 담당)
-  useGtmPageViews();
+  // SPA 라우트 전환을 GA4(gtag.js)에 page_view 로 전달 (최초 로드는 gtag config 가 담당)
+  useGaPageViews();
 
   // 테마 → <html> 클래스 동기화
   useEffect(() => {
