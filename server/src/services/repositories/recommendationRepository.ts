@@ -591,9 +591,15 @@ export async function fetchRegionCandidates(
 
   // 2) workplace 와 거리 계산 → 1차 필터 (직선 거리 상한)
   const safePatience = Math.max(15, patience);
+  // 통근 게이트 배율 (KI-22): 인내심 × 1.2 초과 통근은 후보 제외.
+  //   기존 ×2(=90분)는 너무 헐거워, 인내심 45분에 commuteMinutes 60~89분 지역이
+  //   affordability/life 로 top8 에 새어 들어왔음(수도권 확장 KI-19 부작용).
+  //   commute 는 demand-driven ODsay 전까지 Haversine 추정이라 ±0.2 버퍼만 허용.
+  const PATIENCE_GATE_MULT = 1.2;
   // 직선 → 대중교통 환산 ≈ km × 2.4분/km. patience 분 = patience/2.4 km.
-  // 안전 패딩 1.5× → patience × 0.5 × 1.5 ≈ patience × 0.75 km
-  const maxKm = options.maxKm ?? safePatience * 0.5 * 1.5;
+  // coarse 사전필터(시간 정밀 게이트는 아래 §4). 게이트 시간(patience×1.2)을 km 로 환산
+  //   (×1.2/2.4 = ×0.5) 후, cached 통근이 Haversine 보다 빠를 수 있어 1.3× 패딩 → ×0.65.
+  const maxKm = options.maxKm ?? safePatience * PATIENCE_GATE_MULT * 0.5 * 1.3;
 
   const withDistance = aggregates
     .map((a) => ({
@@ -662,8 +668,8 @@ export async function fetchRegionCandidates(
       ? cached.transitMinutes
       : estimateTransitMinutesByKm(distanceKm);
 
-    // patience × 2 초과 통근은 후보에서 강제 제외
-    if (commuteMinutes > safePatience * 2) continue;
+    // patience × 1.2 초과 통근은 후보에서 강제 제외 (KI-22)
+    if (commuteMinutes > safePatience * PATIENCE_GATE_MULT) continue;
 
     rawCandidates.push({ agg, commuteMinutes, price: repPrice, rawReturn });
   }
