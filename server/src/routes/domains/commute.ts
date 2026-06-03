@@ -8,8 +8,8 @@
  *    }
  *    response: {
  *      cacheKey: string,
- *      cacheHit: number,      // 정확 좌표 일치 (4자리 동일)
- *      cacheNearby: number,   // 인접 격자에서 흡수 (KNN)
+ *      cacheHit: number,      // 같은 좌표 버킷 일치 (3자리 동일 ≈110m)
+ *      cacheNearby: number,   // 인접 격자에서 흡수 (KNN ≈330m)
  *      cacheMiss: number,     // 신규 ODsay 호출
  *      written: number,
  *      elapsedMs: number,
@@ -48,6 +48,7 @@ import {
   upsertCommuteEntries,
   type CommuteEntry,
 } from '../../services/repositories/commuteRepository';
+import { getOdsayUsageToday } from '../../services/external/odsayQuota';
 import { prisma } from '../../services/db';
 
 export const commuteRouter = Router();
@@ -175,7 +176,16 @@ commuteRouter.post('/matrix', async (req: Request, res: Response) => {
           };
         });
 
-        writtenCount = await upsertCommuteEntries(cacheKey, upsertEntries);
+        // ── 캐시 포이즈닝 방지 (KI-23) ─────────────────────────────
+        //   쿼터 차단(≥800) 중엔 ODsay 미호출 → transitMinutes 가 Haversine 폴백.
+        //   이 추정값을 저장하면 캐시 hit 으로 고착돼 쿼터 리셋 후에도 재호출 안 됨.
+        //   차단 중일 때는 추정 폴백(transfers=null)을 저장하지 않아 다음에 재조회되게 함.
+        //   (평시엔 진짜 no-route(-98/-99)도 저장 — 알려진 무경로 재호출 방지.)
+        const quotaBlocked = (await getOdsayUsageToday()).blocked;
+        const entriesToPersist = quotaBlocked
+          ? upsertEntries.filter((e) => e.transitTransfers !== null)
+          : upsertEntries;
+        writtenCount = await upsertCommuteEntries(cacheKey, entriesToPersist);
       }
 
       // ── 3) 응답 조립 ───────────────────────────────────────────
