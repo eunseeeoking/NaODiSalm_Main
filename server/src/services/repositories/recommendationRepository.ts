@@ -230,6 +230,9 @@ async function cachedCutoff(key: string, compute: () => Promise<Date | null>): P
 async function fetchRepresentativePrices(
   aggregates: RegionAggregate[],
   propertyTypes: readonly PropertyType[],
+  // 면적 필터(KI-18 P2 면적대별). 기본 = 전체 면적 9~330 sanity(KI-16, 기존과 동일 = 핫패스 무변경).
+  //  Depth 3 면적대별 호출만 반개구간 밴드(`>= lo AND < hi`)를 주입해 동일 median 규약 재사용.
+  areaFilter: Prisma.Sql = Prisma.sql`p.area_m2 BETWEEN 9 AND 330`,
 ): Promise<Map<string, number>> {
   if (aggregates.length === 0) return new Map();
 
@@ -262,7 +265,7 @@ async function fetchRepresentativePrices(
     WITH pooled AS (
       SELECT sigungu_code, legal_dong, price_manwon
       FROM ( ${tradeUnion} ) p
-      WHERE p.area_m2 BETWEEN 9 AND 330
+      WHERE ${areaFilter}
       ${cutoff ? Prisma.sql`AND p.deal_date >= ${cutoff}` : Prisma.empty}
     ),
     ranked AS (
@@ -348,6 +351,8 @@ async function fetchRentCostByRegion(
   aggregates: RegionAggregate[],
   dealType: DealType,
   propertyTypes: readonly PropertyType[],
+  // 면적 필터(KI-18 P2). 기본 = 전체 9~330(기존과 동일, 핫패스 무변경). 면적대별만 반개구간 밴드 주입.
+  areaFilter: Prisma.Sql = Prisma.sql`p.area_m2 BETWEEN 9 AND 330`,
 ): Promise<Map<string, RentStat>> {
   const map = new Map<string, RentStat>();
   if (dealType === 'SALE' || aggregates.length === 0 || propertyTypes.length === 0) {
@@ -413,7 +418,7 @@ async function fetchRentCostByRegion(
       WITH pooled AS (
         SELECT sigungu_code, legal_dong, deposit_manwon
         FROM ( ${unioned} ) p
-        WHERE p.area_m2 BETWEEN 9 AND 330
+        WHERE ${areaFilter}
         ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
       ),
       ranked AS (
@@ -438,7 +443,7 @@ async function fetchRentCostByRegion(
       WITH pooled AS (
         SELECT sigungu_code, legal_dong, deposit_manwon, monthly_manwon, (${costExpr}) AS cost
         FROM ( ${unioned} ) p
-        WHERE p.area_m2 BETWEEN 9 AND 330
+        WHERE ${areaFilter}
         ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
         ${semiJeonseFilter}
       ),
@@ -550,6 +555,160 @@ export async function fetchDongPriceStructure(
         }
       : null,
   };
+}
+
+/**
+ * KI-18 Phase 2 (#1+#4) — 단일 행정동의 **면적대별(소/중/대) 시세 분포**.
+ *
+ *  ▷ 목적: "동 상세 평가" 시세 구조에 면적대별 median 을 붙여 분포를 보여줌(KI-16 후속).
+ *    원룸~대형이 한 median 에 섞이던 것을 전용면적 3구간으로 분리.
+ *  ▷ 구간(국민주택규모 경계, 반개구간 — 경계 중복 없음):
+ *    소형 9~60㎡ · 중형 60~85㎡ · 대형 85~330㎡.
+ *  ▷ 재사용: `fetchRepresentativePrices`·`fetchRentCostByRegion` 에 면적 밴드만 주입 →
+ *    median/cutoff/반전세 제외/HAVING≥5 규약을 그대로(KI-8/10/16). 단일 동이라 구간×거래유형
+ *    9쿼리지만 dong tuple 필터로 각 쿼리가 가벼움(+cutoff 캐시 공유).
+ *  ▷ 전월세는 HAVING≥5 라 표본 부족 구간은 null(정직). 매매는 count 미산출(기존 함수 한계) → 표본칩 없음.
+ */
+export type AreaTier = '소형' | '중형' | '대형';
+
+export interface AreaTierPriceRow {
+  tier: AreaTier;
+  /** 전용면적 구간 라벨 (예: "60㎡ 미만") */
+  areaLabel: string;
+  sale: { medianManwon: number } | null;
+  jeonse: { depositMedianManwon: number; sampleCount: number } | null;
+  monthly: {
+    depositMedianManwon: number;
+    pureMonthlyMedianManwon: number;
+    sampleCount: number;
+  } | null;
+}
+
+const AREA_TIERS: { tier: AreaTier; min: number; max: number; areaLabel: string }[] = [
+  { tier: '소형', min: 9, max: 60, areaLabel: '60㎡ 미만' },
+  { tier: '중형', min: 60, max: 85, areaLabel: '60–85㎡' },
+  { tier: '대형', min: 85, max: 331, areaLabel: '85㎡ 이상' },
+];
+
+export async function fetchDongAreaTierPrices(
+  sigunguCode: string,
+  dong: string,
+  propertyTypes: readonly PropertyType[],
+): Promise<AreaTierPriceRow[]> {
+  const agg: RegionAggregate = {
+    legalDongCode: `${sigunguCode}-${dong}`,
+    sigunguCode,
+    sigungu: '',
+    dong,
+    centroidLat: 0,
+    centroidLng: 0,
+    complexCount: 0,
+  };
+  const aggs = [agg];
+  const key = `${sigunguCode}|${dong}`;
+
+  return Promise.all(
+    AREA_TIERS.map(async (t) => {
+      // 반개구간 `>= min AND < max` — 60·85 경계 중복 집계 방지.
+      const band = Prisma.sql`p.area_m2 >= ${t.min} AND p.area_m2 < ${t.max}`;
+      const [priceMap, jeonseMap, monthlyMap] = await Promise.all([
+        fetchRepresentativePrices(aggs, propertyTypes, band),
+        fetchRentCostByRegion(aggs, 'JEONSE', propertyTypes, band),
+        fetchRentCostByRegion(aggs, 'MONTHLY', propertyTypes, band),
+      ]);
+      const sale = priceMap.get(key);
+      const jeonse = jeonseMap.get(key);
+      const monthly = monthlyMap.get(key);
+      return {
+        tier: t.tier,
+        areaLabel: t.areaLabel,
+        sale: sale && sale > 0 ? { medianManwon: sale } : null,
+        jeonse: jeonse
+          ? { depositMedianManwon: jeonse.depositManwon, sampleCount: jeonse.sampleCount }
+          : null,
+        monthly: monthly
+          ? {
+              depositMedianManwon: monthly.depositManwon,
+              pureMonthlyMedianManwon: monthly.monthlyRentManwon,
+              sampleCount: monthly.sampleCount,
+            }
+          : null,
+      };
+    }),
+  );
+}
+
+/**
+ * KI-18 Phase 2 (#2) — 단일 행정동의 **반전세 비율**(KI-10 후속).
+ *
+ *  ▷ 배경: KI-10 은 WOLSE 버킷에서 반전세(준전세)를 **통계에서 제외만** 함(순수 월세 median 왜곡 방지).
+ *    여기선 그 **비율을 노출**해 "순수 월세 median 은 반전세를 뺀 값"임을 사용자에게 알린다.
+ *  ▷ 반전세 정의(KI-10 동일): `monthly_manwon < deposit_manwon × RATE`
+ *    (보증금 환산월이 순수 월세 초과 = 사실상 전세에 가까움. RATE=JEONSE_TO_MONTHLY_RATE 재사용).
+ *  ▷ 분모=WOLSE 전체(area 9~330·cutoff −1년, 기존 월세 경로와 동일 윈도우), 분자=반전세 건.
+ *    표본<5 면 null(저표본 비율은 신뢰도 낮아 미노출).
+ */
+export interface SemiJeonseRatio {
+  /** WOLSE 전체 표본(반전세 포함) */
+  totalWolse: number;
+  /** 그중 반전세(준전세) 건수 */
+  semiJeonse: number;
+  /** 반전세 비율(%) 0~100 */
+  ratioPct: number;
+}
+
+export async function fetchDongSemiJeonseRatio(
+  sigunguCode: string,
+  dong: string,
+  propertyTypes: readonly PropertyType[],
+): Promise<SemiJeonseRatio | null> {
+  if (propertyTypes.length === 0) return null;
+  const agg: RegionAggregate = {
+    legalDongCode: `${sigunguCode}-${dong}`,
+    sigunguCode,
+    sigungu: '',
+    dong,
+    centroidLat: 0,
+    centroidLng: 0,
+    complexCount: 0,
+  };
+  const dongFilter = dongTupleFilter([agg]);
+
+  // 월세 경로(fetchRentCostByRegion)와 동일 cutoff(캐시 공유) + WOLSE 풀.
+  const cutoff = await cachedCutoff('apt_rent_contract', async () => {
+    const latest = await prisma.aptRent.aggregate({ _max: { contractDate: true } });
+    if (!latest._max.contractDate) return null;
+    const c = new Date(latest._max.contractDate);
+    c.setFullYear(c.getFullYear() - 1);
+    return c;
+  });
+
+  const unioned = Prisma.join(
+    propertyTypes.map((t) => rentSource(t, 'WOLSE', dongFilter)),
+    ' UNION ALL ',
+  );
+  // RATE 는 상수 → SQL 리터럴 인라인(KI-21 교훈: embed fragment 파라미터 순서 꼬임 방지).
+  const rateLit = String(JEONSE_TO_MONTHLY_RATE);
+
+  const rows = await prisma
+    .$queryRaw<{ total: bigint | number; semi: bigint | number }[]>(Prisma.sql`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN p.monthly_manwon < p.deposit_manwon * ${Prisma.raw(rateLit)} THEN 1 ELSE 0 END) AS semi
+      FROM ( ${unioned} ) p
+      WHERE p.area_m2 BETWEEN 9 AND 330
+        ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
+        AND (p.monthly_manwon > 0 OR p.deposit_manwon > 0)
+    `)
+    .catch((e: unknown) => {
+      console.warn('[recommendations] 반전세 비율 집계 실패:', e);
+      return [] as { total: bigint | number; semi: bigint | number }[];
+    });
+
+  const total = Number(rows[0]?.total ?? 0);
+  const semi = Number(rows[0]?.semi ?? 0);
+  if (total < 5) return null; // 저표본 비율 미노출
+  return { totalWolse: total, semiJeonse: semi, ratioPct: Math.round((semi / total) * 100) };
 }
 
 /**

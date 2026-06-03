@@ -239,8 +239,21 @@ export function commuteScore(
  *  월 환산: × (1/12)
  *
  *  결합: price(만원) × 0.65 × 0.045 / 12 = price × MONTHLY_COST_RATE
+ *
+ *  ▷ KI-14(2026-06-04): 환산율·전세가율은 금리·시장 변동에 따라 바뀌므로 **env 로 주기 갱신** 가능.
+ *    기본값은 한국은행 전월세전환율(연 4.5%, 2023 기준)·전세가율 65% — 갱신 시 .env 의
+ *    `JEONSE_CONVERSION_RATE_ANNUAL`(예: 0.052)·`JEONSE_PRICE_RATIO` 로 오버라이드(미설정 시 기존값 = 점수 불변).
+ *    ※ 값 변경은 전 동 RIR/affordability 에 영향 → 갱신 시 회귀 확인 권장.
  */
-const MONTHLY_COST_RATE = 0.65 * 0.045 / 12; // ≈ 0.002438
+/** 연 전월세전환율 — 한국은행 기준(기본 4.5%/년). env `JEONSE_CONVERSION_RATE_ANNUAL` 로 갱신. */
+const ANNUAL_CONVERSION_RATE =
+  Number(process.env.JEONSE_CONVERSION_RATE_ANNUAL) > 0
+    ? Number(process.env.JEONSE_CONVERSION_RATE_ANNUAL)
+    : 0.045;
+/** 매매가 → 전세 환산 전세가율(기본 65%). env `JEONSE_PRICE_RATIO` 로 갱신. */
+const JEONSE_PRICE_RATIO =
+  Number(process.env.JEONSE_PRICE_RATIO) > 0 ? Number(process.env.JEONSE_PRICE_RATIO) : 0.65;
+const MONTHLY_COST_RATE = (JEONSE_PRICE_RATIO * ANNUAL_CONVERSION_RATE) / 12; // 기본 ≈ 0.002438
 
 /**
  * 전세 보증금 → 월 환산율 (2026-05-30, 실거래 전월세 도입).
@@ -251,8 +264,10 @@ const MONTHLY_COST_RATE = 0.65 * 0.045 / 12; // ≈ 0.002438
  *
  *    전세 월환산   = depositManwon × JEONSE_TO_MONTHLY_RATE
  *    월세 월주거비 = monthlyManwon + depositManwon × JEONSE_TO_MONTHLY_RATE
+ *
+ *  ▷ KI-14: 연 전환율은 위 ANNUAL_CONVERSION_RATE(env 갱신 가능) 공유. 기본 4.5%/년.
  */
-export const JEONSE_TO_MONTHLY_RATE = 0.045 / 12; // ≈ 0.00375
+export const JEONSE_TO_MONTHLY_RATE = ANNUAL_CONVERSION_RATE / 12; // 기본 ≈ 0.00375
 
 /**
  * 사용자 소득 미입력 시 기본값 — 통계청 3분위 월평균 가처분소득 (2023).
@@ -341,7 +356,15 @@ export function scoreRegion(
       ? metrics.rentMonthlyCost
       : metrics.representativePrice * MONTHLY_COST_RATE;
   const rir = monthlyCost / Math.max(1, income);
-  const as_ = affordabilityScore(rir);
+  // KI-11(2026-06-04): 저표본 전월세 시세는 신뢰도 낮음 → affordability 에 완만한 신뢰 보정.
+  //  rent 기반(표본 존재)만 적용, sale-proxy(rentSampleCount=null)는 무보정. 표본 5~9건 → 0.94~1.0 선형,
+  //  ≥10 무보정. HAVING≥5 라 5 미만은 없음. 게이트가 아니라 점수 가중이라 동 자체를 제외하진 않음
+  //  (저표본 동을 살짝 뒤로 — '표본 N건·참고' amber 칩과 정합).
+  const sampleConf =
+    basis === 'rent' && metrics.rentSampleCount != null && metrics.rentSampleCount < 10
+      ? 0.94 + (Math.max(0, metrics.rentSampleCount - 5) / 5) * 0.06
+      : 1;
+  const as_ = Math.round(affordabilityScore(rir) * sampleConf);
   const ss = safetyScore(metrics.safetyBase);
   const ls = lifeScore(metrics.lifeScoreBase);
 

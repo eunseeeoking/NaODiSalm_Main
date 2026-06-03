@@ -36,11 +36,11 @@ export async function fetchComplexes(
       `/api/regions/${legalDongCode}/complexes`,
       { signal },
     );
-    if (Array.isArray(data) && data.length > 0) {
-      return { complexes: data, source: 'api' };
-    }
-    // 빈 배열 = 해당 행정동 단지 데이터 미적재 → mock 폴백
-    throw new Error('empty response');
+    if (!Array.isArray(data)) throw new Error('invalid shape');
+    // 빈 배열도 정상 응답 — APT 단지가 실제로 없는 동(상업·오피 밀집 등)은 가짜 mock 카드
+    // 대신 빈 상태로 표시. mock 폴백은 진짜 API 오류(네트워크/HTTP) 때만(아래 catch).
+    // (빈 배열을 mock 으로 메우면 종로구 관수동 같은 실 추천 동이 DEMO 로 오인됨.)
+    return { complexes: data, source: 'api' };
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
     const reason = describeError(err);

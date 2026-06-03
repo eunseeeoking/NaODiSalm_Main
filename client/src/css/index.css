@@ -232,6 +232,45 @@ input[type='range']::-moz-range-thumb {
   cursor: pointer;
 }
 
+/* ─── 전역 스크롤바 — 얇은 막대 + 상하/좌우 화살표 제거 (사이트 통일) ───
+ *  · 기본 브라우저 스크롤바(16px·화살표 버튼 有)가 일부 세로 스크롤 영역에서 디자인을 깨서 전역 통일.
+ *  · width/height 8px · 트랙 투명 · 썸 라운드 pill · 화살표 버튼 제거.
+ *  · 클래스 규칙(.scroll-x-slider=숨김, .scroll-x-thin=3px)은 specificity 가 더 높아 그대로 우선.
+ *  · 스타일만 지정 — 실제 스크롤바는 overflow 가 넘칠 때만 생성되므로 새 스크롤바가 강제로 생기지 않음.
+ * ─────────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;                      /* Firefox */
+  scrollbar-color: #D1D5DB transparent;       /* Firefox: thumb track */
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-button {                 /* 상하/좌우 화살표 버튼 제거 */
+  display: none;
+  width: 0;
+  height: 0;
+}
+*::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+html.dark * {
+  scrollbar-color: #3A3D47 transparent;
+}
+html.dark *::-webkit-scrollbar-thumb {
+  background: #3A3D47;
+}
+html.dark *::-webkit-scrollbar-thumb:hover {
+  background: #4B5563;
+}
+
 /* ─── 얇은 가로 스크롤바 (.scroll-x-thin) ───────────────────────
  *  · 화살표 버튼 완전 제거
  *  · 높이 3px — 기본 브라우저 스크롤바(16px)보다 훨씬 얇음
@@ -278,23 +317,6 @@ html.dark .scroll-x-thin::-webkit-scrollbar-thumb {
 
 html.dark .scroll-x-thin::-webkit-scrollbar-thumb:hover {
   background: #4B5563;
-}
-
-/* ─── 슬라이더형 가로 스크롤 (.scroll-x-slider) ─────────────────
-   스크롤바를 완전히 숨기고 useDragScroll 훅으로 마우스 드래그/휠 스크롤.
-   소득분위·인기직장·통근범례 등 좌우 칩셋에 사용. */
-.scroll-x-slider {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.scroll-x-slider::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
-}
-.scroll-x-slider.is-dragging {
-  cursor: grabbing;
-  user-select: none;
 }
 
 /* ─── 슬라이더형 가로 스크롤 (.scroll-x-slider) ──────────────────

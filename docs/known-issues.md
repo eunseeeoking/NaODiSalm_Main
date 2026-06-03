@@ -114,12 +114,22 @@
   **밀도** 기반 transitScore; 배차/막차 미상). `server/data/seoul-bus-stops.csv` 배치 후 `npm run seed:transit` → 서울 적재.
   ② 경기·인천은 기존 TAGO 라이브 유지(검증됨).
 
-### KI-7 · 통근시간 Haversine 폴백 🟡 (심각도: 중간)
-- **증상**: commute matrix 캐시가 없으면 직선거리 기반 추정(25km/h + 5분)으로 통근시간 산정 → 실제와 괴리.
-- **제안**: matrix 사전 적재 범위 확대 / 실시간 호출 백필.
-- **부분 개선(2026-06-03, Depth 3)**: `/api/commute/compare` 가 `complexId` 없이 **동 centroid 출발지(`oLat/oLng/legalDongCode`)**도
-  받도록 확장 → Depth 3 "동 상세 평가"에서 **비아파트·미지오코딩 단지 포함 전 매물종류**가 ODsay(대중교통)·카카오(자차) **실측** 통근 비교 표시.
-  (Depth 2 랭킹은 여전히 Haversine — 본 KI 본체는 잔존.)
+### KI-7 · 통근시간 — 표시값은 ODsay 실측, 랭킹만 캐시미스 시 Haversine 🟡 (심각도: 낮음)
+> ⚠️ **2026-06-04 정정**: 기존 "Depth 2 랭킹 전부 Haversine / ODsay 배제" 표현은 **과장**이었음. 실제 동작은 아래.
+- **표시값(사용자가 보는 값)**: 추천 직후 클라([MapPanel](../client/src/pages/Recommendation/components/MapPanel.tsx))가
+  top-8 에 `/api/commute/matrix`(ODsay) 호출 → `commuteOverrides` → 카드·지도 통근시간이 **ODsay 실측으로 교체**.
+  즉 **사용자가 보는 top-8 통근시간은 실측**(추정 표기 아님 — 추정 여부는 RegionCard 툴팁으로만 구분).
+- **랭킹/게이트**: `fetchRegionCandidates`([recommendationRepository.ts:916](../server/src/services/repositories/recommendationRepository.ts#L916))가
+  dong별로 `findCachedMatrix`(`t_commute_matrix`, 과거 ODsay 실측) **hit 이면 실측값**, **miss 면 `estimateTransitMinutesByKm`(Haversine)**.
+  → **캐시에 없는 cold 동만** Haversine.
+- **캐시 키/격자**: 3자리(≈110m) + 3×3 KNN 흡수 — **이미 적용 완료(2026-06-03)**. "격자 재배치 대기" 아님.
+- **남은 갭(좁음)**: cold 직장 첫 조회에서 *어떤 8곳이 뽑히는지*(선택)와 patience 게이트가 **캐시 미스 동에 한해** Haversine.
+  뽑힌 8곳의 표시값은 실측. 같은 직장 재조회 시 그 8곳은 캐시 hit → 랭킹도 실측.
+- **개선안(저ROI — 보류 결정 2026-06-04)**: §4 ODsay 거점 사전적재는 *선택 정확도* 개선이나, 인기직장×~537동 매트릭스
+  사전호출이 ODsay 쿼터를 크게 먹어(top-8-only 절감분 상쇄) 실익 작음. 오피·빌라 정밀 지오코딩이 시드 단계 불가인
+  **동 단위 추천 컨셉상 현 수준이 적정**으로 판단.
+- **Depth 3 실측(2026-06-03)**: `/api/commute/compare` 가 동 centroid 출발지(`oLat/oLng/legalDongCode`)도 받아
+  비아파트·미지오코딩 단지 포함 전 매물종류가 ODsay·카카오 **실측** 통근 비교 표시.
 
 ### KI-8 · 매매 대표값이 평균(AVG), median 아님 🟢 해결 (2026-05-31)
 - **증상**: 전월세는 동별 **중위값** 적용(P2)했으나 `representativePrice`(매매)는 여전히 AVG → 이상치 취약.
@@ -154,15 +164,23 @@
 - **✅ Phase 1 해결(2026-06-03)** — 공통 코어 "동 상세 평가":
   - 서버 `GET /api/regions/:code/detail?types=` 신규([regions.ts]) — 4축 분해(안전 crime/light/cctv·POI 8종·교통 품질) + 시세 median(매매/전세/월세·표본) + 단지수. 사용자 입력 무관 객관 데이터(직접 URL 진입 견고). 시세는 `fetchDongPriceStructure`(recommendationRepository)가 기존 median 규약(KI-8/10/16)을 단일 동으로 재사용.
   - 클라 `RegionDetailEvaluation` 패널 + `index.tsx` 분기: **APT 포함=단지 리스트·3년 전망 유지, 비아파트 전용=패널+정직 안내**. (역삼동 실DB 검증: 4축·시세·단지수 정상, SH-only sale=null, 서울 transit는 정적 적재 후 표시.)
-- **잔여(Phase 2+)**: 면적대별(소·중·대) median 분리(KI-16 후속) · 반전세 비율 라벨(KI-10 후속) · 빌라·오피 "건물 시세 카드"(설계 §6 보류) · 시세 분포 시각화.
+- **✅ Phase 2 (#1+#4) 면적대별 시세 분포 완료(2026-06-03)**: 소/중/대(전용 9~60·60~85·85~330㎡ 반개구간) median 분리.
+  서버 `fetchDongAreaTierPrices`([recommendationRepository.ts]) — `fetchRepresentativePrices`·`fetchRentCostByRegion`에
+  **면적 밴드 파라미터(기본=기존 9~330, 핫패스 무변경)**만 주입해 KI-8/10/16 규약 그대로 재사용(구간×거래유형 9쿼리, 단일 동·cutoff 캐시 공유).
+  `/detail` 응답에 `priceByTier` 추가. 클라 `AreaTierBars`(RegionDetailEvaluation) — 거래유형별 막대 시각화(매매/전세보증금/순수월세
+  median, 표본 칩, 값 없는 구간=표본 부족). 실DB 검증(대치동: 매매 소4.2/중36.5/대46억, 전세 7.2/8/15.5억·표본 216/985/576).
+- **✅ Phase 2 (#2) 반전세 비율 라벨 완료(2026-06-03)**: KI-10 은 반전세(준전세, `월세 < 보증금×RATE`)를 월세 통계에서
+  제외만 했는데, 그 **비율을 노출**(`fetchDongSemiJeonseRatio` → `/detail.semiJeonseRatio` → 클라 캡션). 분모=WOLSE 전체(area·cutoff
+  동일), 분자=반전세, 표본<5 null. 실DB(대치동): 월세 2,627건 중 반전세 1,062건 = **40%** 정상. "순수 월세 중위값은 반전세 제외 기준" 안내.
+- **잔여(Phase 2+)**: 빌라·오피 "건물 시세 카드"(설계 §6 보류·MVP 포함 미정, #3) — 시작 시 포함 여부 결정부터.
 - **✅ 매물 카드 스와이퍼·선택 보더 검증 완료(2026-06-03)**: 브라우저 실측(강남구 대치동, 실DB) — 좌우 드래그/휠 스와이프 정상, 선택 카드 보더 2px·미선택 1px·클릭 시 보더 이동 정상, 좌측 첫 카드 클립 없음. 그림자/ring/lift 제거하고 **보더만** 남기는 디자인으로 확정(사용자 요청). 선택 보더가 안 보이던 진짜 원인은 KI-24(`button{border:0}` 가 border-style:none 강제) → 함께 해소.
 
 ### KI-19 · 추천 서빙 universe 가 서울 한정 (수도권 데이터 적재됐으나 미서빙) 🟢 해결 (2026-06-XX)
 - **✅ 해결**: `fetchRegionAggregates` 기본 prefix 를 **수도권(11·28·41)** 로 확장 + 후보 매칭을 sigungu **이름** →
   **시군구 코드(5자리)+동명** 기반으로 교체(인천 중구↔서울 중구 등 **동명 시군구 충돌 차단**).
-  서빙 경로는 ODsay 라이브 호출 없음(findCachedMatrix=DB캐시, 미스는 Haversine) → **쿼터 안전**. 수도권 commute 는 §4 배치 전까지 Haversine 근사(KI-7).
+  서빙 경로는 ODsay 라이브 호출 없음(findCachedMatrix=DB캐시, 미스는 Haversine) → **쿼터 안전**. 수도권 cold 동 랭킹은 캐시 미스 시 Haversine 근사(KI-7).
   **검증**: 강남역 → totalCandidates 396→**537**(경기·인천 편입, top8은 통근상 서울). 판교 직장 → top8 전부 **경기 성남(분당41135·수정41131·중원41133)** 통근 9~23분.
-- **잔여(정확도, 미착수)**: 수도권 commute 가 Haversine 근사 → `수도권-mvp-plan` §4(ODsay 거점 사전적재 배치)로 정밀화. 서빙 자체는 이미 동작.
+- **잔여(정확도)**: 수도권 **cold 동의 랭킹 선택만** Haversine 근사(표시 top-8 은 ODsay 실측 — KI-7 정정 참조). §4 거점 사전적재는 저ROI라 **현 수준 적정으로 보류(2026-06-04)**. 서빙 자체는 이미 동작.
 - **증상(2026-06-01 발견)**: 수도권 실거래(APT/OFFI/VILLA 2년치) 적재 완료 후에도 추천이 **서울 동만** 반환.
   재현: 강남역·전세·예산 2.3억·인내심 75분·전체 → **0건**. (낮은 전세 예산이라 서울 동은 보증금 median 초과로
   전부 예산 게이트 제외되고, 2.3억 가능한 **수도권 외곽 동은 universe 에 아예 없음** → 빈 결과.)
@@ -271,10 +289,13 @@
 - **검증**: node 시뮬레이션 — 반전세/준전세 제외·경계값(환산=월세) 유지·완전월세(보증금0) 유지 확인, 제외 후 monthly median 왜곡 없이 상향.
 - **잔여**: 반전세 제외로 일부 동 표본이 HAVING<5 가 되면 매매가 합성 폴백(설계상 허용). 별도 '반전세 시세' 라벨 표출은 후속(선택).
 
-### KI-11 · 표본 임계(HAVING COUNT≥5)가 낮음 🟡 (심각도: 낮음)
+### KI-11 · 표본 임계(HAVING COUNT≥5)가 낮음 🟢 신뢰 보정 적용 (2026-06-04)
 - **증상**: 5~9건 표본 동의 시세 신뢰도가 낮음.
 - **현재 완화**: 카드에 `표본 N건` 칩(10건 미만 amber·"참고") 노출.
-- **제안**: 임계 상향 또는 표본수 기반 신뢰가중(저표본 동 랭킹 디스카운트).
+- **✅ 해결(2026-06-04)**: `scoreRegion`([scoring.ts])에 **저표본 신뢰 보정** — rent 기반(표본 존재)·표본 5~9건은
+  affordability 점수에 `0.94~1.0` 선형 가중(≥10·sale-proxy 무보정). **게이트가 아니라 점수 가중**이라 동을 제외하진
+  않고 살짝 뒤로(amber 칩과 정합). 실측(강남역·전세): 표본 7·11건 동이 top-8 잔존하되 affordability 소폭↓ 정상.
+- **잔여(선택)**: 임계 자체 상향은 표본 부족 동 결과 감소 trade-off라 보류.
 
 ### KI-12 · "N곳 숨김" 사유 미세분화 🟢 해결 (2026-06-03)
 - **증상**: `budgetFilteredCount` 가 보증금·월세·매매가 초과를 합산 → 어떤 한도로 숨겼는지 구분 안 됨(배너는 "예산"으로 일반화).
@@ -288,14 +309,17 @@
 
 ## D. 가정 / 환산율
 
-### KI-13 · 소득 미입력 시 3분위(403만) 가정 🟡 (심각도: 낮음)
+### KI-13 · 소득 미입력 시 3분위(403만) 가정 🟢 명시 (2026-06-04)
 - **증상**: 소득 미입력 시 서버 기본 3분위 → 사용자가 인지 못하면 affordability 왜곡.
-- **현재 완화**: 월 급여 직접입력 시 실제값 그대로 사용(2026-05-30 버그 수정). 미입력 시 기본 가정은 잔존.
-- **제안**: 미입력 상태를 카드/안내에 명시("3분위 기준 추정").
+- **현재 완화**: 월 급여 직접입력 시 실제값 그대로 사용(2026-05-30 버그 수정).
+- **✅ 해결(2026-06-04)**: 소득 미입력(`incomeQuintile===null`) 시 [WeightSliders] 에
+  **"소득 미입력 — 3분위(403만원) 기준으로 주거비 부담을 추정 중"** 안내 명시. (직접입력/분위칩 선택 시 자동 숨김.)
 
-### KI-14 · 고정 환산율 🔴 (심각도: 낮음)
+### KI-14 · 고정 환산율 🟡 env 갱신 가능화 (2026-06-04)
 - **증상**: 전세→월 환산 `JEONSE_TO_MONTHLY_RATE`(4.5%/12), 매매→전세 `MONTHLY_COST_RATE`(전세가율 65%×4.5%) 가 상수 → 금리·시장 변동 미반영.
-- **제안**: 한국은행 전월세전환율·지역별 전세가율 주기 갱신.
+- **✅ 개선(2026-06-04)**: [scoring.ts] 의 연 전환율·전세가율을 **env 로 주기 갱신 가능**하게 분리
+  (`JEONSE_CONVERSION_RATE_ANNUAL`·`JEONSE_PRICE_RATIO`, 미설정 시 기존 4.5%·65% = 점수 불변). 출처/갱신 주석 보강.
+- **잔여**: 실제 한국은행 최신값 반영(값 변경)은 전 동 RIR 에 영향 → 회귀 확인 동반해 별도 갱신. 지역별 전세가율 차등은 미적용.
 
 ---
 
@@ -319,6 +343,25 @@
   담당하므로 제거해도 무border 버튼은 그대로, **border 유틸 준 버튼만 정상 렌더**(순개선). **사이트 전역 변경**이라 다른 화면 회귀 1회 권장.
 - **잔여(정리 권장)**: index.css 의 나머지 수동 리셋이 preflight 와 **일부 중복**(무해하나 점진 정리 가능). 남은 `border-0` 워크어라운드도
   불필요해진 곳 전수 점검 시 제거 가능.
+
+### KI-25 · Depth 3 직접 진입/새로고침 견고성 + 빈 단지 동 DEMO 오인 🟡 새로고침·DEMO 해결·콜드진입 잔존 (2026-06-03)
+- **증상 A (DEMO 오인) 🟢 해결**: 추천 결과 클릭으로 들어간 실 동인데 Depth 3 가 **DEMO 페이지**로 표시(예: 강남역·인내심90·매매·직장인
+  가중치 → 추천된 **종로구 관수동**). 원인은 `fetchComplexes`([api/regionDetail.ts])가 **빈 배열(정상 응답)도 mock 폴백** →
+  APT 단지가 실제로 없는 동(상업·오피 밀집: 관수동·교남동 등)을 가짜 카드+DEMO 배지로 메움. `isDemoData = APT && source==='mock'`.
+  - **해결**: 빈 배열은 정상 응답으로 `source:'api'` 그대로 반환(단지 0건=정직한 빈 상태 "등록된 단지가 없습니다" + 동 상세 평가 실데이터).
+    mock 폴백은 **진짜 API 오류(네트워크/HTTP)** 때만. 검증(교남동, 실DB): DEMO 배지 소거·4축/시세 실데이터 정상.
+- **증상 B (새로고침) 🟢 해결**: Depth 3 에서 **새로고침/직접 URL 진입** 시 "존재하지 않는 지역". 원인은 `useRecommendationStore`(zustand)가
+  **비영속** → 새로고침 시 `recommendations`·`workplace` 소실 → `region = store ?? MOCK ?? null` 이 null(실 동은 MOCK 에 없음).
+  - **해결**: store 에 `persist`(sessionStorage, version 1, partialize=사용자입력+결과만) 적용. 동기 rehydrate(깜빡임 없음),
+    탭 닫으면 소멸(장기 스테일 방지). 검증: F5 후 점수·지도·통근 전체 복원.
+- **🔴 잔여(콜드 진입 갭 — 후속)**: persist 는 **같은 탭 새로고침**만 커버. [공유] 버튼 링크를 **다른 브라우저/새 탭에서 콜드 진입**하면
+  sessionStorage 가 비어 여전히 "존재하지 않는 지역"(실 동인데도). [공유] 기능이 있는 한 실사용 결함.
+  - **제안(설계 의도와 정합)**: 페이지가 `!region` 에 하드 실패하지 말고, 이미 있는 **서버 `/api/regions/:code/detail`**(객관 데이터:
+    dongName·4축·시세, 직접진입 견고 목적으로 설계됨) 응답으로 **최소 region 폴백 구성** → 동 상세 평가 렌더. 다만 ① detail 에 **dong centroid
+    lat/lng·시군구명 부재**(지도 센터·표시명) → detail 응답에 centroid 추가 필요(t_legal_dong.lat/lng 는 KI-20 후 미사용·불확실 → complex
+    UNION 평균 또는 컬럼 신뢰성 확인). ② **개인화 점수(통근·부담·종합)는 weights·workplace 의존 → 콜드진입 시 미상** → 헤더에서 해당 점수
+    "미상/—" 처리(객관 4축은 detail 에서). 공수 중간. **이번 세션 처리 여부 미정.**
+- **연관**: KI-18(Depth 3 동 상세 평가 — 직접진입 견고 설계) · KI-19(서빙 universe).
 
 ---
 

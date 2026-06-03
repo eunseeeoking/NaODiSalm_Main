@@ -204,6 +204,21 @@ export interface RegionPriceStructure {
   } | null;
 }
 
+/** 면적대별(소/중/대) 시세 분포 한 구간 (KI-18 P2 #1+#4) */
+export type AreaTier = '소형' | '중형' | '대형';
+export interface AreaTierPrice {
+  tier: AreaTier;
+  /** 전용면적 구간 라벨 (예: "60㎡ 미만") */
+  areaLabel: string;
+  sale: { medianManwon: number } | null;
+  jeonse: { depositMedianManwon: number; sampleCount: number } | null;
+  monthly: {
+    depositMedianManwon: number;
+    pureMonthlyMedianManwon: number;
+    sampleCount: number;
+  } | null;
+}
+
 export interface RegionDetail {
   legalDongCode: string;
   sigunguCode: string;
@@ -214,6 +229,17 @@ export interface RegionDetail {
   transit: AxisTransit | null;
   price: RegionPriceStructure;
   complexCount: number;
+  /** 면적대별(소/중/대) 시세 분포 (KI-18 P2 #1+#4). 빈 배열 = 미집계 */
+  priceByTier?: AreaTierPrice[];
+  /** 반전세 비율 (KI-18 P2 #2 · KI-10 후속). null = 표본 부족/미집계 */
+  semiJeonseRatio?: SemiJeonseRatio | null;
+}
+
+/** 반전세(준전세) 비율 — 월세 표본 중 보증금 큰 월세 비중 (KI-18 P2 #2) */
+export interface SemiJeonseRatio {
+  totalWolse: number;
+  semiJeonse: number;
+  ratioPct: number;
 }
 
 /** 통근 비교 — 대중교통 vs 자차 */

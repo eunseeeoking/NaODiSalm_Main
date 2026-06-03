@@ -284,8 +284,10 @@ export function RegionDetailPage() {
                 />
               )}
 
+              {/* 통근 비교는 단지 좌표가 있을 때만 노출 — 없으면 블록 자체를 생략(동 단위 비교는 위 평가 패널).
+                  좌표 없을 때 빈 안내를 띄우던 것 제거, 분석 카드가 가로 전체 차지. */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="col-span-1 md:col-span-2">
+                <div className={commute ? 'col-span-1 md:col-span-2' : 'col-span-1 md:col-span-3'}>
                   {(arimaLoading || lstmLoading) ? (
                     <LoadingBar label="가격 안정성 분석 중…" />
                   ) : selectedComplex && (arima ?? lstm) ? (
@@ -298,13 +300,11 @@ export function RegionDetailPage() {
                     <EmptyAnalysis />
                   )}
                 </div>
-                <div className="col-span-1">
-                  {commute ? (
+                {commute && (
+                  <div className="col-span-1">
                     <CommuteCompare data={commute} />
-                  ) : (
-                    <EmptyCommute hasWorkplace={!!workplace} />
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -340,24 +340,3 @@ function EmptyAnalysis() {
   );
 }
 
-function EmptyCommute({ hasWorkplace }: { hasWorkplace: boolean }) {
-  return (
-    <div className="min-h-[80px] md:h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card flex items-center justify-center text-xs text-ink-tertiary dark:text-ink-tertiary-dark text-center px-3">
-      {hasWorkplace ? (
-        <>
-          이 단지는 좌표 정보가 없어
-          <br />
-          단지별 통근 비교를 못 했어요.
-          <br />
-          (동 단위 비교는 위 평가 참고)
-        </>
-      ) : (
-        <>
-          직장이 설정되어야
-          <br />
-          통근 비교가 표시됩니다.
-        </>
-      )}
-    </div>
-  );
-}

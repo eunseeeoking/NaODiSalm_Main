@@ -20,7 +20,13 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../services/db';
-import { fetchDongPriceStructure } from '../../services/repositories/recommendationRepository';
+import {
+  fetchDongPriceStructure,
+  fetchDongAreaTierPrices,
+  fetchDongSemiJeonseRatio,
+  type AreaTierPriceRow,
+  type SemiJeonseRatio,
+} from '../../services/repositories/recommendationRepository';
 import { ALL_PROPERTY_TYPES, type PropertyType } from '../../services/recommendation/scoring';
 
 export const regionsRouter = Router();
@@ -334,6 +340,10 @@ interface RegionDetailDto {
   };
   /** 동 내 선택 종류 단지 수 (부가 정보) */
   complexCount: number;
+  /** 면적대별(소/중/대) 시세 분포 (KI-18 P2 #1+#4) */
+  priceByTier: AreaTierPriceRow[];
+  /** 반전세 비율 (KI-18 P2 #2 · KI-10 후속). 표본<5 → null */
+  semiJeonseRatio: SemiJeonseRatio | null;
 }
 
 /** 매물종류 → complex 테이블명 (고정 화이트리스트 — Prisma.raw 안전) */
@@ -376,7 +386,7 @@ regionsRouter.get(
 
     // 2) 4축 분해 — 단일 동이라 findUnique. 테이블 미생성/미적재 시 graceful null.
     const safe = <T>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
-    const [safetyRow, poiRow, transitRow, priceStructure, complexCount] = await Promise.all([
+    const [safetyRow, poiRow, transitRow, priceStructure, complexCount, priceByTier, semiJeonseRatio] = await Promise.all([
       safe(prisma.safetyIndex.findUnique({ where: { legalDongCode } })),
       safe(prisma.poiSummary.findUnique({ where: { legalDongCode } })),
       safe(prisma.transitRouteSummary.findUnique({ where: { legalDongCode } })),
@@ -386,6 +396,8 @@ regionsRouter.get(
         monthly: null,
       })),
       fetchDongComplexCount(sigunguCode, dongName, propertyTypes),
+      fetchDongAreaTierPrices(sigunguCode, dongName, propertyTypes).catch(() => [] as AreaTierPriceRow[]),
+      fetchDongSemiJeonseRatio(sigunguCode, dongName, propertyTypes).catch(() => null),
     ]);
 
     const dto: RegionDetailDto = {
@@ -425,6 +437,8 @@ regionsRouter.get(
         : null,
       price: priceStructure,
       complexCount,
+      priceByTier,
+      semiJeonseRatio,
     };
     return res.json(dto);
   },

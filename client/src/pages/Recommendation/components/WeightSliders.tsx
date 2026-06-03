@@ -322,7 +322,7 @@ export function WeightSliders({ bare = false }: { bare?: boolean } = {}) {
         </div>
         {incomeQuintile === null && (
           <p className="mt-1.5 text-xs text-ink-tertiary dark:text-ink-tertiary-dark">
-            3분위(403만원) 기본값 적용 중
+            소득 미입력 — <b className="font-semibold text-ink-secondary dark:text-ink-secondary-dark">3분위(403만원)</b> 기준으로 주거비 부담을 추정 중
           </p>
         )}
 

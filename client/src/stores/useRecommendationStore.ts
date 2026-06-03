@@ -5,6 +5,7 @@
  *  - 인터랙션 (hoveredRegion — 카드↔지도 양방향 호버용)
  */
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { BudgetFilteredBreakdown } from '../api/recommendations';
 import {
   WEIGHT_PRESETS,
@@ -134,7 +135,9 @@ interface RecommendationState {
   ) => void;
 }
 
-export const useRecommendationStore = create<RecommendationState>((set) => ({
+export const useRecommendationStore = create<RecommendationState>()(
+  persist(
+    (set) => ({
   workplace: null,
   // 사회초년생 기본값 — 1.5억 (거래유형별 슬라이더 범위는 BUDGET_SLIDER 참조, 최대=무제한)
   budget: 15000,
@@ -209,4 +212,31 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
       // 결과가 들어오면 로딩 종료 (성공 경로)
       isLoading: false,
     }),
-}));
+    }),
+    {
+      // 새로고침 시 Depth 3 가 store 추천을 잃어 "존재하지 않는 지역" 되던 문제 해소(직접 진입·새로고침 견고).
+      // sessionStorage: 탭 단위·탭 닫으면 소멸(장기 스테일 방지, "새로고침" 의미에 정합).
+      name: 'naodisalm-recommendation',
+      version: 1,
+      storage: createJSONStorage(() => sessionStorage),
+      // 사용자 입력 + 결과만 영속. 순수 UI 상태(hover/focus/loading)는 제외.
+      partialize: (s) => ({
+        workplace: s.workplace,
+        budget: s.budget,
+        monthlyRentCap: s.monthlyRentCap,
+        weights: s.weights,
+        patience: s.patience,
+        dealType: s.dealType,
+        propertyTypes: s.propertyTypes,
+        _rentPropertyTypes: s._rentPropertyTypes,
+        incomeQuintile: s.incomeQuintile,
+        incomeManwon: s.incomeManwon,
+        recommendations: s.recommendations,
+        commuteOverrides: s.commuteOverrides,
+        dataSource: s.dataSource,
+        budgetFilteredCount: s.budgetFilteredCount,
+        budgetFilteredBreakdown: s.budgetFilteredBreakdown,
+      }),
+    },
+  ),
+);

@@ -17,7 +17,7 @@ import type {
   RecPropertyType,
 } from '../../../types/recommendation';
 import { PROPERTY_TYPE_LABELS } from '../../../types/recommendation';
-import type { RegionDetail, AxisLife, CommuteCompareData } from '../../../types/region-detail';
+import type { RegionDetail, AxisLife, CommuteCompareData, AreaTierPrice } from '../../../types/region-detail';
 
 interface Props {
   region: RegionRecommendation;
@@ -192,6 +192,21 @@ export function RegionDetailEvaluation({ region, detail, dealType, propertyTypes
             선택 매물종류({typeLabels}) 실거래 표본이 부족해 시세를 집계하지 못했어요.
           </p>
         )}
+
+        {/* 반전세 비율 — KI-18 P2 #2 (KI-10 후속). 순수 월세 median 이 반전세를 제외함을 안내 */}
+        {detail?.semiJeonseRatio && (
+          <p className="mt-1.5 text-2xs leading-relaxed text-ink-tertiary dark:text-ink-tertiary-dark">
+            월세 표본 중 <b className="font-semibold text-ink-secondary dark:text-ink-secondary-dark">반전세</b>(보증금 큰 월세){' '}
+            <span className="tabular-nums font-semibold text-ink-secondary dark:text-ink-secondary-dark">{detail.semiJeonseRatio.ratioPct}%</span>
+            <span className="tabular-nums"> ({detail.semiJeonseRatio.semiJeonse.toLocaleString()}/{detail.semiJeonseRatio.totalWolse.toLocaleString()}건)</span>
+            {' '}— 위 순수 월세 중위값은 반전세 제외 기준이에요.
+          </p>
+        )}
+
+        {/* 면적대별(소/중/대) 분포 — KI-18 P2 #1+#4. dealType 값 없으면 자체 숨김 */}
+        {detail?.priceByTier && detail.priceByTier.length > 0 && (
+          <AreaTierBars tiers={detail.priceByTier} dealType={dealType} />
+        )}
       </div>
 
       {/* (A) 4축 분해 */}
@@ -300,6 +315,60 @@ function PriceRow({
       <span className="text-2xs font-semibold w-8 shrink-0 text-ink-secondary dark:text-ink-secondary-dark">{label}</span>
       <div className="flex-1 flex items-baseline text-sm text-ink-primary dark:text-ink-primary-dark">{children}</div>
       {chip}
+    </div>
+  );
+}
+
+// ─── 면적대별(소/중/대) 시세 분포 막대 (KI-18 P2 #1+#4) ──────────
+//  거래유형별로 해당 값(매매가/전세보증금/순수월세)을 구간별 median 으로 보여줌.
+//  값이 없는 구간(표본<5 또는 거래 없음)은 "표본 부족". 전 구간 값 없으면 컴포넌트 자체 숨김.
+function AreaTierBars({ tiers, dealType }: { tiers: AreaTierPrice[]; dealType: RecDealType }) {
+  const pick = (t: AreaTierPrice): { value: number | null; sample: number | null } => {
+    if (dealType === 'SALE') return { value: t.sale?.medianManwon ?? null, sample: null };
+    if (dealType === 'JEONSE')
+      return { value: t.jeonse?.depositMedianManwon ?? null, sample: t.jeonse?.sampleCount ?? null };
+    return { value: t.monthly?.pureMonthlyMedianManwon ?? null, sample: t.monthly?.sampleCount ?? null };
+  };
+  const rows = tiers.map((t) => ({ tier: t.tier, areaLabel: t.areaLabel, ...pick(t) }));
+  const max = Math.max(0, ...rows.map((r) => r.value ?? 0));
+  if (max <= 0) return null; // 이 거래유형에 표시할 값이 한 구간도 없음
+
+  const heading =
+    dealType === 'SALE' ? '면적대별 매매 (중위)' : dealType === 'JEONSE' ? '면적대별 전세 보증금 (중위)' : '면적대별 월세 (중위)';
+  const fmtVal = (v: number) => (dealType === 'MONTHLY' ? `월 ${v.toLocaleString()}만` : fmtEok(v));
+
+  return (
+    <div className="mt-2.5">
+      <h4 className="text-2xs font-semibold text-ink-tertiary dark:text-ink-tertiary-dark mb-1.5">{heading}</h4>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((r) => (
+          <div key={r.tier} className="flex items-center gap-2">
+            <span className="w-[4.5rem] shrink-0 text-2xs text-ink-secondary dark:text-ink-secondary-dark">
+              <span className="font-semibold">{r.tier}</span>
+              <span className="ml-1 text-ink-tertiary dark:text-ink-tertiary-dark">{r.areaLabel}</span>
+            </span>
+            <div className="flex-1 h-2 rounded-full bg-line-light dark:bg-line-dark overflow-hidden">
+              {r.value != null && (
+                <div className="h-full rounded-full bg-brand/70" style={{ width: `${(r.value / max) * 100}%` }} />
+              )}
+            </div>
+            <span className="w-[5.5rem] shrink-0 text-right text-2xs tabular-nums">
+              {r.value != null ? (
+                <>
+                  <span className="font-semibold text-ink-primary dark:text-ink-primary-dark">{fmtVal(r.value)}</span>
+                  {r.sample != null && (
+                    <span className={r.sample < 10 ? 'ml-1 text-amber-600 dark:text-amber-400' : 'ml-1 text-ink-tertiary dark:text-ink-tertiary-dark'}>
+                      {r.sample}건
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-ink-tertiary dark:text-ink-tertiary-dark">표본 부족</span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
