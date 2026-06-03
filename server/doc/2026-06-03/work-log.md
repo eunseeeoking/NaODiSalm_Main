@@ -142,3 +142,69 @@ d9a2ba0 feat: 수도권(서울·인천·경기) MVP 확장
 2. 클라 §8 작업 `npm run dev` 시각 검증 → 커밋(또는 추천 폴리곤 가시성 튜닝).
 3. KI-18 Depth 3 동 상세 + Depth3 ODsay(demand-driven 나머지).
 4. (선택) median 사전집계로 서브초 / 서울 transit TOPIS 승인 후 재시드.
+
+---
+
+# ───────────── 후속 세션 추가분 (2026-06-03 오후) ─────────────
+
+## 12. KI-22 — 통근 게이트 강화 (완료·커밋)
+- `recommendationRepository.ts`에 `PATIENCE_GATE_MULT = 1.2` 도입 →
+  ① 시간 게이트 `commuteMinutes > safePatience * 2` → **`* 1.2`** (인내심 45분에 60~89분
+  경기·인천이 affordability/life로 top8 진입하던 KI-19 부작용 차단).
+  ② 보조 거리필터 `maxKm`도 게이트 배율에 종속화(정밀 제외는 시간 게이트, maxKm은 coarse 사전필터).
+- known-issues KI-22 🟢. 커밋 `38dac62`.
+
+## 13. 추천 지도 폴리곤 재설계 + Depth2 top-8 ODsay 실측 (완료·커밋)
+> §8(이전 세션) 통근 히트맵을 사용자 사전 요청 설계대로 재구성.
+- **배경 전체 폴리곤 제거 → 추천 top-8 지역구 폴리곤만 강조**: `useChoroplethLayer`에
+  `includeCodes` 화이트리스트 추가. 추천(법정동)→최근접 행정동 폴리곤 매핑.
+- **신호등 tier 색**: 파랑 램프(`pickHeatmapColor`) → `pickCommuteTierColor`(초록→노랑→빨강).
+  범례도 동일 갱신.
+- **Depth2 추천 8곳만 ODsay 호출**(요청당 ≤8콜) → store `commuteOverrides` → 지도 폴리곤 색 +
+  카드 통근분 공유(미스 시 서버 Haversine 폴백, 카드 `~` 표시). `includeCodes`(추천 의존)와
+  `colorByCode`(통근값 의존) 분리로 ODsay 도착 시 폴리곤 깜빡임 방지.
+- **매물 단위 ODsay = 폐기**(수십만건 불가). Depth 3는 동의 top-8 캐시 재사용(추가 호출 0).
+- 커밋 `f86cf85`.
+
+## 14. ODsay 캐시 격자 4→3자리 + KI-23 캐시 포이즌 방지 (완료·커밋)
+- **격자 확대**: `makeCacheKey`/`Candidates` `toFixed(4)`→`toFixed(3)` (~11m→~110m 버킷,
+  3×3 KNN ~330m 흡수). 인접 직장 캐시 재사용 ~100배↑. top-8 캡과 함께 ODsay 호출량 절감.
+  (행정동 단위 표시엔 ≤150m 원점 스냅 오차 무의미. 기존 4자리 캐시는 재축적.)
+- **800 쿼터 가드 확인**: `fetchOdsayRoute`가 호출 직전 `checkAndConsumeOdsayQuota()` →
+  ≥800이면 `null`(Haversine 폴백). top-8 경로도 동일 게이트 통과, 요청당 ≤8콜.
+- **KI-23(신규·해결)**: 쿼터 차단 중 Haversine 폴백값이 `t_commute_matrix`에 저장돼 리셋 후에도
+  고착되던 잠복 버그 → 저장 직전 `getOdsayUsageToday().blocked` 확인, 차단 중엔 추정 폴백
+  (`transitTransfers===null`) 미저장(다음 가용 시 재조회). known-issues KI-23 🟢. 커밋 `2e2b656`.
+
+## 15. KI-9 / KI-12 카드 UX 보강 (완료·미커밋 → 본 세션 말미 커밋 예정, 시각검증 권장)
+- **KI-9(🟢)** 월세 표시 ↔ 필터 기준 일치: 서버가 `rentDepositManwon`·`rentPureMonthlyManwon`을
+  후보→응답까지 노출. 카드 대표가 거래유형별 분리 —
+  · MONTHLY → "월세 X만"(=순수 월세, **월세 한도 필터와 동일**) + 보조 "보증금 Y"
+  · JEONSE → "보증금 X억"(=전세금, **보증금 한도와 동일**) · SALE/sale-proxy → "가격 X억" 유지.
+  RIR·주거비%는 합산 월주거비(`monthlyHousingCost`) 그대로(별개 개념).
+- **KI-12(🟢)** 숨김 사유 분리: 게이트가 `budgetFilteredBreakdown{deposit,monthlyRent,salePrice}`
+  집계(상호배타) → meta 전달 → 배너 "보증금 초과 N · 월세 초과 M 숨김". 월세만 초과 시
+  "월세 한도 늘리기" 버튼이 `monthlyRentCap` 상향(기존엔 항상 예산만).
+- typecheck OK(client·server). **시각 검증은 다음 세션에서**(카카오맵/브라우저 필요).
+
+## 16. 커밋 로그 (이번 세션 추가, feat/capital-mvp)
+```
+38dac62 fix(KI-22): 통근 게이트 인내심 *2 → *1.2 강화
+f86cf85 feat: 추천 지역 폴리곤 재설계 + Depth2 top-8 ODsay 실측 통근
+2e2b656 perf+fix: ODsay 캐시 격자 4→3자리 확대 + 쿼터 차단 폴백 캐시 포이즌 방지(KI-23)
+f338857 docs: KI-22/23 해결 기록 + 2026-06-03 인계 work-log
+(+ KI-9/12 feat 커밋 — 본 섹션 직후)
+```
+- ⚠️ main 미머지·미push(로컬만). push는 미요청.
+- ⚠️ 기존 4자리 ODsay 캐시 보존 원하면 1회 마이그레이션:
+  `UPDATE t_commute_matrix SET cache_key=CONCAT(FORMAT(work_lat,3),'_',FORMAT(work_lng,3))` (선택).
+
+## 17. 다음 세션 (사용자가 별도 진행)
+- **KI-18 Depth 3 "동 상세 평가"** — `docs/depth3-design.md` 기반. 큰 제품 작업.
+  - 코어 데이터 이미 확보 확인: `SafetyIndex`에 crime/light/cctv 3종, `PoiSummary`에 8개 카테고리
+    카운트, `TransitRouteSummary`에 정류장수/배차/막차 → **4축 분해는 기존 컬럼 노출로 가능**(신규 집계 불필요).
+  - 신규 필요: 면적대별(소·중·대) median 집계(KI-16 후속), 반전세 비율(KI-10 후속).
+  - 현재 Depth3(`/api/regions/:code/complexes` + `ComplexCardList`/`LstmFullAnalysis`)는 APT 단지 전망
+    중심 → 종류별 분기(APT=단지전망 유지, VILLA/OFFI/SH=동 상세평가만 + 정직 안내) 필요.
+  - 결정 보류(설계 §6): 빌라/오피 "건물 시세 카드" MVP 포함 여부, 시세 분포 시각화 형태.
+- (선택) KI-21 median 사전집계로 추천 서브초화.
