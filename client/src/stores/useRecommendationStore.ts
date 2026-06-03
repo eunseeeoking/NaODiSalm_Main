@@ -5,6 +5,7 @@
  *  - 인터랙션 (hoveredRegion — 카드↔지도 양방향 호버용)
  */
 import { create } from 'zustand';
+import type { BudgetFilteredBreakdown } from '../api/recommendations';
 import {
   WEIGHT_PRESETS,
   DEFAULT_PROPERTY_TYPES,
@@ -78,6 +79,8 @@ interface RecommendationState {
   dataSource: RecommendationSource | null;
   /** 예산 상한으로 제외된(숨겨진) 후보 수 — CardPanel "N개 숨김" 안내용 (2026-05-30 P3 후속) */
   budgetFilteredCount: number;
+  /** 숨김 사유별 분리 (KI-12) — 보증금/월세/매매가 초과. mock/레거시면 null. */
+  budgetFilteredBreakdown: BudgetFilteredBreakdown | null;
   /**
    * 추천 조회 진행 중 여부 (2026-05-30 P3 후속).
    *  - true: API 응답 대기 중 → 지도 핀 제거 + 카드 스켈레톤 + 지도 로딩 표시.
@@ -117,7 +120,10 @@ interface RecommendationState {
   setRecommendations: (
     recs: RegionRecommendation[],
     source?: RecommendationSource | null,
-    meta?: { budgetFilteredCount: number } | null,
+    meta?: {
+      budgetFilteredCount: number;
+      budgetFilteredBreakdown?: BudgetFilteredBreakdown;
+    } | null,
   ) => void;
 }
 
@@ -140,6 +146,7 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
   commuteOverrides: {},
   dataSource: null,
   budgetFilteredCount: 0,
+  budgetFilteredBreakdown: null,
   isLoading: false,
 
   setWorkplace: (w) => set({ workplace: w }),
@@ -174,6 +181,7 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
       recommendations: recs,
       dataSource: source,
       budgetFilteredCount: meta?.budgetFilteredCount ?? 0,
+      budgetFilteredBreakdown: meta?.budgetFilteredBreakdown ?? null,
       // 새 추천 → 이전 ODsay 통근 오버라이드 폐기(스테일 방지). MapPanel 이 top-8 재조회.
       commuteOverrides: {},
       // 결과가 들어오면 로딩 종료 (성공 경로)

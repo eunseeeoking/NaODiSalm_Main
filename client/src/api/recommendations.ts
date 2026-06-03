@@ -51,10 +51,22 @@ export interface RecommendationRequest {
 
 export type RecommendationSource = 'api' | 'mock';
 
+/** 숨김 사유별 분리 카운트 (KI-12). 합 = budgetFilteredCount. */
+export interface BudgetFilteredBreakdown {
+  /** 보증금(전월세) > 예산 으로 제외 */
+  deposit: number;
+  /** 순수 월세 > 월세 한도 로 제외 (MONTHLY) */
+  monthlyRent: number;
+  /** 매매 대표가 > 예산 으로 제외 (SALE) */
+  salePrice: number;
+}
+
 /** 응답 메타 (2026-05-30 P3 후속) */
 export interface RecommendationMeta {
   /** 예산 상한으로 제외된(숨겨진) 후보 수 — "N개 숨김" 안내용 */
   budgetFilteredCount: number;
+  /** 숨김 사유별 분리 (KI-12) — 레거시/mock 응답이면 undefined */
+  budgetFilteredBreakdown?: BudgetFilteredBreakdown;
   /** 예산 필터 전 후보 수 */
   totalCandidates: number;
 }

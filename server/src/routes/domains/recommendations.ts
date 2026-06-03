@@ -10,7 +10,7 @@
  *        patience:       number,   // 편도 분
  *        incomeMonthly?: number    // 월 소득 (만원, 선택). 미입력 시 통계청 3분위 403만원.
  *      }
- *    Response: { regions: RegionRecommendation[], meta: { budgetFilteredCount, totalCandidates } }
+ *    Response: { regions: RegionRecommendation[], meta: { budgetFilteredCount, budgetFilteredBreakdown, totalCandidates } }
  *              (regions 는 클라이언트 타입과 1:1. 클라이언트는 레거시 배열 응답도 수용)
  *
  *  동작:
@@ -138,15 +138,20 @@ recommendationsRouter.post('/', async (req: Request, res: Response) => {
       : undefined; // scoring.ts DEFAULT_MONTHLY_INCOME_MANWON(403) 사용
 
   try {
-    const { candidates, budgetFilteredCount } = await fetchRegionCandidates(
-      workplace,
-      patience,
-      { dealType, budget, monthlyBudget, propertyTypes },
-    );
+    const { candidates, budgetFilteredCount, budgetFilteredBreakdown } =
+      await fetchRegionCandidates(workplace, patience, {
+        dealType,
+        budget,
+        monthlyBudget,
+        propertyTypes,
+      });
 
     // 후보 자체가 0건 — 데이터 부족, 직장 위치가 서울 밖, 또는 예산으로 전부 제외
     if (candidates.length === 0) {
-      return res.json({ regions: [], meta: { budgetFilteredCount, totalCandidates: 0 } });
+      return res.json({
+        regions: [],
+        meta: { budgetFilteredCount, budgetFilteredBreakdown, totalCandidates: 0 },
+      });
     }
 
     const top = pickTopRegions(candidates, weights, patience, 8, income);
@@ -182,6 +187,9 @@ recommendationsRouter.post('/', async (req: Request, res: Response) => {
       rentMonthlyCost: r.rentMonthlyCost,
       // P3 #6: 전월세 집계 표본수 (신뢰 칩용)
       rentSampleCount: r.rentSampleCount,
+      // KI-9: 카드 분리 표기용 — 보증금 / 순수 월세 중위값
+      rentDepositManwon: r.rentDepositManwon,
+      rentPureMonthlyManwon: r.rentPureMonthlyManwon,
       // P3 #5: 총점 분모에서 제외된 추정 축 (점수 변별력 + 투명성)
       estimatedAxes: r.estimatedAxes,
     }));

@@ -97,6 +97,18 @@ export interface RegionRecommendation {
    */
   rentSampleCount?: number | null;
   /**
+   * 보증금 중위값 (만원, KI-9) — 카드 분리 표기용.
+   *  - JEONSE: 전세금(=보증금)을 카드 대표값으로 표시. MONTHLY: "보증금 Y" 보조.
+   *  - null = SALE/sale-proxy(표본 부족) → representativePrice 로 폴백.
+   */
+  rentDepositManwon?: number | null;
+  /**
+   * 순수 월세 중위값 (만원, KI-9) — MONTHLY 카드 "월세 X만"(월세 한도 필터와 동일 기준).
+   *  - monthlyHousingCost(합산 월주거비, RIR 분자)와 다른 값 — 표시·필터 일치로 혼동 해소.
+   *  - null = SALE/JEONSE/표본 부족.
+   */
+  rentPureMonthlyManwon?: number | null;
+  /**
    * 총점 분모에서 제외된 추정 축 (2026-05-30 P3 #5).
    *  - 안전·생활이 더미(50)면 총점에 반영 안 함 → 카드에 "추정 · 점수 미반영" 표시.
    *  - [] 또는 미정의 = 모든 축 반영.

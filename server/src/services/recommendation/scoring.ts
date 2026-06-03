@@ -77,6 +77,18 @@ export interface RegionMetrics {
    */
   rentSampleCount: number | null;
   /**
+   * 보증금 중위값 (만원) — 카드 분리 표기용 (KI-9). null = SALE/표본 부족.
+   *  - JEONSE: 전세금(=보증금) 그대로 카드 대표값으로 표시.
+   *  - MONTHLY: "보증금 Y" 보조 표기.
+   */
+  rentDepositManwon: number | null;
+  /**
+   * 순수 월세 중위값 (만원) — 카드 분리 표기용 (KI-9). null = SALE/JEONSE/표본 부족.
+   *  - 월세 한도 필터(monthlyBudget)와 동일 기준 → 카드 "월세 X만"이 필터와 일치(혼동 해소).
+   *  - 합산 월주거비(monthlyHousingCost = 월세 + 보증금×환산, RIR 분자)와는 다른 값.
+   */
+  rentPureMonthlyManwon: number | null;
+  /**
    * 안전 점수가 추정(더미 50)인지 (2026-05-30 P3 #5).
    *  - t_safety_index 미적재로 50 fallback 이면 true.
    *  - true 인 축은 scoreRegion 의 총점 분모에서 제외 → 점수 변별력 회복.

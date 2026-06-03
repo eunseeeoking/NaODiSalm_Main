@@ -528,6 +528,18 @@ async function fetchExpectedReturns(
 }
 
 /**
+ * 예산 상한으로 숨겨진 후보 수 — 사유별 분리 (KI-12).
+ *  - deposit:    보증금(전월세) > 예산 으로 제외
+ *  - monthlyRent: 순수 월세 > 월세 한도 로 제외 (MONTHLY 전용)
+ *  - salePrice:  매매 대표가 > 예산 으로 제외 (SALE 전용)
+ */
+export interface BudgetFilteredBreakdown {
+  deposit: number;
+  monthlyRent: number;
+  salePrice: number;
+}
+
+/**
  * 진입점 — 추천용 후보 행정동 산출.
  *
  *  @param workplace  직장 좌표 (lat/lng)
@@ -538,7 +550,8 @@ async function fetchExpectedReturns(
  *  @param options.propertyTypes 전월세 집계에 쓸 매물종류 (생략 시 전체 4종 — 하위호환).
  *  @param maxKm      직선 거리 상한 (기본: patience × 0.5 km, 안전 패딩 1.5×)
  *
- *  @returns candidates + budgetFilteredCount(예산 상한으로 제외된 후보 수 — "N개 숨김" 안내용).
+ *  @returns candidates + budgetFilteredCount(예산 상한으로 제외된 후보 수 — "N개 숨김" 안내용)
+ *           + budgetFilteredBreakdown(사유별 분리: 보증금/월세/매매가 초과 — KI-12).
  */
 export async function fetchRegionCandidates(
   workplace: { lat: number; lng: number },
@@ -553,7 +566,11 @@ export async function fetchRegionCandidates(
     monthlyBudget?: number;
     propertyTypes?: readonly PropertyType[];
   } = {},
-): Promise<{ candidates: RegionCandidate[]; budgetFilteredCount: number }> {
+): Promise<{
+  candidates: RegionCandidate[];
+  budgetFilteredCount: number;
+  budgetFilteredBreakdown: BudgetFilteredBreakdown;
+}> {
   const dealType: DealType = options.dealType ?? 'SALE';
   // 예산(자본) 상한 — 미지정 시 Infinity (필터 비활성, 하위호환)
   const budget = typeof options.budget === 'number' && options.budget > 0
@@ -575,8 +592,13 @@ export async function fetchRegionCandidates(
   const priceTypes = (dealType === 'SALE' ? SALE_TRADE_TYPES : propertyTypes).filter((t) =>
     SALE_TRADE_TYPES.includes(t),
   );
-  // 예산 상한으로 제외된 후보 수 (거리·통근 통과했으나 예산 초과)
-  let budgetFilteredCount = 0;
+  // 예산 상한으로 제외된 후보 수 — 사유별 분리 (KI-12). deposit/monthlyRent/salePrice 는
+  //  게이트상 상호배타(첫 실패 사유에서 continue) → 중복 집계 없음. count=세 값의 합.
+  const budgetFilteredBreakdown: BudgetFilteredBreakdown = {
+    deposit: 0,
+    monthlyRent: 0,
+    salePrice: 0,
+  };
   // 진단: REC_DEBUG=1 일 때 단계별 소요시간 출력 (성능 병목 추적, KI-21 후속)
   const REC_DEBUG = process.env.REC_DEBUG === '1';
   const timed = async <T>(label: string, p: Promise<T>): Promise<T> => {
@@ -587,7 +609,8 @@ export async function fetchRegionCandidates(
   };
   // 1) 기본 메타 — 선택 매물종류 단지 universe
   const aggregates = await timed('aggregates', fetchRegionAggregates(effectiveUniverse, options.sigunguCodePrefixes));
-  if (aggregates.length === 0) return { candidates: [], budgetFilteredCount };
+  if (aggregates.length === 0)
+    return { candidates: [], budgetFilteredCount: 0, budgetFilteredBreakdown };
 
   // 2) workplace 와 거리 계산 → 1차 필터 (직선 거리 상한)
   const safePatience = Math.max(15, patience);
@@ -607,7 +630,8 @@ export async function fetchRegionCandidates(
       distanceKm: haversineKm(workplace, { lat: a.centroidLat, lng: a.centroidLng }),
     }))
     .filter((x) => x.distanceKm <= maxKm);
-  if (withDistance.length === 0) return { candidates: [], budgetFilteredCount };
+  if (withDistance.length === 0)
+    return { candidates: [], budgetFilteredCount: 0, budgetFilteredBreakdown };
 
   // 3) 가격 + 수익률 + (전월세 시) 실거래 월주거비 일괄 조회
   const targetAggs = withDistance.map((x) => x.agg);
@@ -648,12 +672,12 @@ export async function fetchRegionCandidates(
     //      (전월세 표본 없는 동은 유효 후보 아님 — 매매가 폴백 표시 방지.)
     if (dealType === 'SALE') {
       if (price == null) continue; // 매매 거래 데이터 없는 동 제외
-      if (price > budget) { budgetFilteredCount++; continue; }
+      if (price > budget) { budgetFilteredBreakdown.salePrice++; continue; }
     } else {
       if (!rentStat) continue; // 전월세 표본 없는 동 제외 (budgetFilteredCount 비집계)
-      if (rentStat.depositManwon > budget) { budgetFilteredCount++; continue; }
+      if (rentStat.depositManwon > budget) { budgetFilteredBreakdown.deposit++; continue; }
       if (dealType === 'MONTHLY' && rentStat.monthlyRentManwon > monthlyBudget) {
-        budgetFilteredCount++;
+        budgetFilteredBreakdown.monthlyRent++;
         continue;
       }
     }
@@ -777,6 +801,7 @@ export async function fetchRegionCandidates(
   // 6) 최종 RegionCandidate 조립
   const candidates: RegionCandidate[] = rawCandidates.map((c) => {
     const adjusted = adjustedReturnMap.get(c.agg.sigunguCode) ?? c.rawReturn;
+    const rentStat = rentCostMap.get(`${c.agg.sigunguCode}|${c.agg.dong}`);
     return {
       legalDongCode: c.agg.legalDongCode,
       displayName: `${c.agg.sigungu} ${c.agg.dong}`,
@@ -804,11 +829,19 @@ export async function fetchRegionCandidates(
       complexCount: c.agg.complexCount,
       // 2026-05-30: 선택 거래유형(JEONSE/MONTHLY) 실거래 환산 월주거비 중위값.
       //  SALE 또는 표본 부족 시 null → scoring 이 매매가 합성으로 폴백.
-      rentMonthlyCost: rentCostMap.get(`${c.agg.sigunguCode}|${c.agg.dong}`)?.monthlyCost ?? null,
+      rentMonthlyCost: rentStat?.monthlyCost ?? null,
       // P3 #6: 전월세 집계 표본수 — 카드 신뢰 칩용. SALE/표본없음 시 null.
-      rentSampleCount: rentCostMap.get(`${c.agg.sigunguCode}|${c.agg.dong}`)?.sampleCount ?? null,
+      rentSampleCount: rentStat?.sampleCount ?? null,
+      // KI-9: 카드 분리 표기용 — 보증금 중위값 + 순수 월세 중위값(필터 기준과 동일).
+      //  null = SALE/표본 부족(sale-proxy). 월세 한도 필터는 rentPureMonthlyManwon 기준이라 표시와 일치.
+      rentDepositManwon: rentStat?.depositManwon ?? null,
+      rentPureMonthlyManwon: rentStat?.monthlyRentManwon ?? null,
     };
   });
 
-  return { candidates, budgetFilteredCount };
+  const budgetFilteredCount =
+    budgetFilteredBreakdown.deposit +
+    budgetFilteredBreakdown.monthlyRent +
+    budgetFilteredBreakdown.salePrice;
+  return { candidates, budgetFilteredCount, budgetFilteredBreakdown };
 }

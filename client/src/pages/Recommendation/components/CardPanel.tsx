@@ -6,7 +6,7 @@
  *  - 가중치 슬라이더는 LeftPanel 로 분리됨
  */
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
-import { BUDGET_SLIDER } from '../../../types/recommendation';
+import { BUDGET_SLIDER, MONTHLY_RENT_SLIDER } from '../../../types/recommendation';
 import { RegionCard } from './RegionCard';
 import { EmptyState } from './EmptyState';
 
@@ -17,8 +17,11 @@ export function CardPanel() {
   const recommendations = useRecommendationStore((s) => s.recommendations);
   const isLoading = useRecommendationStore((s) => s.isLoading);
   const budgetFilteredCount = useRecommendationStore((s) => s.budgetFilteredCount);
+  const budgetFilteredBreakdown = useRecommendationStore((s) => s.budgetFilteredBreakdown);
   const budget = useRecommendationStore((s) => s.budget);
   const setBudget = useRecommendationStore((s) => s.setBudget);
+  const monthlyRentCap = useRecommendationStore((s) => s.monthlyRentCap);
+  const setMonthlyRentCap = useRecommendationStore((s) => s.setMonthlyRentCap);
   const dealType = useRecommendationStore((s) => s.dealType);
 
   const isEmpty = workplace != null && recommendations.length === 0;
@@ -29,7 +32,32 @@ export function CardPanel() {
   const budgetMax = BUDGET_SLIDER[dealType].max;
   const bumpedBudget = Math.min(budgetMax, Math.round((budget * 1.5) / 1000) * 1000);
   const canRaiseBudget = bumpedBudget > budget;
-  // MONTHLY 는 보증금·월세 두 한도가 섞여 제외될 수 있으므로 '예산' 으로 일반화
+  // 월세 한도 1.5배(5만 단위), 최대로 클램프 — 월세 초과 사유 전용 늘리기
+  const bumpedMonthly = Math.min(
+    MONTHLY_RENT_SLIDER.max,
+    Math.round((monthlyRentCap * 1.5) / 5) * 5,
+  );
+  const canRaiseMonthly = bumpedMonthly > monthlyRentCap;
+
+  // KI-12: 숨김 사유별 분리 (보증금/월세/매매가 초과). breakdown 없으면(mock/레거시) 단일 문구.
+  const bd = budgetFilteredBreakdown;
+  const reasonParts: Array<{ label: string; count: number }> = [];
+  if (bd) {
+    if (bd.salePrice > 0) reasonParts.push({ label: '매매가', count: bd.salePrice });
+    if (bd.deposit > 0) reasonParts.push({ label: '보증금', count: bd.deposit });
+    if (bd.monthlyRent > 0) reasonParts.push({ label: '월세', count: bd.monthlyRent });
+  }
+  // 월세만 초과한 경우엔 '한도 늘리기'가 월세 한도를 올리도록 분기
+  const onlyMonthly =
+    !!bd && bd.monthlyRent > 0 && bd.deposit === 0 && bd.salePrice === 0;
+  const raiseAction = onlyMonthly
+    ? canRaiseMonthly
+      ? () => setMonthlyRentCap(bumpedMonthly)
+      : null
+    : canRaiseBudget
+    ? () => setBudget(bumpedBudget)
+    : null;
+  // MONTHLY 는 보증금·월세 두 한도가 섞여 제외될 수 있으므로 '예산' 으로 일반화 (breakdown 폴백용)
   const budgetWhat =
     dealType === 'SALE' ? '매매가' : dealType === 'MONTHLY' ? '예산' : '보증금';
 
@@ -88,19 +116,34 @@ export function CardPanel() {
             </span>
           </div>
           <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 p-3">
-            {/* 예산 초과로 숨겨진 후보 안내 — budgetFilteredCount > 0 일 때만 */}
+            {/* 예산 초과로 숨겨진 후보 안내 — 사유별 분리 (KI-12). breakdown 없으면 단일 문구 폴백. */}
             {budgetFilteredCount > 0 && (
               <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-card bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs">
                 <span>
-                  {budgetWhat} 한도 초과로{' '}
-                  <span className="font-bold tabular-nums">{budgetFilteredCount}곳</span> 숨김
+                  {reasonParts.length > 0 ? (
+                    <>
+                      {reasonParts.map((p, i) => (
+                        <span key={p.label}>
+                          {i > 0 && ' · '}
+                          {p.label} 초과{' '}
+                          <span className="font-bold tabular-nums">{p.count}곳</span>
+                        </span>
+                      ))}{' '}
+                      숨김
+                    </>
+                  ) : (
+                    <>
+                      {budgetWhat} 한도 초과로{' '}
+                      <span className="font-bold tabular-nums">{budgetFilteredCount}곳</span> 숨김
+                    </>
+                  )}
                 </span>
-                {canRaiseBudget && (
+                {raiseAction && (
                   <button
-                    onClick={() => setBudget(bumpedBudget)}
+                    onClick={raiseAction}
                     className="shrink-0 font-semibold text-amber-700 dark:text-amber-300 hover:underline"
                   >
-                    한도 늘리기
+                    {onlyMonthly ? '월세 한도 늘리기' : '한도 늘리기'}
                   </button>
                 )}
               </div>

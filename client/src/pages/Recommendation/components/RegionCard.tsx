@@ -12,7 +12,6 @@ import { useNavigate } from 'react-router-dom';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { InfoTooltip } from '../../../components/InfoTooltip';
 import type { RegionRecommendation } from '../../../types/recommendation';
-import { DEAL_TYPE_LABELS } from '../../../types/recommendation';
 
 interface Props {
   region: RegionRecommendation;
@@ -22,6 +21,12 @@ interface Props {
 function formatEok(manwon: number): string {
   const eok = (manwon / 10000).toFixed(1).replace(/\.0$/, '');
   return `${eok}억`;
+}
+
+/** 만원 금액 표기 — 1억 이상은 "X억", 미만은 "Y만" (보증금 분리 표기용, KI-9) */
+function formatManwon(manwon: number): string {
+  if (manwon >= 10000) return formatEok(manwon);
+  return `${Math.round(manwon)}만`;
 }
 
 /** 가격 기준 간이 RIR (3분위 소득 403만원 기본값, 전세가율 65% × 전환율 4.5%) */
@@ -94,13 +99,24 @@ export function RegionCard({ region, rank }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusTick]);
 
-  // 2026-05-30: 전월세 거래유형 + 실거래 시세가 있으면 "전세/월세 월부담", 아니면 기존 "가격(매매가)".
-  const isRentBasis =
-    region.affordabilityBasis === 'rent' && region.monthlyHousingCost != null;
-  const priceLabel = isRentBasis ? `${DEAL_TYPE_LABELS[dealType]} 월` : '가격';
-  const priceDisplay = isRentBasis
-    ? `${Math.round(region.monthlyHousingCost as number)}만`
-    : formatEok(region.representativePrice);
+  // KI-9: 거래유형별 대표가 분리 표기 (표시 기준 = 필터 기준 일치로 혼동 해소).
+  //  · JEONSE  → "보증금 X억"(전세금=보증금 한도 필터와 동일)
+  //  · MONTHLY → "월세 X만"(순수 월세=월세 한도 필터와 동일) + 보조 "보증금 Y"
+  //  · SALE / 표본부족(sale-proxy) → 기존 "가격 X억"(매매가)
+  //  (RIR·주거비%는 별도로 합산 월주거비 monthlyHousingCost 기준 — 다른 개념.)
+  const isRentBasis = region.affordabilityBasis === 'rent';
+  const hasDeposit = region.rentDepositManwon != null;
+  let priceLabel = '가격';
+  let priceDisplay = formatEok(region.representativePrice);
+  let depositSub: string | null = null;
+  if (isRentBasis && dealType === 'MONTHLY' && region.rentPureMonthlyManwon != null) {
+    priceLabel = '월세';
+    priceDisplay = `${Math.round(region.rentPureMonthlyManwon)}만`;
+    if (hasDeposit) depositSub = formatManwon(region.rentDepositManwon as number);
+  } else if (isRentBasis && dealType === 'JEONSE' && hasDeposit) {
+    priceLabel = '보증금';
+    priceDisplay = formatManwon(region.rentDepositManwon as number);
+  }
 
   const goToDetail = () => navigate(`/region/${region.legalDongCode}`);
 
@@ -209,6 +225,14 @@ export function RegionCard({ region, rank }: Props) {
                 {priceDisplay}
               </span>
             </span>
+            {depositSub && (
+              <span>
+                <span className="text-ink-tertiary dark:text-ink-tertiary-dark mr-1">보증금</span>
+                <span className="font-semibold text-ink-primary dark:text-ink-primary-dark">
+                  {depositSub}
+                </span>
+              </span>
+            )}
             <span className="inline-flex items-center gap-1">
               <span className={`font-semibold ${rirColorClass}`}>
                 주거비 {rirPct}%
@@ -276,6 +300,12 @@ export function RegionCard({ region, rank }: Props) {
               <span className="text-ink-tertiary dark:text-ink-tertiary-dark">{priceLabel}</span>{' '}
               {priceDisplay}
             </span>
+            {depositSub && (
+              <span>
+                <span className="text-ink-tertiary dark:text-ink-tertiary-dark">보증금</span>{' '}
+                {depositSub}
+              </span>
+            )}
             <span className="inline-flex items-center gap-1">
               <span className={`font-semibold ${rirColorClass}`}>
                 주거비 {rirPct}%
