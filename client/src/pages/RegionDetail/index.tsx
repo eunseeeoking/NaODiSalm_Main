@@ -23,14 +23,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecommendationStore } from '../../stores/useRecommendationStore';
 import { MOCK_REGIONS } from '../Recommendation/data/mockRegions';
-import { fetchComplexes, fetchLstm, fetchArima, fetchCommuteCompare, fetchLhSummary } from '../../api/regionDetail';
+import { fetchComplexes, fetchLstm, fetchArima, fetchCommuteCompare, fetchLhSummary, fetchRegionDetail, fetchRegionCommute } from '../../api/regionDetail';
 import { RegionDetailHeader } from './components/RegionDetailHeader';
 import { RegionMiniMap } from './components/RegionMiniMap';
 import { ComplexCardList } from './components/ComplexCardList';
 import { LhAggregateBanner } from './components/LhAggregateBanner';
 import { PriceStabilityAnalysis } from './components/LstmFullAnalysis';
 import { CommuteCompare } from './components/CommuteCompare';
-import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData, LhSummary } from '../../types/region-detail';
+import { RegionDetailEvaluation } from './components/RegionDetailEvaluation';
+import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData, LhSummary, RegionDetail } from '../../types/region-detail';
 import type { RegionRecommendation } from '../../types/recommendation';
 
 export function RegionDetailPage() {
@@ -38,6 +39,8 @@ export function RegionDetailPage() {
   const navigate = useNavigate();
   const workplace = useRecommendationStore((s) => s.workplace);
   const storeRecommendations = useRecommendationStore((s) => s.recommendations);
+  const propertyTypes = useRecommendationStore((s) => s.propertyTypes);
+  const dealType = useRecommendationStore((s) => s.dealType);
 
   // ─── region 메타: store 우선 → MOCK_REGIONS 폴백 ────────────
   const region: RegionRecommendation | null =
@@ -82,6 +85,23 @@ export function RegionDetailPage() {
       });
     return () => ac.abort();
   }, [legalDongCode]);
+
+  // ─── 동 상세 평가 (KI-18 공통 코어) — 4축 분해 + 시세 구조 ────
+  const [detail, setDetail] = useState<RegionDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(true);
+  useEffect(() => {
+    if (!legalDongCode) return;
+    const ac = new AbortController();
+    setDetailLoading(true);
+    fetchRegionDetail(legalDongCode, propertyTypes, ac.signal)
+      .then((d) => setDetail(d))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.error('[RegionDetailPage] detail fetch fail:', err);
+      })
+      .finally(() => setDetailLoading(false));
+    return () => ac.abort();
+  }, [legalDongCode, propertyTypes]);
 
   // ─── 선택 단지 ───────────────────────────────────────────────
   const [selectedComplex, setSelectedComplex] = useState<AptComplex | null>(null);
@@ -164,6 +184,26 @@ export function RegionDetailPage() {
     return () => ac.abort();
   }, [selectedComplex, workplace]);
 
+  // ─── 동 통근 비교 (KI-18) — 동 centroid → 직장, 전 매물종류 공통 ──
+  //   단지 좌표가 아닌 동 centroid 출발이라 비아파트·미지오코딩 단지에서도 동작.
+  const [regionCommute, setRegionCommute] = useState<CommuteCompareData | null>(null);
+  useEffect(() => {
+    if (!region || !workplace || !region.lat || !region.lng) {
+      setRegionCommute(null);
+      return;
+    }
+    const ac = new AbortController();
+    fetchRegionCommute(region.legalDongCode, { lat: region.lat, lng: region.lng }, workplace, ac.signal)
+      .then((r) => setRegionCommute(r?.data ?? null))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.error('[RegionDetailPage] region commute fetch fail:', err);
+      });
+    return () => ac.abort();
+    // region 객체는 매 렌더 새 참조지만 코드·좌표는 안정적 → 원시값을 deps 로.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [region?.legalDongCode, region?.lat, region?.lng, workplace]);
+
   // ─── 잘못된 경로 또는 직접 URL 진입 ─────────────────────────
   if (!region) {
     return (
@@ -188,7 +228,7 @@ export function RegionDetailPage() {
       <RegionDetailHeader
         region={region}
         onBack={() => navigate('/home')}
-        isDemoData={complexesSource === 'mock'}
+        isDemoData={propertyTypes.includes('APT') && complexesSource === 'mock'}
       />
 
       {/* flex-1 min-h-0: 헤더 아래 남은 공간을 정확히 차지
@@ -206,8 +246,12 @@ export function RegionDetailPage() {
           />
         </section>
 
-        {/* 우: 매물 + LSTM — 모바일 풀폭, 데스크톱 8컬 */}
-        <section className="col-span-1 md:col-span-8 flex flex-col gap-3 md:overflow-hidden">
+        {/* 우: 동 상세 평가(공통) + (APT 한정) 단지 전망 — 모바일 풀폭, 데스크톱 8컬
+            KI-18: 매물종류별 분기. APT 포함 = 단지 리스트+전망 부가 모듈 유지,
+            비아파트 전용 = 동 상세 평가 본체만(시계열 예측 부적합 → 정직 안내). */}
+        {/* md:overflow-x-hidden 명시 — overflow-y-auto 는 브라우저가 overflow-x 를 auto 로 강제(가로
+            스크롤바 생성)해 ComplexCardList 내부 좌우 스와이프와 충돌. x 는 클립, y 만 스크롤. */}
+        <section className="col-span-1 md:col-span-8 flex flex-col gap-3 min-w-0 md:overflow-y-auto md:overflow-x-hidden">
           {/* LH 집계 배너 — Phase 2-B: 행정동 정밀도 지원. scope=DONG 이면 "역삼동", SIGUNGU 면 "강남구" */}
           <LhAggregateBanner
             summary={lhSummary}
@@ -215,42 +259,55 @@ export function RegionDetailPage() {
             dongDisplayName={region.dong}
           />
 
-          {/* 단지 카드 리스트 (가로 스크롤) */}
-          {complexesLoading ? (
-            <LoadingBar label="단지 목록 불러오는 중…" />
-          ) : (
-            <ComplexCardList
-              complexes={complexes}
-              selectedId={selectedComplex?.complexId ?? null}
-              onSelect={setSelectedComplex}
-            />
-          )}
+          {/* 동 상세 평가 — 모든 매물종류 공통 코어 (4축 분해 + 시세 구조) */}
+          <RegionDetailEvaluation
+            region={region}
+            detail={detail}
+            dealType={dealType}
+            propertyTypes={propertyTypes}
+            commute={regionCommute}
+            hasWorkplace={!!workplace}
+            loading={detailLoading}
+          />
 
-          {/* 가격 안정성 분석 + 통근 비교 — 모바일 1열, 데스크톱 3-grid
-              모바일: flex-1 제거 → auto height (main 스크롤로 처리)
-              데스크톱: md:flex-1 md:min-h-0 → flex column 남은 공간 채움 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:flex-1 md:min-h-0 md:overflow-hidden">
-            <div className="col-span-1 md:col-span-2 md:overflow-auto">
-              {(arimaLoading || lstmLoading) ? (
-                <LoadingBar label="가격 안정성 분석 중…" />
-              ) : selectedComplex && (arima ?? lstm) ? (
-                <PriceStabilityAnalysis
-                  complex={selectedComplex}
-                  lstm={lstm}
-                  arima={arima}
+          {/* APT 부가 모듈 — 단지 리스트 + 3년 가격 전망 + 통근 비교.
+              비아파트 전용 선택 시 비활성(매물 단위 예측 부적합, 설계 §3-B). */}
+          {propertyTypes.includes('APT') && (
+            <>
+              {complexesLoading ? (
+                <LoadingBar label="단지 목록 불러오는 중…" />
+              ) : (
+                <ComplexCardList
+                  complexes={complexes}
+                  selectedId={selectedComplex?.complexId ?? null}
+                  onSelect={setSelectedComplex}
                 />
-              ) : (
-                <EmptyAnalysis />
               )}
-            </div>
-            <div className="col-span-1 md:overflow-auto">
-              {commute ? (
-                <CommuteCompare data={commute} />
-              ) : (
-                <EmptyCommute />
-              )}
-            </div>
-          </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="col-span-1 md:col-span-2">
+                  {(arimaLoading || lstmLoading) ? (
+                    <LoadingBar label="가격 안정성 분석 중…" />
+                  ) : selectedComplex && (arima ?? lstm) ? (
+                    <PriceStabilityAnalysis
+                      complex={selectedComplex}
+                      lstm={lstm}
+                      arima={arima}
+                    />
+                  ) : (
+                    <EmptyAnalysis />
+                  )}
+                </div>
+                <div className="col-span-1">
+                  {commute ? (
+                    <CommuteCompare data={commute} />
+                  ) : (
+                    <EmptyCommute hasWorkplace={!!workplace} />
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </section>
       </main>
     </div>
@@ -283,12 +340,24 @@ function EmptyAnalysis() {
   );
 }
 
-function EmptyCommute() {
+function EmptyCommute({ hasWorkplace }: { hasWorkplace: boolean }) {
   return (
     <div className="min-h-[80px] md:h-full rounded-cardlg bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark shadow-card flex items-center justify-center text-xs text-ink-tertiary dark:text-ink-tertiary-dark text-center px-3">
-      직장이 설정되어야
-      <br />
-      통근 비교가 표시됩니다.
+      {hasWorkplace ? (
+        <>
+          이 단지는 좌표 정보가 없어
+          <br />
+          단지별 통근 비교를 못 했어요.
+          <br />
+          (동 단위 비교는 위 평가 참고)
+        </>
+      ) : (
+        <>
+          직장이 설정되어야
+          <br />
+          통근 비교가 표시됩니다.
+        </>
+      )}
     </div>
   );
 }

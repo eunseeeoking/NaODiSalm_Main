@@ -10,7 +10,8 @@
  *    - AbortError 는 그대로 re-throw (호출처 무시)
  */
 import { apiFetch, ApiError } from './client';
-import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData, LhSummary } from '../types/region-detail';
+import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData, LhSummary, RegionDetail } from '../types/region-detail';
+import type { RecPropertyType } from '../types/recommendation';
 import { getMockComplexesForRegion } from '../pages/RegionDetail/data/mockComplexes';
 import { getMockLstm } from '../pages/RegionDetail/data/mockLstmResults';
 import { getMockCommuteCompare } from '../pages/RegionDetail/data/mockCommuteCompare';
@@ -48,6 +49,34 @@ export async function fetchComplexes(
       complexes: getMockComplexesForRegion(legalDongCode),
       source: 'mock',
     };
+  }
+}
+
+// ─── 동 상세 평가 (KI-18 공통 코어) ──────────────────────────
+
+/**
+ * Depth 3 "동 상세 평가" 객관 데이터 조회 (4축 분해 + 시세 구조).
+ *  - GET /api/regions/:legalDongCode/detail?types=...
+ *  - mock 폴백 없음 — 실패 시 null 반환(패널이 "데이터 없음" 표기). 미적재 축은 서버가 null.
+ */
+export async function fetchRegionDetail(
+  legalDongCode: string,
+  propertyTypes: RecPropertyType[],
+  signal?: AbortSignal,
+): Promise<RegionDetail | null> {
+  const types = propertyTypes.length > 0 ? propertyTypes.join(',') : '';
+  const qs = types ? `?types=${encodeURIComponent(types)}` : '';
+  try {
+    const data = await apiFetch<RegionDetail>(
+      `/api/regions/${legalDongCode}/detail${qs}`,
+      { signal },
+    );
+    if (!data || typeof data.legalDongCode !== 'string') throw new Error('invalid shape');
+    return data;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    console.warn('[regionDetail] detail API 실패:', describeError(err));
+    return null;
   }
 }
 
@@ -214,6 +243,49 @@ export async function fetchCommuteCompare(
       return { data: fallback, source: 'mock' };
     }
     return { data: mockData, source: 'mock' };
+  }
+}
+
+/**
+ * 동 centroid ↔ 직장 통근 비교 (KI-18 동 상세 평가 — 전 매물종류 공통).
+ *  - GET /api/commute/compare?oLat=&oLng=&legalDongCode=&wpLat=&wpLng=
+ *  - 단지 좌표가 아닌 동 centroid 를 출발지로 사용 → 비아파트·미지오코딩 단지도 통근 비교 가능.
+ *  - 서버: t_commute_matrix 캐시 → ODsay(대중교통)/Kakao(자차) → Haversine. 실패 시 클라 Haversine 폴백.
+ */
+export async function fetchRegionCommute(
+  legalDongCode: string,
+  origin: { lat: number; lng: number },
+  workplace: Workplace,
+  signal?: AbortSignal,
+): Promise<CommuteCompareResult | null> {
+  if (!workplace) return null;
+  try {
+    const params = new URLSearchParams({
+      oLat: String(origin.lat),
+      oLng: String(origin.lng),
+      legalDongCode,
+      wpLat: String(workplace.lat),
+      wpLng: String(workplace.lng),
+    });
+    const data = await apiFetch<CommuteCompareData & { source?: string }>(
+      `/api/commute/compare?${params}`,
+      { signal },
+    );
+    if (
+      !data ||
+      typeof data.transitMinutes !== 'number' ||
+      typeof data.carMinutes !== 'number'
+    ) {
+      throw new Error('invalid shape');
+    }
+    const apiSource = data.source;
+    const source: CommuteSource =
+      apiSource === 'cache' || apiSource === 'odsay' ? 'api' : 'estimate';
+    return { data, source };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    console.warn('[regionDetail] region commute API 실패 → Haversine 폴백:', describeError(err));
+    return { data: haversineCommuteFallback(origin, workplace), source: 'mock' };
   }
 }
 

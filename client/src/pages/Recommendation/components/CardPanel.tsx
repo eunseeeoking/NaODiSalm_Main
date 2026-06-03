@@ -70,10 +70,14 @@ export function CardPanel() {
       ) : isLoading ? (
         <>
           <div className="flex items-center gap-2 px-4 pt-3.5 pb-2.5 shrink-0 border-b border-line-light dark:border-line-dark bg-surface-elevated dark:bg-surface-dark-elevated">
-            <span
-              className="w-3.5 h-3.5 rounded-full border-2 border-brand/30 border-t-brand animate-spin"
+            <svg
+              className="animate-spin shrink-0 text-brand"
+              width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2.5"
               aria-hidden="true"
-            />
+            >
+              <path d="M21 12a9 9 0 1 1-6.22-8.56" strokeLinecap="round" />
+            </svg>
             <span className="text-sm text-ink-secondary dark:text-ink-secondary-dark font-medium">
               추천 지역 조회 중…
             </span>

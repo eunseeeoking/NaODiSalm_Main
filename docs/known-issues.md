@@ -88,7 +88,10 @@
   🔗 **근본 원인은 KI-20**(centroids↔generated LAWD granularity 불일치) — 추천 universe 매칭에도 영향 가능.
 - **잔여(🟢 유지 조건)**: 별칭 반영 위해 `npm run seed:safety` **1회 재실행** 권장(API 불필요).
 
-### KI-6 · 대중교통 품질(transitScore) 미적재 🟡 코드 완료·시드 대기 (2026-06-01)
+### KI-6 · 대중교통 품질(transitScore) 미적재 🟢 수도권 적재 완료 (2026-06-03)
+- **✅ 전 수도권 적재 완료(2026-06-03)**: 서울은 TOPIS 폐기 후 **정적 정류소 좌표 밀도**(`seoulBusStopTransit.ts`)로,
+  경기·인천은 TAGO 라이브로 적재 → `t_transit_route_summary` **949건**(서울/정적 396 · 경기인천/TAGO 562), transitScore 평균 60.5(11~100).
+  서울 적재가 비던 마지막 블로커 해소. (상세 경위는 아래 ⏳/잔여 항목.)
 - **증상**: 통근 점수에 배차·야간접근성·정류장밀도 보정이 없음(`transitScore=null`).
 - **현황**: `scripts/seedTransitSummary.ts` + provider 레이어 완성.
 - **추가 버그픽스(2026-05-31)**: `t_transit_route_summary` 조회도 KI-5 와 동일한 `arr.join(',')` IN 절 버그 → `Prisma.join` 으로 수정.
@@ -105,11 +108,18 @@
     좌표 `gpsX/gpsY`→**`tmX=위도·tmY=경도`**(샘플값 기준 반대), 노선=`getRouteByStationList`, 첫·막차=`getBustimeByStationList`(arsId,busRouteId).
     배차(term)는 서울 명세에 없어 headway 기본값 처리. **응답 필드명은 키 활성 후 프로브로 최종 확정**(미검증).
   - 키: 별도 발급 불필요 — data.go.kr 인증키는 계정당 1개라 **MOLIT_SERVICE_KEY 재사용**(코드 `||` 폴백). 같은 계정 승인 시 통용.
-- **잔여(🟢 전환 조건)**: ① 서울 TOPIS 승인 전파 대기 후 재프로브(정류소 N>0 + 응답 필드명 arsId/busRouteId/firstBusTm 확정) → ② `npm run seed:transit` 본실행(경기·인천은 이미 검증).
+- **잔여(🟢 전환 조건)**: ① ~~서울 TOPIS 승인 전파 대기 후 재프로브~~ → 🔴 **TOPIS 폐기(2026-06-03)**: data.go.kr
+  발급키가 ws.bus.go.kr 백엔드에 끝내 등록 안 됨(`SERVICE KEY IS NOT REGISTERED` 지속, TAGO 는 동일 키로 apis.data.go.kr 정상).
+  → **국토부 "전국 버스정류장 위치정보"(15067528) 정적 좌표 CSV** 로 대체(`seoulBusStopTransit.ts`, 동 centroid 반경 1km 정류소
+  **밀도** 기반 transitScore; 배차/막차 미상). `server/data/seoul-bus-stops.csv` 배치 후 `npm run seed:transit` → 서울 적재.
+  ② 경기·인천은 기존 TAGO 라이브 유지(검증됨).
 
 ### KI-7 · 통근시간 Haversine 폴백 🟡 (심각도: 중간)
 - **증상**: commute matrix 캐시가 없으면 직선거리 기반 추정(25km/h + 5분)으로 통근시간 산정 → 실제와 괴리.
 - **제안**: matrix 사전 적재 범위 확대 / 실시간 호출 백필.
+- **부분 개선(2026-06-03, Depth 3)**: `/api/commute/compare` 가 `complexId` 없이 **동 centroid 출발지(`oLat/oLng/legalDongCode`)**도
+  받도록 확장 → Depth 3 "동 상세 평가"에서 **비아파트·미지오코딩 단지 포함 전 매물종류**가 ODsay(대중교통)·카카오(자차) **실측** 통근 비교 표시.
+  (Depth 2 랭킹은 여전히 Haversine — 본 KI 본체는 잔존.)
 
 ### KI-8 · 매매 대표값이 평균(AVG), median 아님 🟢 해결 (2026-05-31)
 - **증상**: 전월세는 동별 **중위값** 적용(P2)했으나 `representativePrice`(매매)는 여전히 AVG → 이상치 취약.
@@ -137,10 +147,15 @@
     수도권 dong 조회. (별도 `SafetyProvider` 인터페이스 없이 코드-키 상수표로 해소.)
 - **잔여(🟢 전환 조건)**: 서울 TOPIS 필드매핑·경기인천 TAGO 커버리지 **프로브 검증**(DEBUG 플래그) 후 `seed:transit`/`seed:safety` 실행. 상세: `docs/수도권-mvp-plan.md` §5.
 
-### KI-18 · Depth 3 매물종류별 분기 (비아파트 = 동 상세 평가) 🔴 (심각도: 중간 · 제품)
+### KI-18 · Depth 3 매물종류별 분기 (비아파트 = 동 상세 평가) 🟡 Phase 1 완료 (2026-06-03)
 - **증상**: Depth 3(`/api/regions/:code/complexes`)가 **아파트 단지 + 3년 예측가 중심**, 비아파트(빌라·오피·단독) 비활성.
 - **원인**: 비아파트는 매물 단위 시계열 예측 부적합 — 단독·다가구는 식별이 동 단위(지번 마스킹/부재·연면적), 빌라·오피는 식별 가능하나 좌표·반복거래 부족. (RTMS API 컬럼 근거: `docs/depth3-design.md` 부록 A.)
 - **제안**: Depth 3 본체를 **"동 상세 평가"**(4축 분해 + 시세 분포 + POI/안전/교통/LH)로 재정의, 시계열 전망은 아파트 부가 모듈로 격리. 상세: `docs/depth3-design.md`.
+- **✅ Phase 1 해결(2026-06-03)** — 공통 코어 "동 상세 평가":
+  - 서버 `GET /api/regions/:code/detail?types=` 신규([regions.ts]) — 4축 분해(안전 crime/light/cctv·POI 8종·교통 품질) + 시세 median(매매/전세/월세·표본) + 단지수. 사용자 입력 무관 객관 데이터(직접 URL 진입 견고). 시세는 `fetchDongPriceStructure`(recommendationRepository)가 기존 median 규약(KI-8/10/16)을 단일 동으로 재사용.
+  - 클라 `RegionDetailEvaluation` 패널 + `index.tsx` 분기: **APT 포함=단지 리스트·3년 전망 유지, 비아파트 전용=패널+정직 안내**. (역삼동 실DB 검증: 4축·시세·단지수 정상, SH-only sale=null, 서울 transit는 정적 적재 후 표시.)
+- **잔여(Phase 2+)**: 면적대별(소·중·대) median 분리(KI-16 후속) · 반전세 비율 라벨(KI-10 후속) · 빌라·오피 "건물 시세 카드"(설계 §6 보류) · 시세 분포 시각화.
+- **✅ 매물 카드 스와이퍼·선택 보더 검증 완료(2026-06-03)**: 브라우저 실측(강남구 대치동, 실DB) — 좌우 드래그/휠 스와이프 정상, 선택 카드 보더 2px·미선택 1px·클릭 시 보더 이동 정상, 좌측 첫 카드 클립 없음. 그림자/ring/lift 제거하고 **보더만** 남기는 디자인으로 확정(사용자 요청). 선택 보더가 안 보이던 진짜 원인은 KI-24(`button{border:0}` 가 border-style:none 강제) → 함께 해소.
 
 ### KI-19 · 추천 서빙 universe 가 서울 한정 (수도권 데이터 적재됐으나 미서빙) 🟢 해결 (2026-06-XX)
 - **✅ 해결**: `fetchRegionAggregates` 기본 prefix 를 **수도권(11·28·41)** 로 확장 + 후보 매칭을 sigungu **이름** →
@@ -289,6 +304,21 @@
 ### KI-15 · 작업 샌드박스에서 tsc 직접 실행 불가 🟡 (개발 메모)
 - **증상**: 마운트 동기화 지연으로 bash `tsc` 가 stale/truncated 파일을 읽어 신뢰 불가. (이 known-issues 문서도 부분 편집 누적 시 마운트가 잘린 버전을 보여준 사례 있음 — 편집 후 에디터 새로고침 권장.)
 - **현재 완화**: 권한 파일은 정상. 순수 로직은 node 시뮬레이션으로 검증, 컴파일은 **실 환경 `npm run typecheck`(client·server)** 1회로 확인.
+
+### KI-24 · Tailwind preflight 가 꺼져 있어 디자인이 전반적으로 어긋나 있었음 🟢 해결 (2026-06-03)
+- **증상**: `tailwind.config.ts` 에 `corePlugins.preflight = false` 였는데, **실제 디자인은 preflight ON(전역 리셋) 전제로 작성**돼
+  있어 곳곳이 미묘하게 어긋남. 대표 사례: input 들이 브라우저 기본 테두리(상/하 비대칭 inset)를 그대로 노출 → 이를 피하려고
+  사이트 전반에 `border-0`·수동 마진 보정 같은 **워크어라운드**가 누적(예: 검색바·월급여 입력).
+- **원인**: preflight off + 부분적 수동 리셋(index.css 의 `button{border:0}`·`ul/ol` 불릿 제거 등)로 미봉.
+- **해결**: `corePlugins.preflight = true` 로 전환 → 기본 테두리·마진·불릿 제거, `box-sizing` 통일. 검색바/선택 카드 보더 등
+  의도된 스타일이 깨끗이 렌더(사용자 확인 "눈이 편해졌다").
+- **✅ 후속 정리(2026-06-03) — `button{border:0}` 제거**: preflight off 시절 워크어라운드였던 index.css `button{border:0}` 이
+  **bordered 버튼을 안 보이게 만드는 버그**로 드러나 제거. `border:0`(shorthand)이 `border-style:none` 까지 설정 → **요소 선택자(button)
+  우선순위로 preflight 의 `*{border-style:solid}` 를 덮어**, 버튼에 `border-2` 등 width 유틸을 줘도 used width 가 0 으로 렌더(보더 증발).
+  Depth 3 매물 선택 카드 보더가 안 보이던 원인이 이것(그동안 ring=box-shadow 가 보더처럼 보여 잠복). preflight 가 이미 border-width:0 을
+  담당하므로 제거해도 무border 버튼은 그대로, **border 유틸 준 버튼만 정상 렌더**(순개선). **사이트 전역 변경**이라 다른 화면 회귀 1회 권장.
+- **잔여(정리 권장)**: index.css 의 나머지 수동 리셋이 preflight 와 **일부 중복**(무해하나 점진 정리 가능). 남은 `border-0` 워크어라운드도
+  불필요해진 곳 전수 점검 시 제거 가능.
 
 ---
 

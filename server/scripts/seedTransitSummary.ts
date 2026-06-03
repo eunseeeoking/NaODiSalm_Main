@@ -6,8 +6,8 @@
  *    → t_transit_route_summary 적재. 통근 점수 보정(transitScore → commuteScore 가중합).
  *
  *  ▷ Provider 분기 (KI-6 / KI-17, transitProvider.ts)
- *    · 서울(11***)        → TOPIS(seoulTopisClient) — TAGO 서울 시내버스 미등재 보완.
- *    · 그 외(인천·경기)    → TAGO(tagoClient).
+ *    · 서울(11***)        → 정적 정류소 좌표 밀도(seoulBusStopTransit) — TOPIS 라이브 폐기 대체.
+ *    · 그 외(인천·경기)    → TAGO(tagoClient) 라이브.
  *    분기는 행정동 코드 prefix 로 자동 수행 — 호출부는 fetchTransitSummary(lat,lng,code) 단일 시그니처.
  *
  *  ▷ 실행
@@ -16,14 +16,15 @@
  *
  *    # 특정 행정동만:
  *    npm run seed:transit -- --dongCode=1168010100
- *    # provider 응답 진단(적재 전 권장): TAGO_DEBUG=1 / SEOUL_TOPIS_DEBUG=1
+ *    # provider 응답 진단(적재 전 권장): TAGO_DEBUG=1(경기인천) / SEOUL_BUS_DEBUG=1(서울 정적)
  *
  *  ▷ 사전 조건
- *    - server/.env 에 MOLIT_SERVICE_KEY=<발급키> (TAGO·경기인천)
- *      + (서울) SEOUL_TOPIS_KEY=<발급키> 미설정 시 MOLIT_SERVICE_KEY 재사용.
- *      data.go.kr 신청: TAGO 버스정류장/노선정보 + 서울특별시 정류소/버스노선정보.
+ *    - (경기·인천 TAGO) server/.env 에 MOLIT_SERVICE_KEY=<data.go.kr 발급키>.
+ *    - (서울 정적) server/data/seoul-bus-stops.csv — 공공데이터포털 "국토부 전국 버스정류장
+ *      위치정보"(15067528) CSV 를 그대로 저장(서울권 bbox 자동 필터). 키 불필요.
+ *      env SEOUL_BUS_STOPS_CSV 로 경로 변경 가능. 파일 없으면 서울은 폴백(미적재).
  *    - npx prisma db push (t_transit_route_summary 테이블 생성)
- *    ⚠️ 경기·인천 TAGO 커버리지·서울 TOPIS 필드매핑은 프로브 검증 대상(KI-17 §5).
+ *    ⚠️ 경기·인천 TAGO 커버리지는 프로브 검증 대상(KI-17 §5). 서울은 정적 밀도(배차/막차 미상).
  *
  *  ▷ 결과 확인 (MySQL)
  *    SELECT AVG(transit_score), MIN(transit_score), MAX(transit_score)

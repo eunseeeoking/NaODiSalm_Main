@@ -41,18 +41,25 @@ export function ComplexCardList({ complexes, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div className="shrink-0">
-      {/* 헤더: 제목 */}
-      <div className="flex items-center justify-between mb-2 px-1">
+    // min-w-0: flex 컨테이너 안에서 내부 가로 스크롤이 정상 동작하도록 폭 제약(스와이퍼 복구)
+    <div className="shrink-0 min-w-0">
+      {/* 헤더: 제목 + 매매 참고용 명시 */}
+      <div className="mb-2 px-1">
         <h2 className="text-sm font-bold text-ink-primary dark:text-ink-primary-dark">
           매물 단지
           <span className="ml-2 text-xs font-medium text-ink-tertiary dark:text-ink-tertiary-dark tabular-nums">
             {complexes.length}건
           </span>
         </h2>
+        {/* 단지 카드는 거래유형과 무관하게 아파트 '매매' 실거래·전망 — 혼동 방지 명시(KI-18) */}
+        <p className="mt-0.5 text-2xs text-ink-tertiary dark:text-ink-tertiary-dark">
+          아파트 <span className="font-semibold text-ink-secondary dark:text-ink-secondary-dark">매매</span> 실거래 기준 · 참고용 (전월세로 조회해도 단지 시세·전망은 매매가)
+        </p>
       </div>
 
-      <div ref={cardScrollRef} className="overflow-x-auto scroll-x-slider -mx-1 px-1 pb-1">
+      {/* overflow-x-auto 는 세로축도 auto 로 클립 → 선택 카드의 border-2(2px)가 잘리지 않도록 사방 소폭 패딩.
+          그림자 제거 후 음수 마진 트릭 불필요(좌측 첫 카드 보더 짤림 원인) → 대칭 px/py 로 단순화. */}
+      <div ref={cardScrollRef} className="overflow-x-auto scroll-x-slider px-1 py-1">
         <div className="flex gap-2.5 min-w-min">
           {complexes.map((c) => {
             const isSelected = c.complexId === selectedId;
@@ -63,11 +70,12 @@ export function ComplexCardList({ complexes, selectedId, onSelect }: Props) {
                 key={c.complexId}
                 onClick={() => onSelect(c)}
                 className={[
-                  'shrink-0 w-56 rounded-cardlg p-3 text-left transition-all',
+                  'shrink-0 w-56 rounded-cardlg p-3 text-left transition-colors',
                   'bg-surface-elevated dark:bg-surface-dark-elevated',
+                  // 보더만 — 그림자/헤일로/lift 없음. 선택 = 파란 2px, 미선택 = 중립 1px + hover 보더 강조
                   isSelected
-                    ? 'border-2 border-brand shadow-card-hover -translate-y-px'
-                    : 'border border-line-light dark:border-line-dark shadow-card hover:shadow-card-hover hover:-translate-y-px',
+                    ? 'border-2 border-brand'
+                    : 'border border-line-light dark:border-line-dark hover:border-ink-tertiary dark:hover:border-ink-tertiary-dark',
                 ].join(' ')}
               >
                 {/* 단지명 */}

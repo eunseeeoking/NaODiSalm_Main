@@ -258,7 +258,11 @@ export function WeightSliders({ bare = false }: { bare?: boolean } = {}) {
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
                 <span>
-                  가중치 합이 {sum}입니다. {WEIGHTS_SUM_MIN}~{WEIGHTS_SUM_MAX} 범위로 조정하거나 프리셋을 선택하세요.
+                  가중치 합이 {sum} 입니다. {WEIGHTS_SUM_MIN}~{WEIGHTS_SUM_MAX} 범위로 조정해야
+                  추천이 갱신됩니다.
+                  <br />
+                  <span className="font-semibold">[사회초년생] [신혼부부] [실거주] [직장인]</span>{' '}
+                  프리셋을 누르면 합 100 으로 자동 맞춰집니다.
                 </span>
               </div>
             )}
@@ -360,37 +364,6 @@ export function WeightSliders({ bare = false }: { bare?: boolean } = {}) {
         )}
       </div>
 
-      {/* 합이 허용 범위 밖이면 인라인 경고 — 추천이 갱신되지 않는다는 사실을 명시 */}
-      {!valid && (
-        <div
-          role="alert"
-          className="mt-3 px-3 py-2 rounded-card bg-negative/10 border border-negative/30 text-xs font-medium text-negative flex items-start gap-2"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="mt-0.5 shrink-0"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          <span>
-            가중치 합이 {sum} 입니다. {WEIGHTS_SUM_MIN}~{WEIGHTS_SUM_MAX} 범위로 조정해야
-            추천이 갱신됩니다.
-            <br />
-            <span className="font-semibold">[사회초년생] [신혼부부] [실거주] [직장인]</span>{' '}
-            프리셋을 누르면 합 100 으로 자동 맞춰집니다.
-          </span>
-        </div>
-      )}
     </div>
   );
 }

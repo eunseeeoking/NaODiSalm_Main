@@ -43,9 +43,16 @@ interface RecommendationState {
   /**
    * 매물종류 (2026-05-30 P2) — 전월세 시세 집계 풀.
    *  - 다중 선택. 최소 1개 유지 (전부 해제 방지).
-   *  - SALE 거래유형에서는 무시됨(매매가 기준).
+   *  - SALE 거래유형에서는 **['APT'] 로 자동 픽스**(매매=아파트 — Depth 3 단지 전망/매매 시세 정합).
+   *    전월세로 복귀하면 직전 전월세 선택을 복원(`_rentPropertyTypes`).
    */
   propertyTypes: RecPropertyType[];
+  /**
+   * 매매 진입 시 보존해 둔 직전 전월세 매물종류 선택 (내부 상태).
+   *  - SALE 로 전환할 때 현재 propertyTypes 를 여기 백업하고 propertyTypes 를 ['APT'] 로 픽스.
+   *  - 전월세(JEONSE/MONTHLY)로 복귀할 때 이 값으로 propertyTypes 복원 → QA 토글 시 선택 유지.
+   */
+  _rentPropertyTypes: RecPropertyType[];
   /**
    * 소득 분위 (1~5, 통계청 2023 기준)
    *  - null: 미선택 → 서버 기본값(3분위 403만원) 사용
@@ -137,6 +144,7 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
   patience: 45,
   dealType: 'JEONSE',
   propertyTypes: [...DEFAULT_PROPERTY_TYPES],
+  _rentPropertyTypes: [...DEFAULT_PROPERTY_TYPES],
   incomeQuintile: null,
   incomeManwon: null,
   hoveredRegion: null,
@@ -156,7 +164,21 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
     set((state) => ({ weights: { ...state.weights, [key]: value } })),
   applyPreset: (preset) => set({ weights: { ...WEIGHT_PRESETS[preset] } }),
   setPatience: (minutes) => set({ patience: minutes }),
-  setDealType: (dealType) => set({ dealType }),
+  setDealType: (dealType) =>
+    set((state) => {
+      if (dealType === state.dealType) return { dealType };
+      // 전월세 → 매매: 직전 전월세 선택 보존 + 아파트로 픽스 (매매=아파트).
+      //  매매 추천 시세(representativePrice)·Depth 3 진입(단지 전망)이 모두 APT 기준이 되도록.
+      if (dealType === 'SALE') {
+        return { dealType, _rentPropertyTypes: state.propertyTypes, propertyTypes: ['APT'] };
+      }
+      // 매매 → 전월세: 보존했던 선택 복원.
+      if (state.dealType === 'SALE') {
+        return { dealType, propertyTypes: state._rentPropertyTypes };
+      }
+      // 전세 ↔ 월세: 매물종류 유지.
+      return { dealType };
+    }),
   togglePropertyType: (type) =>
     set((state) => {
       const has = state.propertyTypes.includes(type);

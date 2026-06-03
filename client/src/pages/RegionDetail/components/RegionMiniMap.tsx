@@ -4,13 +4,30 @@
  *  - 단지 핀 클릭 → onSelectComplex
  *  - 선택된 단지는 강조 (size up + brand 색)
  *
- *  ※ 행정동 폴리곤 오버레이는 의도적으로 생략 (Depth 2 에서 이미 봤음 — 시선 분산 방지)
- *  ※ Choropleth 가 필요해질 경우 useChoroplethLayer 재사용 가능
+ *  ※ 선택 지역(현재 보는 동) 경계 폴리곤을 옅게 강조 — "내가 어디를 보는지" 시각화.
+ *    추천은 법정동 코드이고 GeoJSON 은 행정동이라 Depth 2(MapPanel)와 동일하게
+ *    centroid 최근접 행정동 폴리곤에 매핑. useChoroplethLayer(includeCodes 단일) 재사용.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useKakaoLoader } from '../../../hooks/useKakaoLoader';
+import { useChoroplethLayer } from '../../Recommendation/hooks/useChoroplethLayer';
 import type { AptComplex } from '../../../types/region-detail';
 import type { RegionRecommendation, Workplace } from '../../../types/recommendation';
+
+// 수도권 행정동 GeoJSON / centroid — Depth 2(MapPanel)와 동일 자산 재사용.
+const GEOJSON_URL = '/data/capital-hjd-simplified.geojson';
+const CENTROIDS_URL = '/data/capital-centroids.json';
+
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
 
 interface Props {
   region: RegionRecommendation;
@@ -61,6 +78,46 @@ export function RegionMiniMap({
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [mapInstance]);
+
+  // 선택 지역(법정동) → 최근접 행정동 코드 매핑 — 경계 폴리곤 강조용 (Depth 2 와 동일 규약)
+  const [admCode, setAdmCode] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(CENTROIDS_URL)
+      .then((r) => r.json() as Promise<Array<{ code: string; lat: number; lng: number }>>)
+      .then((centroids) => {
+        if (cancelled) return;
+        let best = '';
+        let bestKm = Infinity;
+        for (const c of centroids) {
+          const km = haversineKm(region.lat, region.lng, c.lat, c.lng);
+          if (km < bestKm) { bestKm = km; best = c.code; }
+        }
+        setAdmCode(best || null);
+      })
+      .catch((e) => console.error('[miniMap] centroids fetch fail:', e));
+    return () => { cancelled = true; };
+  }, [region.lat, region.lng]);
+
+  const includeCodes = useMemo(
+    () => (admCode ? new Set([admCode]) : new Set<string>()),
+    [admCode],
+  );
+  const colorByCode = useMemo(
+    () => (admCode ? { [admCode]: '#3182F6' } : {}),
+    [admCode],
+  );
+
+  // 선택 동 경계 폴리곤(옅은 brand 채움 + 또렷한 외곽선) — "지금 보는 지역" 시각화
+  useChoroplethLayer(mapInstance, status, GEOJSON_URL, {
+    colorByCode,
+    includeCodes,
+    visible: admCode != null,
+    fillOpacity: 0.1,
+    strokeColor: '#3182F6',
+    strokeWeight: 2.5,
+    defaultFill: '#3182F6',
+  });
 
   // 단지 마커 갱신
   useEffect(() => {

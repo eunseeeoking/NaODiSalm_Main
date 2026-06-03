@@ -486,6 +486,73 @@ async function fetchRentCostByRegion(
 }
 
 /**
+ * KI-18 (Depth 3 동 상세 평가) — 단일 행정동의 매매/전세/월세 시세 구조.
+ *
+ *  ▷ 목적: Depth 3 "동 상세 평가" 패널이 한 동의 3종 거래유형 median 을 한 번에 표시.
+ *  ▷ 재사용: 추천(Depth 2)과 **동일한 median 규약**(KI-8/16 매매·KI-10 반전세 제외·area 9~330
+ *    sanity·cutoff −1년·표본 HAVING≥5)을 그대로 쓰기 위해 `fetchRepresentativePrices`·
+ *    `fetchRentCostByRegion` 을 **단일 동 합성 aggregate**로 호출(전 수도권 스캔 없이 후보 동 1개만).
+ *  ▷ propertyTypes: SALE 은 내부에서 SALE_TRADE_TYPES(APT/OFFI/VILLA)로 자동 필터, 전월세는 선택 종류 풀.
+ *  ▷ 매칭 키: `${sigunguCode}|${dong}` — 두 함수와 동일 규약.
+ */
+export interface DongPriceStructure {
+  /** 매매 median (만원). 표본 부족/매매 거래 없음(SH) → null */
+  sale: { medianManwon: number } | null;
+  /** 전세: 보증금(=전세금) median + 표본. 표본<5 → null */
+  jeonse: { depositMedianManwon: number; sampleCount: number } | null;
+  /** 월세: 보증금 median + 순수 월세 median + 표본(반전세 제외). 표본<5 → null */
+  monthly: {
+    depositMedianManwon: number;
+    pureMonthlyMedianManwon: number;
+    sampleCount: number;
+  } | null;
+}
+
+export async function fetchDongPriceStructure(
+  sigunguCode: string,
+  dong: string,
+  propertyTypes: readonly PropertyType[],
+): Promise<DongPriceStructure> {
+  // 합성 단일 동 aggregate — 두 함수는 (sigungu_code, legal_dong) 튜플 IN 필터만 사용하므로
+  //  centroid/legalDongCode/complexCount 는 더미여도 무방.
+  const agg: RegionAggregate = {
+    legalDongCode: `${sigunguCode}-${dong}`,
+    sigunguCode,
+    sigungu: '',
+    dong,
+    centroidLat: 0,
+    centroidLng: 0,
+    complexCount: 0,
+  };
+  const aggs = [agg];
+  const key = `${sigunguCode}|${dong}`;
+
+  const [priceMap, jeonseMap, monthlyMap] = await Promise.all([
+    fetchRepresentativePrices(aggs, propertyTypes),
+    fetchRentCostByRegion(aggs, 'JEONSE', propertyTypes),
+    fetchRentCostByRegion(aggs, 'MONTHLY', propertyTypes),
+  ]);
+
+  const saleMedian = priceMap.get(key);
+  const jeonse = jeonseMap.get(key);
+  const monthly = monthlyMap.get(key);
+
+  return {
+    sale: saleMedian && saleMedian > 0 ? { medianManwon: saleMedian } : null,
+    jeonse: jeonse
+      ? { depositMedianManwon: jeonse.depositManwon, sampleCount: jeonse.sampleCount }
+      : null,
+    monthly: monthly
+      ? {
+          depositMedianManwon: monthly.depositManwon,
+          pureMonthlyMedianManwon: monthly.monthlyRentManwon,
+          sampleCount: monthly.sampleCount,
+        }
+      : null,
+  };
+}
+
+/**
  * 3단계 — 후보 행정동의 3년 누적 수익률 (t_training_result)
  *  - 행정동 집계 row (complex_id=NULL) 우선
  *  - 없으면 단지 row 들 (complex_id NOT NULL) 의 평균

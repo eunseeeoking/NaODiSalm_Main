@@ -372,10 +372,15 @@ export function MapPanel() {
       {isLoading && workplace && status === 'ready' && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 6 }}>
           <div className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-elevated/95 dark:bg-surface-dark-elevated/95 border border-line-light dark:border-line-dark rounded-cardlg shadow-card-hover">
-            <span
-              className="w-4 h-4 rounded-full border-2 border-brand/30 border-t-brand animate-spin"
+            {/* 또렷한 SVG 호 스피너 — 기존 흐린 CSS 링은 다크 패널에서 빈 공간처럼 보였음 */}
+            <svg
+              className="animate-spin shrink-0 text-brand"
+              width="18" height="18" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2.5"
               aria-hidden="true"
-            />
+            >
+              <path d="M21 12a9 9 0 1 1-6.22-8.56" strokeLinecap="round" />
+            </svg>
             <span className="text-sm font-semibold text-ink-secondary dark:text-ink-secondary-dark">
               추천 지역 조회 중…
             </span>

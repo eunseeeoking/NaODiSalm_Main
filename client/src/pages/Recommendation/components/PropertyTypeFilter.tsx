@@ -6,8 +6,8 @@
  *          사용자가 실제로 찾는 종류만 골라 affordability 를 산출하도록 분리.
  *  ▷ 동작: 선택 종류가 fetchRecommendations 요청의 propertyTypes 로 전달되어
  *          서버가 해당 풀만 집계 → 동 시세·부담 점수 재계산 → 카드 재정렬.
- *  ▷ 제약: 최소 1개 유지(마지막 칩 해제 불가). 거래유형이 '매매'면 매매가 기준이라
- *          이 필터는 영향이 없어 비활성(흐리게) 처리.
+ *  ▷ 제약: 최소 1개 유지(마지막 칩 해제 불가). 거래유형이 '매매'면 매매=아파트 전제로
+ *          아파트 단일 고정(store 가 ['APT'] 로 픽스) → 칩 비활성. 전월세 복귀 시 직전 선택 복원.
  *
  *  멀티선택 칩 — DealTypeToggle 과 톤 일치.
  */
@@ -23,12 +23,12 @@ export function PropertyTypeFilter({ bare = false }: { bare?: boolean }) {
   const propertyTypes = useRecommendationStore((s) => s.propertyTypes);
   const togglePropertyType = useRecommendationStore((s) => s.togglePropertyType);
 
-  // 매매는 매매가 기준 → 매물종류 풀 집계와 무관하므로 비활성
+  // 매매는 아파트 단지 기준(매매 시세·Depth 3 단지 전망) → 아파트로 자동 고정, 칩 비활성
   const disabled = dealType === 'SALE';
 
   const badge = (
     <span className="text-xs text-ink-tertiary dark:text-ink-tertiary-dark">
-      {disabled ? '매매가 기준 (해당 없음)' : '복수 선택'}
+      {disabled ? '아파트 고정' : '복수 선택'}
     </span>
   );
 
