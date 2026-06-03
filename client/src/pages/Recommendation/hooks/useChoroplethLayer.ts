@@ -40,6 +40,12 @@ interface FeatureCollection {
 interface ChoroplethOptions {
   /** 행정동 코드 → fill 색상 (예: { "1168051000": "#3182F6" }) */
   colorByCode: Record<string, string>;
+  /**
+   * 렌더 대상 코드 화이트리스트 (선택).
+   *  - 지정 시 이 집합에 든 행정동 폴리곤만 그림 (예: 추천 8곳만 강조).
+   *  - 미지정(undefined) 시 전체 feature 렌더(기존 동작).
+   */
+  includeCodes?: Set<string>;
   /** 폴리곤 호버 시 호출 (null 이면 leave) */
   onHover?: (code: string | null) => void;
   /** 폴리곤 클릭 시 호출 */
@@ -118,6 +124,8 @@ export function useChoroplethLayer(
 
     for (const feature of geojsonRef.current.features) {
       const code = extractCode(feature.properties);
+      // 화이트리스트 지정 시 대상 코드만 렌더 (추천 지역만 강조)
+      if (options.includeCodes && !options.includeCodes.has(code)) continue;
       const paths = geomToKakaoPaths(feature.geometry, k);
       const fillColor =
         options.colorByCode[code] ?? options.defaultFill ?? '#E5E8EB';
@@ -162,6 +170,7 @@ export function useChoroplethLayer(
     options.strokeColor,
     options.strokeWeight,
     options.defaultFill,
+    options.includeCodes, // 추천 코드 집합 변경 시 폴리곤 재생성 (caller 가 useMemo 로 안정화)
   ]);
 
   // ── 3) 색상만 변경 (인내심 슬라이더 등) ────────────────────

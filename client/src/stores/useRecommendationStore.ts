@@ -63,6 +63,13 @@ interface RecommendationState {
   /** 추천 결과 (서버 응답 또는 mock) */
   recommendations: RegionRecommendation[];
   /**
+   * 추천 top-8 ODsay 정밀 통근시간(분) — legalDongCode → transitMinutes.
+   *  - Depth 2 에서 추천 8곳만 ODsay 호출(쿼터 절약) → 지도 폴리곤 색 + 카드 통근 표시에 사용.
+   *  - 랭킹/총점은 서버 Haversine 그대로(일관성). 이 값은 "표시·색 정밀화"용.
+   *  - 새 추천 수신 시 초기화({}) 후 재조회로 채움.
+   */
+  commuteOverrides: Record<string, number>;
+  /**
    * 추천 결과의 출처
    *  - 'api'  실 서버 응답
    *  - 'mock' mock 폴백 (DEMO 뱃지 노출)
@@ -97,6 +104,14 @@ interface RecommendationState {
   /** 월 소득 실제 입력값(만원) 설정. null = 직접입력 해제. */
   setIncomeManwon: (manwon: number | null) => void;
   setHovered: (regionCode: string | null) => void;
+  /** 추천 top-8 ODsay 정밀 통근시간 맵 설정 (지도·카드 공유) */
+  setCommuteOverrides: (overrides: Record<string, number>) => void;
+  /** 지도 핀 클릭 등으로 "고정 포커스"된 행정동(카드 스크롤·강조 트리거). hover 와 별개. */
+  focusedRegion: string | null;
+  /** focusedRegion 갱신 카운터 — 같은 핀 재클릭에도 카드 flash 재발화하게 */
+  focusTick: number;
+  /** 핀 클릭 등으로 카드 포커스(스크롤+강조). 같은 코드 재호출도 tick 증가로 재발화. */
+  setFocused: (regionCode: string | null) => void;
   /** 추천 조회 진행 상태 설정 */
   setLoading: (loading: boolean) => void;
   setRecommendations: (
@@ -119,7 +134,10 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
   incomeQuintile: null,
   incomeManwon: null,
   hoveredRegion: null,
+  focusedRegion: null,
+  focusTick: 0,
   recommendations: [],
+  commuteOverrides: {},
   dataSource: null,
   budgetFilteredCount: 0,
   isLoading: false,
@@ -147,12 +165,17 @@ export const useRecommendationStore = create<RecommendationState>((set) => ({
   setIncomeQuintile: (q) => set({ incomeQuintile: q }),
   setIncomeManwon: (manwon) => set({ incomeManwon: manwon }),
   setHovered: (regionCode) => set({ hoveredRegion: regionCode }),
+  setCommuteOverrides: (overrides) => set({ commuteOverrides: overrides }),
+  setFocused: (regionCode) =>
+    set((state) => ({ focusedRegion: regionCode, focusTick: state.focusTick + 1 })),
   setLoading: (loading) => set({ isLoading: loading }),
   setRecommendations: (recs, source = null, meta = null) =>
     set({
       recommendations: recs,
       dataSource: source,
       budgetFilteredCount: meta?.budgetFilteredCount ?? 0,
+      // 새 추천 → 이전 ODsay 통근 오버라이드 폐기(스테일 방지). MapPanel 이 top-8 재조회.
+      commuteOverrides: {},
       // 결과가 들어오면 로딩 종료 (성공 경로)
       isLoading: false,
     }),

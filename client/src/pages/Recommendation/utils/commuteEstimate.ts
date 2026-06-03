@@ -33,15 +33,15 @@ export function estimateCommuteMinutes(km: number): number {
 }
 
 /**
- * 통근시간 → 히트맵 색상 (토스 commute ramp)
- *  · patience 를 초과하면 회색 (out of range)
- *  · 그 외에는 5단계 분위 (20/30/45/60분)
+ * 통근시간 → 신호등 tier 색상 (초록→노랑→빨강)
+ *  · 추천 지역 폴리곤 전용. 시간대가 짧을수록 초록, 길수록 빨강으로 직관 표현.
+ *  · 배경(직장 주변 전체) 히트맵은 제거됨 — 추천 8곳만 강조(ODsay 정밀화는 Depth 3).
+ *  · 분위 경계는 범례(20/30/45/60분)와 일치.
  */
-export function pickHeatmapColor(minutes: number, patience: number): string {
-  if (minutes > patience) return '#E5E8EB';        // out of patience → 회색
-  if (minutes <= 20) return '#3182F6';             // commute-fastest
-  if (minutes <= 30) return '#5B9BFF';             // commute-fast
-  if (minutes <= 45) return '#85B7FF';             // commute-medium
-  if (minutes <= 60) return '#B5D4FF';             // commute-slow
-  return '#E1EEFF';                                 // commute-slowest
+export function pickCommuteTierColor(minutes: number): string {
+  if (minutes <= 20) return '#16A34A';   // green-600  — 20분 이내
+  if (minutes <= 30) return '#65A30D';   // lime-600   — 30분
+  if (minutes <= 45) return '#EAB308';   // yellow-500 — 45분
+  if (minutes <= 60) return '#F97316';   // orange-500 — 60분
+  return '#EF4444';                       // red-500    — 60분+
 }

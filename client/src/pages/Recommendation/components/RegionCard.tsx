@@ -7,6 +7,7 @@
  *  - 2위 이하: 컴팩트, 호버 시 살짝 lift
  *  - 호버 시 hoveredRegion 스토어 갱신 → 지도 핀 강조 연동
  */
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { InfoTooltip } from '../../../components/InfoTooltip';
@@ -68,8 +69,30 @@ export function RegionCard({ region, rank }: Props) {
   const hoveredRegion = useRecommendationStore((s) => s.hoveredRegion);
   const setHovered = useRecommendationStore((s) => s.setHovered);
   const dealType = useRecommendationStore((s) => s.dealType);
+  // 통근시간: top-8 ODsay 실측(commuteOverrides) 우선, 없으면 서버 Haversine 추정.
+  const commuteMin = useRecommendationStore(
+    (s) => s.commuteOverrides[region.legalDongCode],
+  );
+  const isPreciseCommute = commuteMin != null;
+  const displayCommute = commuteMin ?? region.commuteMinutes;
+  const focusedRegion = useRecommendationStore((s) => s.focusedRegion);
+  const focusTick = useRecommendationStore((s) => s.focusTick);
   const isHovered = hoveredRegion === region.legalDongCode;
   const isTop = rank === 1;
+
+  // 지도 핀 클릭 → 해당 카드로 스크롤 + 잠깐 flash (모바일: 핀 탭 후 카드 위치 안내)
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [flashing, setFlashing] = useState(false);
+  const isFocused = focusedRegion === region.legalDongCode;
+  useEffect(() => {
+    if (!isFocused) return;
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setFlashing(true);
+    const t = window.setTimeout(() => setFlashing(false), 1100);
+    return () => window.clearTimeout(t);
+    // focusTick 으로 같은 핀 재클릭에도 재발화
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTick]);
 
   // 2026-05-30: 전월세 거래유형 + 실거래 시세가 있으면 "전세/월세 월부담", 아니면 기존 "가격(매매가)".
   const isRentBasis =
@@ -103,6 +126,7 @@ export function RegionCard({ region, rank }: Props) {
 
   return (
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
       onMouseEnter={() => setHovered(region.legalDongCode)}
@@ -114,7 +138,7 @@ export function RegionCard({ region, rank }: Props) {
           goToDetail();
         }
       }}
-      className={`${base} ${color}`}
+      className={`${base} ${color} ${flashing ? 'card-flash' : ''}`}
       aria-label={`${region.displayName} 상세 페이지로 이동`}
     >
       {/* 순위 + 지역명 + LH 배지 */}
@@ -173,10 +197,10 @@ export function RegionCard({ region, rank }: Props) {
 
           {/* 메트릭 3개 (청년 컨셉: 통근 / 가격 / 주거비 부담) */}
           <div className="flex gap-4 text-sm text-ink-secondary dark:text-ink-secondary-dark mb-3.5 tabular-nums flex-wrap">
-            <span>
+            <span title={isPreciseCommute ? 'ODsay 실측 대중교통 통근시간' : '직선거리 기반 추정 통근시간'}>
               <span className="text-ink-tertiary dark:text-ink-tertiary-dark mr-1">통근</span>
               <span className="font-semibold text-ink-primary dark:text-ink-primary-dark">
-                {region.commuteMinutes}분
+                {displayCommute}분{isPreciseCommute ? '' : '~'}
               </span>
             </span>
             <span>
@@ -244,9 +268,9 @@ export function RegionCard({ region, rank }: Props) {
             </span>
           </div>
           <div className="flex gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark tabular-nums flex-wrap">
-            <span>
+            <span title={isPreciseCommute ? 'ODsay 실측 대중교통 통근시간' : '직선거리 기반 추정 통근시간'}>
               <span className="text-ink-tertiary dark:text-ink-tertiary-dark">통근</span>{' '}
-              {region.commuteMinutes}분
+              {displayCommute}분{isPreciseCommute ? '' : '~'}
             </span>
             <span>
               <span className="text-ink-tertiary dark:text-ink-tertiary-dark">{priceLabel}</span>{' '}

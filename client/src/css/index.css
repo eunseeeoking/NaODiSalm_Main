@@ -104,6 +104,16 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* ─── 지도 핀 클릭 → 카드 포커스 flash (모바일 UX) ─── */
+@keyframes card-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(49, 130, 246, 0); }
+  18%  { box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.55); }
+  100% { box-shadow: 0 0 0 0 rgba(49, 130, 246, 0); }
+}
+.card-flash {
+  animation: card-flash 1.05s ease-out;
+}
+
 /**
  *  ⚠️ tailwind.config.ts 에 `corePlugins.preflight = false` 가 설정되어 있어
  *     브라우저 기본 user-agent 스타일(특히 button 의 2px outset gray border)이
