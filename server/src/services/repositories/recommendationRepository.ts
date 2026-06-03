@@ -227,12 +227,79 @@ async function cachedCutoff(key: string, compute: () => Promise<Date | null>): P
   return value;
 }
 
+// KI-21: 전체 면적 호출 식별용 공유 상수(참조 동일성). 면적대별(Depth3)은 별도 Sql 을 주입하므로
+//  `areaFilter === FULL_AREA_FILTER` 로 "전체 면적 추천/시세 구조 경로"만 사전집계 summary 를 태운다.
+const FULL_AREA_FILTER = Prisma.sql`p.area_m2 BETWEEN 9 AND 330`;
+
+/** 동 시세 summary 튜플 필터 — (sigungu_code, dong) IN ((..),(..)). */
+function summaryTupleFilter(aggs: RegionAggregate[]): Prisma.Sql {
+  return Prisma.sql`(sigungu_code, dong) IN (${Prisma.join(
+    aggs.map((a) => Prisma.sql`(${a.sigunguCode}, ${a.dong})`),
+    ', ',
+  )})`;
+}
+
+/**
+ * KI-21(2026-06-04) — 매매 사전집계 조회(`t_dong_price_summary`). worst-case raw median 재계산 대체.
+ *  미적재 동은 맵에 없음 → 호출부가 해당 동만 live 폴백(정합 유지). typeKey = 정렬 조합(시드와 동일).
+ */
+async function fetchSaleSummary(
+  aggs: RegionAggregate[],
+  tradeTypes: readonly PropertyType[],
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (aggs.length === 0 || tradeTypes.length === 0) return map;
+  const typeKey = [...tradeTypes].sort().join('+');
+  const rows = await prisma
+    .$queryRaw<{ sigungu_code: string; dong: string; sale_median: number | null }[]>(Prisma.sql`
+      SELECT sigungu_code, dong, sale_median FROM t_dong_price_summary
+      WHERE deal_type = 'SALE' AND type_key = ${typeKey} AND ${summaryTupleFilter(aggs)}
+    `)
+    .catch(() => [] as { sigungu_code: string; dong: string; sale_median: number | null }[]);
+  for (const r of rows) {
+    const v = Number(r.sale_median ?? 0);
+    if (v > 0) map.set(`${r.sigungu_code}|${r.dong}`, Math.round(v));
+  }
+  return map;
+}
+
+/** KI-21 — 전월세 사전집계 조회. JEONSE 는 cost=deposit×RATE(시드 저장), monthly=0. */
+async function fetchRentSummary(
+  aggs: RegionAggregate[],
+  dealType: DealType,
+  propertyTypes: readonly PropertyType[],
+): Promise<Map<string, RentStat>> {
+  const map = new Map<string, RentStat>();
+  if (aggs.length === 0 || propertyTypes.length === 0) return map;
+  const typeKey = [...propertyTypes].sort().join('+');
+  type Row = { sigungu_code: string; dong: string; cost_median: number | null; deposit_median: number | null; monthly_median: number | null; sample_count: number };
+  const rows = await prisma
+    .$queryRaw<Row[]>(Prisma.sql`
+      SELECT sigungu_code, dong, cost_median, deposit_median, monthly_median, sample_count
+      FROM t_dong_price_summary
+      WHERE deal_type = ${dealType} AND type_key = ${typeKey} AND ${summaryTupleFilter(aggs)}
+    `)
+    .catch(() => [] as Row[]);
+  for (const r of rows) {
+    const cost = Number(r.cost_median ?? 0);
+    if (cost > 0) {
+      map.set(`${r.sigungu_code}|${r.dong}`, {
+        monthlyCost: Math.round(cost * 100) / 100,
+        depositManwon: Math.round(Number(r.deposit_median ?? 0)),
+        monthlyRentManwon: Math.round(Number(r.monthly_median ?? 0)),
+        sampleCount: Number(r.sample_count),
+      });
+    }
+  }
+  return map;
+}
+
 async function fetchRepresentativePrices(
   aggregates: RegionAggregate[],
   propertyTypes: readonly PropertyType[],
   // 면적 필터(KI-18 P2 면적대별). 기본 = 전체 면적 9~330 sanity(KI-16, 기존과 동일 = 핫패스 무변경).
   //  Depth 3 면적대별 호출만 반개구간 밴드(`>= lo AND < hi`)를 주입해 동일 median 규약 재사용.
-  areaFilter: Prisma.Sql = Prisma.sql`p.area_m2 BETWEEN 9 AND 330`,
+  areaFilter: Prisma.Sql = FULL_AREA_FILTER,
 ): Promise<Map<string, number>> {
   if (aggregates.length === 0) return new Map();
 
@@ -240,8 +307,18 @@ async function fetchRepresentativePrices(
   const tradeTypes = propertyTypes.filter((t) => SALE_TRADE_TYPES.includes(t));
   if (tradeTypes.length === 0) return new Map();
 
+  // KI-21: 전체 면적 경로는 사전집계 summary 우선 → 미적재 동만 live 재계산(정합 유지·서브초).
+  const map = new Map<string, number>();
+  let liveAggs = aggregates;
+  if (areaFilter === FULL_AREA_FILTER) {
+    const summ = await fetchSaleSummary(aggregates, tradeTypes);
+    for (const [k, v] of summ) map.set(k, v);
+    liveAggs = aggregates.filter((a) => !map.has(`${a.sigunguCode}|${a.dong}`));
+    if (liveAggs.length === 0) return map;
+  }
+
   // 최신 거래일 조회 (apt 기준 — 가장 크고 최신인 데이터셋. cutoff 없으면 전체 fallback).
-  //  ⚡ MAX(deal_date)는 인덱스 미사용 풀스캔이라 캐시(10분)로 매 요청 반복 제거(KI-21 후속).
+  //  ⚡ MAX(deal_date)는 인덱스 미사용 풀스캔이라 캐시(10분)로 매 요청 반복 제거(KI-21).
   const cutoff = await cachedCutoff('apt_trade_deal', async () => {
     const latest = await prisma.aptTrade.aggregate({ _max: { dealDate: true } });
     if (!latest._max.dealDate) return null;
@@ -253,8 +330,8 @@ async function fetchRepresentativePrices(
   type PriceRow = { sigungu_code: string; legal_dong: string; median_price: number | null };
 
   // 선택 종류 trade×complex 풀링. 전체 면적(9~330 sanity) + 동별 median (KI-16/KI-8).
-  //  후보 동 필터로 complex 스캔 한정(성능, KI-21 후속).
-  const dongFilter = dongTupleFilter(aggregates);
+  //  후보 동 필터로 complex 스캔 한정(성능). KI-21: live 폴백은 미적재 동(liveAggs)만.
+  const dongFilter = dongTupleFilter(liveAggs);
   const tradeUnion = Prisma.join(
     tradeTypes.map((t) => tradeSource(t, dongFilter)),
     ' UNION ALL ',
@@ -287,7 +364,7 @@ async function fetchRepresentativePrices(
     return [] as PriceRow[];
   });
 
-  const map = new Map<string, number>();
+  // live 결과를 summary 맵에 병합(미적재 동 보강).
   for (const r of rows) {
     const median = Number(r.median_price ?? 0);
     if (median > 0) map.set(`${r.sigungu_code}|${r.legal_dong}`, Math.round(median));
@@ -352,11 +429,20 @@ async function fetchRentCostByRegion(
   dealType: DealType,
   propertyTypes: readonly PropertyType[],
   // 면적 필터(KI-18 P2). 기본 = 전체 9~330(기존과 동일, 핫패스 무변경). 면적대별만 반개구간 밴드 주입.
-  areaFilter: Prisma.Sql = Prisma.sql`p.area_m2 BETWEEN 9 AND 330`,
+  areaFilter: Prisma.Sql = FULL_AREA_FILTER,
 ): Promise<Map<string, RentStat>> {
   const map = new Map<string, RentStat>();
   if (dealType === 'SALE' || aggregates.length === 0 || propertyTypes.length === 0) {
     return map;
+  }
+
+  // KI-21: 전체 면적 경로는 사전집계 summary 우선 → 미적재 동만 live 재계산.
+  let liveAggs = aggregates;
+  if (areaFilter === FULL_AREA_FILTER) {
+    const summ = await fetchRentSummary(aggregates, dealType, propertyTypes);
+    for (const [k, v] of summ) map.set(k, v);
+    liveAggs = aggregates.filter((a) => !map.has(`${a.sigunguCode}|${a.dong}`));
+    if (liveAggs.length === 0) return map;
   }
 
   const isJeonse = dealType === 'JEONSE';
@@ -373,8 +459,8 @@ async function fetchRentCostByRegion(
     return c;
   });
 
-  // 선택된 매물종류만 동적 UNION ALL — 후보 동 필터로 complex 스캔 한정(성능, KI-21 후속)
-  const dongFilter = dongTupleFilter(aggregates);
+  // 선택된 매물종류만 동적 UNION ALL — 후보 동 필터로 complex 스캔 한정(성능). KI-21: live 폴백은 미적재 동만.
+  const dongFilter = dongTupleFilter(liveAggs);
   const unioned = Prisma.join(
     propertyTypes.map((t) => rentSource(t, contractType, dongFilter)),
     ' UNION ALL ',

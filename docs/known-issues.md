@@ -236,8 +236,16 @@
   rent 풀스캔 회피) ③ **JEONSE 단일정렬**(cost=deposit×RATE 단조 → 정렬 3→1, cost는 JS 환산) ④ **cutoff MAX 10분 캐시**
   (`cachedCutoff`) ⑤ **raw_payload 컬럼 DROP**(행 축소, 별도 archive 후). + DB `connection_limit=10`.
   → cold 7s → **warm ~2.7s**(patience 75=서울 전체 worst-case; 현실 patience 는 후보 적어 더 빠름).
-- **잔여(서브초 (필요 시))**: worst-case 는 매 요청 "raw 거래 median 재계산"이 본질 한계 → 쿼리 튜닝으로는 ~2.7s 가 바닥.
-  **동별 (dealType×매물종류) median 을 배치 summary 테이블로 사전집계**(POI/safety 패턴) → 런타임 조회 ~10ms 가 유일한 근본 해법. (미착수)
+- **✅ 서브초화 완료(2026-06-04) — 사전집계 summary**: `t_dong_price_summary`(신규) 에 **동 × 거래유형 × 매물종류조합**
+  별 median·표본을 배치 사전집계 → 런타임은 인덱스 조회. **worst-case 2.7s → ~0.42s warm(~6배↑)**, 결과는 live 와 동일.
+  - **조합 처리(median 합산 불가 해결)**: 전 조합(JEONSE/MONTHLY 각 15 + SALE 7) 사전집계 → 임의 매물종류 선택도 정확 조회.
+    `fetchDongPriceSummary` seed 가 동별 raw 거래 1스캔 후 JS 로 조합 median 계산(SQL 윈도우 규약 1:1). **41,214행/2,344동**.
+  - **런타임**: `fetchRepresentativePrices`/`fetchRentCostByRegion` 가 **전체 면적 경로만**(`areaFilter===FULL_AREA_FILTER`)
+    summary 우선 조회(`fetchSaleSummary`/`fetchRentSummary`) → **미적재 동만 live 폴백**(정합·견고). 면적대별(KI-18 P2)은 live 유지.
+  - **규약 정합**: median/cutoff(−1년)/area 9~330/반전세 제외/HAVING≥5 모두 기존과 동일. JEONSE cost=deposit×RATE 저장.
+  - **재시드 조건**: cutoff(최신거래일) 갱신 또는 환산율(RATE, KI-14) 변경 시 `npm run seed:price-summary` 재실행
+    (`prisma db push` 로 테이블 생성 선행). cost_median(MONTHLY)이 RATE 의존.
+  - **검증**: 강남역 JEONSE/SALE/MONTHLY patience75 전부 서브초 + 결과 동일(쌍림동 96/표본7·석촌동 91/849 등 live 일치). 브라우저 E2E OK.
 
 ### KI-22 · 통근 게이트가 인내심에 비해 너무 헐거움 (인내심 45분인데 89분 매물 노출) 🟢 해결 (2026-06-03)
 - **증상**: 인내심(patience) 45분으로 조회했는데 결과 5~8위에 **commuteMinutes 60·69·75·89분** 지역이 뜸.

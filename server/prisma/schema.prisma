@@ -467,6 +467,29 @@ model PoiSummary {
   @@map("t_poi_summary")
 }
 
+/// 행정동 시세 사전집계 (KI-21, 2026-06-04) — 추천 서브초화.
+///  - 동 × 거래유형 × 매물종류조합 별 median·표본을 배치 사전집계 → 런타임 인덱스 조회(~10ms, 기존 raw median 재계산 2.7s 대체).
+///  - median 규약은 fetchRepresentativePrices/fetchRentCostByRegion 와 동일(KI-8/10/16: area 9~330·cutoff −1년·반전세 제외·HAVING≥5).
+///  - typeKey = 정렬된 매물종류 조합(예: "APT", "APT+OFFI", "APT+OFFI+SH+VILLA"). SALE 은 APT/OFFI/VILLA 조합만.
+///  - cost_median(MONTHLY)은 환산율(KI-14) 의존 → RATE 변경 시 재시드. 배치: npm run seed:price-summary (cutoff 갱신 시 주기 재실행).
+model DongPriceSummary {
+  id            Int      @id @default(autoincrement())
+  sigunguCode   String   @map("sigungu_code") @db.VarChar(5)
+  dong          String   @db.VarChar(60)
+  dealType      String   @map("deal_type") @db.VarChar(8)   /// SALE | JEONSE | MONTHLY
+  typeKey       String   @map("type_key") @db.VarChar(24)   /// 정렬 조합 키 (예: APT+OFFI+VILLA)
+  saleMedian    Int?     @map("sale_median")                /// SALE: 매매가 median (만원)
+  costMedian    Float?   @map("cost_median")                /// 환산 월주거비 median (만원) — affordability RIR 분자
+  depositMedian Int?     @map("deposit_median")             /// 보증금 median (만원)
+  monthlyMedian Int?     @map("monthly_median")             /// 순수 월세 median (만원) — MONTHLY
+  sampleCount   Int      @default(0) @map("sample_count")
+  computedAt    DateTime @default(now()) @map("computed_at")
+
+  @@unique([sigunguCode, dong, dealType, typeKey], map: "uniq_dong_price")
+  @@index([sigunguCode, dong])
+  @@map("t_dong_price_summary")
+}
+
 /// 통계청 가계금융복지조사 — 소득 분위별 평균 월소득 (1회 시드)
 ///  - 사용자 소득 미입력 시 분위별 평균으로 RIR 추정
 model IncomeQuintile {
