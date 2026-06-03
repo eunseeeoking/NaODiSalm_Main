@@ -26,9 +26,9 @@ export interface CommuteEntry {
 
 export interface MatrixResponse {
   cacheKey: string;
-  /** 정확 좌표 일치 (4자리 동일) */
+  /** 같은 좌표 버킷 일치 (3자리 동일 ≈110m) */
   cacheHit: number;
-  /** 인접 격자에서 KNN 흡수 (33m 이내 가까운 캐시 재사용) */
+  /** 인접 격자에서 KNN 흡수 (≈330m 이내 가까운 캐시 재사용) */
   cacheNearby: number;
   /** 신규 ODsay 호출한 항목 수 */
   cacheMiss: number;

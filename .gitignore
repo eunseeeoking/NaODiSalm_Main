@@ -44,3 +44,9 @@ coverage/
 server/data/legal_dong_codes.txt
 server/data/*.csv
 server/data/*.zip
+
+# Ingest 체크포인트 (런타임 산출물 — 재실행 시 자동 생성)
+server/reports/
+
+# raw_payload 콜드 아카이브 (대용량 JSONL.gz — 로컬 보관)
+server/archive/

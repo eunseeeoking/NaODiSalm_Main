@@ -104,19 +104,27 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* ─── 지도 핀 클릭 → 카드 포커스 flash (모바일 UX) ─── */
+@keyframes card-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(49, 130, 246, 0); }
+  18%  { box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.55); }
+  100% { box-shadow: 0 0 0 0 rgba(49, 130, 246, 0); }
+}
+.card-flash {
+  animation: card-flash 1.05s ease-out;
+}
+
 /**
- *  ⚠️ tailwind.config.ts 에 `corePlugins.preflight = false` 가 설정되어 있어
- *     브라우저 기본 user-agent 스타일(특히 button 의 2px outset gray border)이
- *     그대로 노출됨.
- *
- *  → button 의 보더·배경을 글로벌 리셋해서, Tailwind utility(`border-*`, `bg-*`)로
- *     명시한 스타일만 보이도록 함. Tailwind utility 가 specificity 동일하지만
- *     선언 순서상 뒤에 들어와 우선 적용됨.
+ *  button 기본값 정리.
+ *  ⚠️ `border: 0` 금지 — preflight ON(KI-24) 이후 모든 요소는 이미 `border-width:0 +
+ *     border-style:solid`(preflight). 여기서 `border:0`(shorthand) 을 다시 주면 `border-style`
+ *     이 none 으로 바뀌고, 이는 요소 선택자(button) 우선순위로 preflight 의 `*{border-style:solid}`
+ *     를 덮어 → 버튼에 `border-2` 등을 줘도 style:none 이라 너비가 0 으로 렌더됨(보더가 안 보임).
+ *     테두리 제거는 preflight 의 border-width:0 이 이미 담당하므로 여기선 손대지 않는다.
  */
 button {
   font: inherit;
   cursor: pointer;
-  border: 0;
   background: none;
   color: inherit;
 }
@@ -224,6 +232,45 @@ input[type='range']::-moz-range-thumb {
   cursor: pointer;
 }
 
+/* ─── 전역 스크롤바 — 얇은 막대 + 상하/좌우 화살표 제거 (사이트 통일) ───
+ *  · 기본 브라우저 스크롤바(16px·화살표 버튼 有)가 일부 세로 스크롤 영역에서 디자인을 깨서 전역 통일.
+ *  · width/height 8px · 트랙 투명 · 썸 라운드 pill · 화살표 버튼 제거.
+ *  · 클래스 규칙(.scroll-x-slider=숨김, .scroll-x-thin=3px)은 specificity 가 더 높아 그대로 우선.
+ *  · 스타일만 지정 — 실제 스크롤바는 overflow 가 넘칠 때만 생성되므로 새 스크롤바가 강제로 생기지 않음.
+ * ─────────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;                      /* Firefox */
+  scrollbar-color: #D1D5DB transparent;       /* Firefox: thumb track */
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-button {                 /* 상하/좌우 화살표 버튼 제거 */
+  display: none;
+  width: 0;
+  height: 0;
+}
+*::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+html.dark * {
+  scrollbar-color: #3A3D47 transparent;
+}
+html.dark *::-webkit-scrollbar-thumb {
+  background: #3A3D47;
+}
+html.dark *::-webkit-scrollbar-thumb:hover {
+  background: #4B5563;
+}
+
 /* ─── 얇은 가로 스크롤바 (.scroll-x-thin) ───────────────────────
  *  · 화살표 버튼 완전 제거
  *  · 높이 3px — 기본 브라우저 스크롤바(16px)보다 훨씬 얇음
@@ -270,23 +317,6 @@ html.dark .scroll-x-thin::-webkit-scrollbar-thumb {
 
 html.dark .scroll-x-thin::-webkit-scrollbar-thumb:hover {
   background: #4B5563;
-}
-
-/* ─── 슬라이더형 가로 스크롤 (.scroll-x-slider) ─────────────────
-   스크롤바를 완전히 숨기고 useDragScroll 훅으로 마우스 드래그/휠 스크롤.
-   소득분위·인기직장·통근범례 등 좌우 칩셋에 사용. */
-.scroll-x-slider {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.scroll-x-slider::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
-}
-.scroll-x-slider.is-dragging {
-  cursor: grabbing;
-  user-select: none;
 }
 
 /* ─── 슬라이더형 가로 스크롤 (.scroll-x-slider) ──────────────────

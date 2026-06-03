@@ -1,3 +1,5 @@
+import { CAPITAL_AREA_LAWD_CODES as CAPITAL } from './capitalAreaLawdCodes.generated';
+
 /**
  * 서울 25 구 법정동 코드 (LAWD_CD, 5자리).
  *  - 국토부 실거래가 API 의 LAWD_CD 파라미터로 사용
@@ -32,3 +34,55 @@ export const SEOUL_LAWD_CODES: ReadonlyArray<{ code: string; name: string }> = [
 ];
 
 export type SigunguCode = (typeof SEOUL_LAWD_CODES)[number]['code'];
+
+/* ────────────────────────────────────────────────────────────────
+ * 수도권(서울·인천·경기) LAWD_CD — 자동 생성 소스에서 파생
+ *
+ *  단일 진실: client/public/data/capital-centroids.json (행정동 universe).
+ *  생성: `npm run gen:lawd` → src/data/capitalAreaLawdCodes.generated.ts
+ *
+ *  손으로 코드를 유지하지 않으므로 행정구역 개편(부천·화성 구 신설 등)
+ *  드리프트가 구조적으로 불가능. 아래 INCHEON/GYEONGGI 는 합본의 sido 필터 뷰.
+ *
+ *  ※ SEOUL_LAWD_CODES(위, 서울 전용 하드코딩)는 REB name→code 맵·LH 시드 등
+ *    서울 전용 경로 호환을 위해 그대로 유지한다(수도권 확장은 합본을 통해서만).
+ * ──────────────────────────────────────────────────────────────── */
+
+export { type LawdEntry, CAPITAL_AREA_LAWD_CODES } from './capitalAreaLawdCodes.generated';
+
+/** 인천광역시 시군구 (합본의 sido='인천광역시' 뷰). */
+export const INCHEON_LAWD_CODES = CAPITAL.filter((e) => e.sido === '인천광역시');
+
+/** 경기도 시군구 (합본의 sido='경기도' 뷰). 구가 있는 시는 구 단위 코드. */
+export const GYEONGGI_LAWD_CODES = CAPITAL.filter((e) => e.sido === '경기도');
+
+/** bulk ingest 등에서 지역 단위로 시군구 코드를 고를 때 쓰는 키. */
+export type LawdRegion = 'seoul' | 'capital' | 'incheon' | 'gyeonggi';
+
+export const LAWD_REGIONS: ReadonlyArray<LawdRegion> = [
+  'seoul',
+  'capital',
+  'incheon',
+  'gyeonggi',
+];
+
+/**
+ * 지역 키 → 시군구 LAWD_CD 배열.
+ *  - 'seoul'    : 서울 25구 (기본·하위호환)
+ *  - 'capital'  : 수도권 전체 82개 (서울+인천+경기)
+ *  - 'incheon'  : 인천 10개
+ *  - 'gyeonggi' : 경기 47개
+ */
+export function lawdCodesByRegion(region: LawdRegion = 'seoul'): string[] {
+  switch (region) {
+    case 'capital':
+      return CAPITAL.map((e) => e.code);
+    case 'incheon':
+      return INCHEON_LAWD_CODES.map((e) => e.code);
+    case 'gyeonggi':
+      return GYEONGGI_LAWD_CODES.map((e) => e.code);
+    case 'seoul':
+    default:
+      return SEOUL_LAWD_CODES.map((s) => s.code);
+  }
+}

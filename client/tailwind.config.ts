@@ -6,8 +6,9 @@ import type { Config } from 'tailwindcss';
  *  ⚠️ darkMode = 'class'
  *      → useThemeStore + App.tsx 가 <html class="dark"> 토글
  *
- *  ⚠️ corePlugins.preflight = false
- *      → 기존 CSS Modules / index.css 와 공존
+ *  ⚠️ corePlugins.preflight = true (2026-06-03 — 디자인이 preflight 전제로 작성됨)
+ *      → 전역 리셋(기본 보더·마진·불릿 제거, box-sizing 통일) ON.
+ *        index.css 의 수동 리셋(button/ul·ol border:0 등)은 이제 일부 중복 — 점진 정리 가능.
  *
  *  ⚠️ 액센트 = 토스 블루 #3182F6 (메인) + 그린 #15B970 (수익률)
  *  ⚠️ 폰트   = Pretendard Variable (한글 가독성 최우선)
@@ -16,7 +17,7 @@ const config: Config = {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   darkMode: 'class',
   corePlugins: {
-    preflight: false,
+    preflight: true, // 전역 리셋 ON — 디자인이 preflight 전제로 작성됨
   },
   theme: {
     extend: {

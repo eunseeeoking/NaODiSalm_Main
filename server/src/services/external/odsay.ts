@@ -292,30 +292,33 @@ export async function fetchKakaoCarRoute(
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * 캐시 키 생성 — 직장 좌표 4자리 반올림
- *   같은 빌딩 다른 층 입력해도 같은 키 → 캐시 hit
- *   4자리 ≈ 11m × 9m 정확도
+ * 캐시 키 생성 — 직장 좌표 3자리 반올림 (2026-06-03: 4→3자리로 격자 확대)
+ *   3자리 ≈ 111m × 88m 버킷 (서울 위도 37°).
+ *   같은 빌딩~인접 블록(≈100m) 직장이 같은 키 → 캐시 hit 으로 흡수.
+ *   ※ 4자리(11m) 시절보다 ~100× 적은 버킷 → 인접 직장 ODsay 재사용 ↑.
+ *     행정동 단위 통근 표시엔 ≤~150m 원점 스냅 오차가 무의미(1~2분 내).
+ *   ⚠️ 기존 4자리 cacheKey 행은 이 조회에 안 잡힘(캐시 재축적). 필요 시 1회 마이그레이션.
  */
 export function makeCacheKey(lat: number, lng: number): string {
-  return `${lat.toFixed(4)}_${lng.toFixed(4)}`;
+  return `${lat.toFixed(3)}_${lng.toFixed(3)}`;
 }
 
 /**
  * 캐시 키 후보 9개 (중심 + 8방향)
  *  - KNN 격자 확장 검색용
- *  - 3×3 격자 ≈ 33m × 27m 범위 (서울 위도 37°)
+ *  - 3×3 격자 ≈ 333m × 264m 범위 (서울 위도 37°, 3자리 기준)
  *
  *  ⚠️ 부동소수 오차 회피
- *      lat * 10000 정수 단계에서 ±1 한 뒤 다시 /10000 → toFixed(4)
+ *      lat * 1000 정수 단계에서 ±1 한 뒤 다시 /1000 → toFixed(3)
  */
 export function makeCacheKeyCandidates(lat: number, lng: number): string[] {
-  const latInt = Math.round(lat * 10000);
-  const lngInt = Math.round(lng * 10000);
+  const latInt = Math.round(lat * 1000);
+  const lngInt = Math.round(lng * 1000);
   const candidates: string[] = [];
   for (const dLat of [-1, 0, 1]) {
     for (const dLng of [-1, 0, 1]) {
-      const a = ((latInt + dLat) / 10000).toFixed(4);
-      const b = ((lngInt + dLng) / 10000).toFixed(4);
+      const a = ((latInt + dLat) / 1000).toFixed(3);
+      const b = ((lngInt + dLng) / 1000).toFixed(3);
       candidates.push(`${a}_${b}`);
     }
   }

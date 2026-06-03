@@ -20,6 +20,14 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../services/db';
+import {
+  fetchDongPriceStructure,
+  fetchDongAreaTierPrices,
+  fetchDongSemiJeonseRatio,
+  type AreaTierPriceRow,
+  type SemiJeonseRatio,
+} from '../../services/repositories/recommendationRepository';
+import { ALL_PROPERTY_TYPES, type PropertyType } from '../../services/recommendation/scoring';
 
 export const regionsRouter = Router();
 
@@ -274,6 +282,191 @@ regionsRouter.get(
     return res.json(result);
   },
 );
+
+// ──────────────────────────────────────────────────────────────
+//  GET /api/regions/:legalDongCode/detail  (KI-18 · Depth 3 "동 상세 평가")
+//
+//  ▷ 목적: 매물종류 무관 공통 코어 — 4축 점수 근거 분해(안전 3종·생활 POI 8종·
+//    교통 품질) + 시세 구조(매매/전세/월세 median·표본). 비아파트(빌라·오피·단독)도
+//    의미 있는 상세를 제공(설계 docs/depth3-design.md §3-A).
+//  ▷ 사용자 입력 무관 객관 데이터만 반환 → 직접 URL 진입·새로고침에도 견고.
+//    가중 4축 점수/totalScore(weights·workplace 의존)는 클라가 store 추천에서 가져옴.
+//  ▷ 쿼리: ?types=APT,OFFI,VILLA,SH (시세 풀 선택. 기본=4종. Depth 2 propertyTypes 정합)
+//  ▷ 미적재 축(safety/life/transit 시드 전, 표본 부족)은 null → 클라가 "추정·미집계" 표기.
+// ──────────────────────────────────────────────────────────────
+
+interface AxisSafety {
+  crimeScore: number;
+  lightScore: number;
+  cctvScore: number;
+  totalScore: number;
+}
+interface AxisLife {
+  subwayCount: number;
+  martCount: number;
+  convenienceCount: number;
+  cafeCount: number;
+  restaurantCount: number;
+  hospitalCount: number;
+  pharmacyCount: number;
+  bankCount: number;
+  lifeScore: number;
+}
+interface AxisTransit {
+  stationCount: number;
+  avgHeadwayMin: number | null;
+  nightAccessible: boolean;
+  firstBusTime: string | null;
+  transitScore: number;
+}
+
+interface RegionDetailDto {
+  legalDongCode: string;
+  sigunguCode: string;
+  dongName: string;
+  /** 시세 풀에 사용된 매물종류 (요청 echo) */
+  propertyTypes: PropertyType[];
+  safety: AxisSafety | null;
+  life: AxisLife | null;
+  transit: AxisTransit | null;
+  price: {
+    sale: { medianManwon: number } | null;
+    jeonse: { depositMedianManwon: number; sampleCount: number } | null;
+    monthly: {
+      depositMedianManwon: number;
+      pureMonthlyMedianManwon: number;
+      sampleCount: number;
+    } | null;
+  };
+  /** 동 내 선택 종류 단지 수 (부가 정보) */
+  complexCount: number;
+  /** 면적대별(소/중/대) 시세 분포 (KI-18 P2 #1+#4) */
+  priceByTier: AreaTierPriceRow[];
+  /** 반전세 비율 (KI-18 P2 #2 · KI-10 후속). 표본<5 → null */
+  semiJeonseRatio: SemiJeonseRatio | null;
+}
+
+/** 매물종류 → complex 테이블명 (고정 화이트리스트 — Prisma.raw 안전) */
+const COMPLEX_TABLE: Record<PropertyType, string> = {
+  APT: 't_apt_complex',
+  OFFI: 't_offi_complex',
+  VILLA: 't_villa_complex',
+  SH: 't_sh_complex',
+};
+
+/** ?types= 파싱 — 화이트리스트 검증, 빈/무효 시 4종 전체. */
+function parsePropertyTypes(raw: unknown): PropertyType[] {
+  if (typeof raw !== 'string' || raw.trim() === '') return [...ALL_PROPERTY_TYPES];
+  const parsed = raw
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter((s): s is PropertyType => (ALL_PROPERTY_TYPES as readonly string[]).includes(s));
+  return parsed.length > 0 ? parsed : [...ALL_PROPERTY_TYPES];
+}
+
+regionsRouter.get(
+  '/:legalDongCode/detail',
+  async (req: Request, res: Response) => {
+    const { legalDongCode } = req.params;
+    if (!/^\d{10}$/.test(legalDongCode)) {
+      return res.status(400).json({ error: 'legalDongCode must be a 10-digit numeric string' });
+    }
+    const propertyTypes = parsePropertyTypes(req.query.types);
+    const sigunguCode = legalDongCode.slice(0, 5);
+
+    // 1) 동 이름 매핑 (complex 시세 매칭은 동 이름 기준)
+    const dongRow = await prisma.legalDong.findFirst({
+      where: { code: legalDongCode, dong: { not: null } },
+      select: { dong: true },
+    });
+    if (!dongRow || !dongRow.dong) {
+      return res.status(404).json({ error: 'Legal dong not found', legalDongCode });
+    }
+    const dongName = dongRow.dong;
+
+    // 2) 4축 분해 — 단일 동이라 findUnique. 테이블 미생성/미적재 시 graceful null.
+    const safe = <T>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
+    const [safetyRow, poiRow, transitRow, priceStructure, complexCount, priceByTier, semiJeonseRatio] = await Promise.all([
+      safe(prisma.safetyIndex.findUnique({ where: { legalDongCode } })),
+      safe(prisma.poiSummary.findUnique({ where: { legalDongCode } })),
+      safe(prisma.transitRouteSummary.findUnique({ where: { legalDongCode } })),
+      fetchDongPriceStructure(sigunguCode, dongName, propertyTypes).catch(() => ({
+        sale: null,
+        jeonse: null,
+        monthly: null,
+      })),
+      fetchDongComplexCount(sigunguCode, dongName, propertyTypes),
+      fetchDongAreaTierPrices(sigunguCode, dongName, propertyTypes).catch(() => [] as AreaTierPriceRow[]),
+      fetchDongSemiJeonseRatio(sigunguCode, dongName, propertyTypes).catch(() => null),
+    ]);
+
+    const dto: RegionDetailDto = {
+      legalDongCode,
+      sigunguCode,
+      dongName,
+      propertyTypes,
+      safety: safetyRow
+        ? {
+            crimeScore: safetyRow.crimeScore,
+            lightScore: safetyRow.lightScore,
+            cctvScore: safetyRow.cctvScore,
+            totalScore: safetyRow.totalScore,
+          }
+        : null,
+      life: poiRow
+        ? {
+            subwayCount: poiRow.subwayCount,
+            martCount: poiRow.martCount,
+            convenienceCount: poiRow.convenienceCount,
+            cafeCount: poiRow.cafeCount,
+            restaurantCount: poiRow.restaurantCount,
+            hospitalCount: poiRow.hospitalCount,
+            pharmacyCount: poiRow.pharmacyCount,
+            bankCount: poiRow.bankCount,
+            lifeScore: poiRow.lifeScore,
+          }
+        : null,
+      transit: transitRow
+        ? {
+            stationCount: transitRow.stationCount,
+            avgHeadwayMin: transitRow.avgHeadwayMin,
+            nightAccessible: transitRow.nightAccessible,
+            firstBusTime: transitRow.firstBusTime,
+            transitScore: transitRow.transitScore,
+          }
+        : null,
+      price: priceStructure,
+      complexCount,
+      priceByTier,
+      semiJeonseRatio,
+    };
+    return res.json(dto);
+  },
+);
+
+/** 동 내 선택 종류 단지 수 — 4종 complex 테이블 UNION ALL count. 실패 시 0. */
+async function fetchDongComplexCount(
+  sigunguCode: string,
+  dongName: string,
+  propertyTypes: readonly PropertyType[],
+): Promise<number> {
+  if (propertyTypes.length === 0) return 0;
+  const sources = Prisma.join(
+    propertyTypes.map(
+      (t) =>
+        Prisma.sql`SELECT id FROM ${Prisma.raw(COMPLEX_TABLE[t])} WHERE sigungu_code = ${sigunguCode} AND legal_dong = ${dongName}`,
+    ),
+    ' UNION ALL ',
+  );
+  try {
+    const rows = await prisma.$queryRaw<{ cnt: bigint }[]>(
+      Prisma.sql`SELECT COUNT(*) AS cnt FROM ( ${sources} ) u`,
+    );
+    return Number(rows[0]?.cnt ?? 0);
+  } catch {
+    return 0;
+  }
+}
 
 /**
  *  GET /api/regions/:legalDongCode/lh-summary

@@ -1,0 +1,140 @@
+{
+  "info": {
+    "name": "NaODiSalm - MOLIT RTMS (2026-05-30 추가분)",
+    "description": "오늘 추가한 국토교통부 실거래가 API.\n오피스텔 / 연립다세대(빌라) / 단독·다가구 × 매매·전월세.\n\n## 사용법\n1) 우상단 Environment 또는 이 컬렉션의 Variables 탭에서 serviceKey 설정\n   - data.go.kr 마이페이지 > 활용신청 상세 > '일반 인증키(Decoding)' 값을 그대로 붙여넣기\n   - Decoding 키를 넣으면 Postman이 자동 URL 인코딩함 (Encoding 키 넣으면 이중 인코딩되어 실패)\n2) lawdCd(시군구 5자리), dealYmd(YYYYMM) 조정\n3) Send. 응답은 XML.\n\n## 403이 나면\n- 해당 API 활용신청이 '승인'이어도 키 반영에 즉시~수 시간 걸릴 수 있음\n- 매매는 되는데 전월세만 403이면 = 전월세 승인 전파 대기 (조금 뒤 재시도)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://apis.data.go.kr/1613000", "type": "string" },
+    { "key": "serviceKey", "value": "여기에_Decoding_인증키_붙여넣기", "type": "string" },
+    { "key": "lawdCd", "value": "11680", "type": "string" },
+    { "key": "dealYmd", "value": "202504", "type": "string" },
+    { "key": "pageNo", "value": "1", "type": "string" },
+    { "key": "numOfRows", "value": "1000", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "오피스텔 (OFFI)",
+      "item": [
+        {
+          "name": "오피스텔 매매 (OffiTrade)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/RTMSDataSvcOffiTrade/getRTMSDataSvcOffiTrade?serviceKey={{serviceKey}}&LAWD_CD={{lawdCd}}&DEAL_YMD={{dealYmd}}&pageNo={{pageNo}}&numOfRows={{numOfRows}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["RTMSDataSvcOffiTrade", "getRTMSDataSvcOffiTrade"],
+              "query": [
+                { "key": "serviceKey", "value": "{{serviceKey}}" },
+                { "key": "LAWD_CD", "value": "{{lawdCd}}" },
+                { "key": "DEAL_YMD", "value": "{{dealYmd}}" },
+                { "key": "pageNo", "value": "{{pageNo}}" },
+                { "key": "numOfRows", "value": "{{numOfRows}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "오피스텔 전월세 (OffiRent)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/RTMSDataSvcOffiRent/getRTMSDataSvcOffiRent?serviceKey={{serviceKey}}&LAWD_CD={{lawdCd}}&DEAL_YMD={{dealYmd}}&pageNo={{pageNo}}&numOfRows={{numOfRows}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["RTMSDataSvcOffiRent", "getRTMSDataSvcOffiRent"],
+              "query": [
+                { "key": "serviceKey", "value": "{{serviceKey}}" },
+                { "key": "LAWD_CD", "value": "{{lawdCd}}" },
+                { "key": "DEAL_YMD", "value": "{{dealYmd}}" },
+                { "key": "pageNo", "value": "{{pageNo}}" },
+                { "key": "numOfRows", "value": "{{numOfRows}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "연립다세대 / 빌라 (VILLA)",
+      "item": [
+        {
+          "name": "연립다세대 매매 (RHTrade)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade?serviceKey={{serviceKey}}&LAWD_CD={{lawdCd}}&DEAL_YMD={{dealYmd}}&pageNo={{pageNo}}&numOfRows={{numOfRows}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["RTMSDataSvcRHTrade", "getRTMSDataSvcRHTrade"],
+              "query": [
+                { "key": "serviceKey", "value": "{{serviceKey}}" },
+                { "key": "LAWD_CD", "value": "{{lawdCd}}" },
+                { "key": "DEAL_YMD", "value": "{{dealYmd}}" },
+                { "key": "pageNo", "value": "{{pageNo}}" },
+                { "key": "numOfRows", "value": "{{numOfRows}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "연립다세대 전월세 (RHRent)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/RTMSDataSvcRHRent/getRTMSDataSvcRHRent?serviceKey={{serviceKey}}&LAWD_CD={{lawdCd}}&DEAL_YMD={{dealYmd}}&pageNo={{pageNo}}&numOfRows={{numOfRows}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["RTMSDataSvcRHRent", "getRTMSDataSvcRHRent"],
+              "query": [
+                { "key": "serviceKey", "value": "{{serviceKey}}" },
+                { "key": "LAWD_CD", "value": "{{lawdCd}}" },
+                { "key": "DEAL_YMD", "value": "{{dealYmd}}" },
+                { "key": "pageNo", "value": "{{pageNo}}" },
+                { "key": "numOfRows", "value": "{{numOfRows}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "단독·다가구 (SH)",
+      "item": [
+        {
+          "name": "단독다가구 매매 (SHTrade)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/RTMSDataSvcSHTrade/getRTMSDataSvcSHTrade?serviceKey={{serviceKey}}&LAWD_CD={{lawdCd}}&DEAL_YMD={{dealYmd}}&pageNo={{pageNo}}&numOfRows={{numOfRows}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["RTMSDataSvcSHTrade", "getRTMSDataSvcSHTrade"],
+              "query": [
+                { "key": "serviceKey", "value": "{{serviceKey}}" },
+                { "key": "LAWD_CD", "value": "{{lawdCd}}" },
+                { "key": "DEAL_YMD", "value": "{{dealYmd}}" },
+                { "key": "pageNo", "value": "{{pageNo}}" },
+                { "key": "numOfRows", "value": "{{numOfRows}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "단독다가구 전월세 (SHRent)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/RTMSDataSvcSHRent/getRTMSDataSvcSHRent?serviceKey={{serviceKey}}&LAWD_CD={{lawdCd}}&DEAL_YMD={{dealYmd}}&pageNo={{pageNo}}&numOfRows={{numOfRows}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["RTMSDataSvcSHRent", "getRTMSDataSvcSHRent"],
+              "query": [
+                { "key": "serviceKey", "value": "{{serviceKey}}" },
+                { "key": "LAWD_CD", "value": "{{lawdCd}}" },
+                { "key": "DEAL_YMD", "value": "{{dealYmd}}" },
+                { "key": "pageNo", "value": "{{pageNo}}" },
+                { "key": "numOfRows", "value": "{{numOfRows}}" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -42,6 +42,14 @@ async function main() {
     safetyIndex,
     incomeQuintile,
     userCount,
+    offiComplex,
+    offiTrade,
+    offiRent,
+    villaComplex,
+    villaTrade,
+    villaRent,
+    shComplex,
+    shRent,
   ] = await Promise.all([
     count('t_apt_complex'),
     count('t_apt_trade'),
@@ -56,6 +64,14 @@ async function main() {
     count('t_safety_index'),
     count('t_income_quintile'),
     count('t_user'),
+    count('t_offi_complex'),
+    count('t_offi_trade'),
+    count('t_offi_rent'),
+    count('t_villa_complex'),
+    count('t_villa_trade'),
+    count('t_villa_rent'),
+    count('t_sh_complex'),
+    count('t_sh_rent'),
   ]);
 
   /* ─── 핵심 메트릭 ─── */
@@ -124,6 +140,40 @@ async function main() {
       AND ac.sigungu_code LIKE '11%'
   `.catch(() => [{ cnt: BigInt(0) }]);
 
+  // 비-아파트 전월세: 전세/월세 분포 + 보증금/월세 평균
+  type RentBreakRow = {
+    contract_type: string;
+    cnt: bigint;
+    avg_deposit: number | null;
+    avg_monthly: number | null;
+  };
+  async function rentBreak(table: string): Promise<RentBreakRow[]> {
+    return prisma
+      .$queryRawUnsafe<RentBreakRow[]>(
+        `SELECT contract_type, COUNT(*) AS cnt,
+                AVG(deposit_manwon) AS avg_deposit,
+                AVG(monthly_manwon) AS avg_monthly
+         FROM \`${table}\`
+         GROUP BY contract_type`,
+      )
+      .catch(() => [] as RentBreakRow[]);
+  }
+  function fmtRentBreak(label: string, rows: RentBreakRow[]): string {
+    if (rows.length === 0) return `${label}: (없음)`;
+    const parts = rows.map((r) => {
+      const t = r.contract_type === 'JEONSE' ? '전세' : '월세';
+      const dep = r.avg_deposit ? Math.round(Number(r.avg_deposit)).toLocaleString() : '-';
+      const mon = r.avg_monthly ? Math.round(Number(r.avg_monthly)).toLocaleString() : '0';
+      return `${t} ${Number(r.cnt).toLocaleString()}건(보증금 ${dep}만/월세 ${mon}만)`;
+    });
+    return `${label}: ${parts.join(' · ')}`;
+  }
+  const [offiBreak, villaBreak, shBreak] = await Promise.all([
+    rentBreak('t_offi_rent'),
+    rentBreak('t_villa_rent'),
+    rentBreak('t_sh_rent'),
+  ]);
+
   /* ─── Markdown 생성 ─── */
   const lines: string[] = [
     `# DB 상태 스냅샷`,
@@ -140,6 +190,14 @@ async function main() {
     `| t_apt_complex | ${aptComplex.toLocaleString()} | 아파트 단지 마스터 |`,
     `| t_apt_trade | ${aptTrade.toLocaleString()} | 매매 실거래 |`,
     `| t_apt_rent | ${aptRent.toLocaleString()} | 전월세 실거래 |`,
+    `| t_offi_complex | ${offiComplex.toLocaleString()} | 오피스텔 단지 마스터 |`,
+    `| t_offi_trade | ${offiTrade.toLocaleString()} | 오피스텔 매매 |`,
+    `| t_offi_rent | ${offiRent.toLocaleString()} | 오피스텔 전월세 |`,
+    `| t_villa_complex | ${villaComplex.toLocaleString()} | 연립다세대 단지 마스터 |`,
+    `| t_villa_trade | ${villaTrade.toLocaleString()} | 연립다세대 매매 |`,
+    `| t_villa_rent | ${villaRent.toLocaleString()} | 연립다세대 전월세 |`,
+    `| t_sh_complex | ${shComplex.toLocaleString()} | 단독다가구 마스터(동 단위) |`,
+    `| t_sh_rent | ${shRent.toLocaleString()} | 단독다가구 전월세 |`,
     `| t_legal_dong | ${legalDong.toLocaleString()} | BJD 법정동 코드 (서울 10자리: ${legalDongSeoul10.toLocaleString()}) |`,
     `| t_commute_matrix | ${commuteMatrix.toLocaleString()} | ODsay 통근시간 캐시 |`,
     `| t_training_result | ${trainingResult.toLocaleString()} | LSTM 학습 결과 |`,
@@ -172,6 +230,17 @@ async function main() {
   }
 
   lines.push(
+    ``,
+    `### 비-아파트 전월세 현황 (청년 타깃 — 2026-05-30 신규)`,
+    `\`\`\``,
+    `오피스텔 전월세: ${offiRent.toLocaleString()}건 / 단지 ${offiComplex.toLocaleString()}개`,
+    `  ${fmtRentBreak('  ', offiBreak)}`,
+    `연립다세대 전월세: ${villaRent.toLocaleString()}건 / 단지 ${villaComplex.toLocaleString()}개`,
+    `  ${fmtRentBreak('  ', villaBreak)}`,
+    `단독다가구 전월세: ${shRent.toLocaleString()}건 / 동 단위 ${shComplex.toLocaleString()}개 (지번·층 미제공 → 동 집계)`,
+    `  ${fmtRentBreak('  ', shBreak)}`,
+    `※ 아파트 전월세는 t_apt_rent 참조`,
+    `\`\`\``,
     ``,
     `### 통근 캐시 (t_commute_matrix)`,
     `\`\`\``,
@@ -245,6 +314,9 @@ async function main() {
     `t_lh_youth_housing ${lhYouthHousing}건  ${lhYouthHousing > 1000 ? '✅' : '❌ → npm run seed:lh'}`,
     `t_transit_route_summary ${transitSummary}건  ${transitSummary > 0 ? '✅' : '❌ → npm run seed:transit'}`,
     `t_reb_price_index  ${rebPriceIndex}건  ${rebPriceIndex > 0 ? '✅' : '❌ → npm run seed:reb (R-ONE-KEY 필요)'}`,
+    `t_offi_rent        ${offiRent}건  ${offiRent > 0 ? '✅' : '❌ → npm run ingest:realty:bulk -- --type=OFFI ...'}`,
+    `t_villa_rent       ${villaRent}건  ${villaRent > 0 ? '✅' : '❌ → npm run ingest:realty:bulk -- --type=VILLA ...'}`,
+    `t_sh_rent          ${shRent}건  ${shRent > 0 ? '✅' : '❌ → npm run ingest:realty:bulk -- --type=SH ...'}`,
     `\`\`\``,
     ``,
     `## 서버 기동 확인`,
@@ -270,6 +342,7 @@ async function main() {
   console.log(`  안전지표:   ${safetyIndex}건`);
   console.log(`  소득분위:   ${incomeQuintile}건`);
   console.log(`  추천 가능 행정동: ${Number(matchableDongs[0]?.cnt ?? 0)}개`);
+  console.log(`  비-APT 전월세: 오피스텔 ${offiRent.toLocaleString()} / 빌라 ${villaRent.toLocaleString()} / 단독다가구 ${shRent.toLocaleString()}`);
 }
 
 main()

@@ -1,31 +1,21 @@
 /**
  * 좌측 지도 패널 (토스 한국형 톤)
- *  - 인내심 슬라이더 (상단)
- *  - 본문: 카카오맵 + 행정동 통근 히트맵 + 직장/추천 마커
+ *  - 본문: 카카오맵 + **추천 지역 폴리곤**(통근 시간대별 신호등 색) + 직장/추천 마커
  *  - 하단: 통근시간 범례
  *
- *  ▷ 통근시간 산출 우선순위
- *    1순위  ODsay 매트릭스 (서버 캐싱) — 실거리 + 환승
- *    2순위  Haversine 추정 — 응답 대기 중 fallback (UX 끊김 방지)
- *
- *  ▷ 흐름
- *    [직장 선택]
- *      → 즉시 Haversine 색상 적용 (대기 없음)
- *      → 백그라운드 fetchCommuteMatrix
- *      → 응답 도착하면 정확한 색상으로 갱신
- *      → 인내심 슬라이더는 두 단계 모두 즉시 반응
+ *  ▷ 폴리곤 정책 (2026-06-03 재설계)
+ *    - 직장 주변 "전체" 배경 히트맵 제거 → **추천 top-8 지역구 폴리곤만** 강조.
+ *    - 색상 = 서버 통근시간(commuteMinutes) tier: 초록(가까움)→노랑→빨강(멀음).
+ *    - 추천은 법정동, GeoJSON 은 행정동 → 좌표 최근접 행정동 폴리곤에 매핑.
+ *    - ODsay 정밀 통근은 Depth 2 에선 호출 안 함 → **Depth 3 진입 시 실제 매물 단위로 연동**(쿼터 절약).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useKakaoLoader } from '../../../hooks/useKakaoLoader';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { useDragScroll } from '../../../hooks/useDragScroll';
 import { useChoroplethLayer } from '../hooks/useChoroplethLayer';
-import {
-  estimateCommuteMinutes,
-  haversineKm,
-  pickHeatmapColor,
-} from '../utils/commuteEstimate';
-import { fetchCommuteMatrix, type CommuteEntry } from '../../../api/commute';
+import { haversineKm, pickCommuteTierColor } from '../utils/commuteEstimate';
+import { fetchCommuteMatrix } from '../../../api/commute';
 // CommutePatienceSlider → LeftPanel 로 이동
 
 interface RegionCentroid {
@@ -55,12 +45,19 @@ export function MapPanel() {
   const regionOverlaysRef = useRef<any[]>([]);
 
   const workplace = useRecommendationStore((s) => s.workplace);
-  const patience = useRecommendationStore((s) => s.patience);
   const recommendations = useRecommendationStore((s) => s.recommendations);
   const hoveredRegion = useRecommendationStore((s) => s.hoveredRegion);
   const setHovered = useRecommendationStore((s) => s.setHovered);
+  const setFocused = useRecommendationStore((s) => s.setFocused);
+  const isLoading = useRecommendationStore((s) => s.isLoading);
+  const commuteOverrides = useRecommendationStore((s) => s.commuteOverrides);
+  const setCommuteOverrides = useRecommendationStore((s) => s.setCommuteOverrides);
   const setHoveredRef = useRef(setHovered);
   setHoveredRef.current = setHovered;
+  const setFocusedRef = useRef(setFocused);
+  setFocusedRef.current = setFocused;
+  const setCommuteOverridesRef = useRef(setCommuteOverrides);
+  setCommuteOverridesRef.current = setCommuteOverrides;
 
   // ── 행정동 centroid 로드 (1회) ─────────────────────────────
   const [centroids, setCentroids] = useState<RegionCentroid[]>([]);
@@ -93,96 +90,95 @@ export function MapPanel() {
     setTimeout(() => map.relayout(), 0);
   }, [status, mapInstance]);
 
-  // ── ODsay 통근 매트릭스 (백그라운드) ────────────────────────
-  const [matrix, setMatrix] = useState<Record<string, CommuteEntry> | null>(
-    null,
-  );
-  const [matrixLoading, setMatrixLoading] = useState(false);
-  const [matrixStats, setMatrixStats] = useState<{
-    hit: number;
-    nearby: number;
-    miss: number;
-    elapsedMs: number;
-  } | null>(null);
-
+  // ── 추천 top-8 ODsay 정밀 통근 조회 (Depth 2) ──────────────────
+  //   추천 8곳만 ODsay 호출(쿼터 ~8/조회, 서버 9격자 KNN 캐시) → store 에 기록 →
+  //   지도 폴리곤 색 + 카드 통근분 표시 공유. 매물 단위 호출은 불가(수십만) → 행정동 단위가 한계.
+  //   미스 시 서버 commuteMinutes(Haversine) 폴백. 랭킹/총점은 서버값 그대로.
   useEffect(() => {
-    if (!workplace || centroids.length === 0) {
-      setMatrix(null);
-      setMatrixStats(null);
-      return;
-    }
-    // 직장이 바뀌면 즉시 이전 매트릭스 비우고 Haversine fallback 으로 색칠
-    setMatrix(null);
-    setMatrixStats(null);
-    setMatrixLoading(true);
-
-    // 빠른 직장 전환 시 버려질 검색이 서버(ODsay 호출 + DB 쓰기)에 도달하지 않도록
-    //   1) 400ms 디바운스 — 연타 전환 중 마지막 직장만 실제 요청
-    //   2) AbortController — 디바운스 후 떠난 요청도 다음 전환 시 중단
+    const top = recommendations.slice(0, 8);
+    if (!workplace || top.length === 0) return;
     const controller = new AbortController();
-    const debounceId = window.setTimeout(() => {
+    const id = window.setTimeout(() => {
       fetchCommuteMatrix(
         { lat: workplace.lat, lng: workplace.lng, label: workplace.label },
-        centroids.map((c) => ({ code: c.code, lat: c.lat, lng: c.lng })),
+        top.map((r) => ({ code: r.legalDongCode, lat: r.lat, lng: r.lng })),
         controller.signal,
       )
         .then((resp) => {
           if (controller.signal.aborted) return;
-          setMatrix(resp.matrix);
-          setMatrixStats({
-            hit: resp.cacheHit,
-            nearby: resp.cacheNearby,
-            miss: resp.cacheMiss,
-            elapsedMs: resp.elapsedMs,
-          });
+          const next: Record<string, number> = {};
+          for (const [code, entry] of Object.entries(resp.matrix)) {
+            next[code] = entry.transitMinutes;
+          }
+          setCommuteOverridesRef.current(next);
         })
         .catch((e) => {
-          // 의도된 중단(AbortError)은 조용히 무시
-          if (controller.signal.aborted) return;
-          console.error('[commute matrix] fail:', e);
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setMatrixLoading(false);
+          if (!controller.signal.aborted) console.error('[commute top8] fail:', e);
         });
     }, 400);
-
     return () => {
-      window.clearTimeout(debounceId);
+      window.clearTimeout(id);
       controller.abort();
     };
-  }, [workplace, centroids]);
+  }, [workplace, recommendations]);
 
-  // ── 통근시간 → 행정동 색상 매핑 ──────────────────────────────
-  //   ODsay 매트릭스 있으면 우선, 없으면 Haversine fallback
-  const colorByCode = useMemo(() => {
-    if (!workplace || centroids.length === 0) return {};
-    const result: Record<string, string> = {};
-    for (const c of centroids) {
-      const odsay = matrix?.[c.code]?.transitMinutes;
-      let minutes: number;
-      if (typeof odsay === 'number') {
-        minutes = odsay;
-      } else {
-        const km = haversineKm(workplace, c);
-        minutes = estimateCommuteMinutes(km);
+  // ── 추천(법정동) → 최근접 행정동 폴리곤 매핑 (2026-06-03 재설계) ──
+  //   추천 top-8 만 강조. GeoJSON 은 행정동이라 좌표 최근접 행정동에 매핑.
+  //   recommendations/centroids 만 의존 → ODsay 값 도착 시 폴리곤 재생성(깜빡임) 방지.
+  const recAdmCodes = useMemo(() => {
+    const pairs: Array<{ legalDongCode: string; admCode: string; serverMin: number }> = [];
+    if (centroids.length === 0) return pairs;
+    for (const r of recommendations.slice(0, 8)) {
+      let bestCode = '';
+      let bestKm = Infinity;
+      for (const c of centroids) {
+        const km = haversineKm({ lat: r.lat, lng: r.lng }, c);
+        if (km < bestKm) {
+          bestKm = km;
+          bestCode = c.code;
+        }
       }
-      result[c.code] = pickHeatmapColor(minutes, patience);
+      if (bestCode) {
+        pairs.push({ legalDongCode: r.legalDongCode, admCode: bestCode, serverMin: r.commuteMinutes });
+      }
     }
-    return result;
-  }, [workplace, patience, centroids, matrix]);
+    return pairs;
+  }, [recommendations, centroids]);
 
-  // ── 히트맵 폴리곤 ─────────────────────────────────────────
-  const { loaded: heatmapLoaded, featureCount } = useChoroplethLayer(
+  // 화이트리스트(렌더 대상 행정동) — 추천만 바뀔 때 갱신
+  const includeCodes = useMemo(
+    () => new Set(recAdmCodes.map((p) => p.admCode)),
+    [recAdmCodes],
+  );
+
+  // 색상 = 통근시간 tier(초록→빨강). ODsay 정밀값(commuteOverrides) 우선, 없으면 서버값.
+  //   같은 행정동에 추천 2곳이 겹치면 더 짧은 통근(=초록 우선)으로.
+  const colorByCode = useMemo(() => {
+    const colors: Record<string, string> = {};
+    const minutesByCode = new Map<string, number>();
+    for (const p of recAdmCodes) {
+      const minutes = commuteOverrides[p.legalDongCode] ?? p.serverMin;
+      const prev = minutesByCode.get(p.admCode);
+      const merged = prev == null ? minutes : Math.min(prev, minutes);
+      minutesByCode.set(p.admCode, merged);
+      colors[p.admCode] = pickCommuteTierColor(merged);
+    }
+    return colors;
+  }, [recAdmCodes, commuteOverrides]);
+
+  // ── 추천 폴리곤 레이어 (화이트리스트 = 추천 8곳만 렌더) ──────────
+  const { loaded: heatmapLoaded } = useChoroplethLayer(
     mapInstance,
     status,
     GEOJSON_URL,
     {
       colorByCode,
-      visible: !!workplace,
-      fillOpacity: 0.45,
+      includeCodes,
+      // 핀과 동일하게 조회 중에는 이전 추천 폴리곤 숨김(스테일 혼동 방지)
+      visible: recommendations.length > 0 && !isLoading,
+      fillOpacity: 0.55,
       strokeColor: '#FFFFFF',
-      strokeWeight: 0.8,
-      defaultFill: '#E5E8EB',
+      strokeWeight: 2,
       onHover: (code) => setHoveredRef.current(code),
     },
   );
@@ -217,6 +213,9 @@ export function MapPanel() {
     // 이전 오버레이 제거
     regionOverlaysRef.current.forEach((o) => o.setMap(null));
     regionOverlaysRef.current = [];
+
+    // 조회 중에는 핀을 그리지 않음 — 이전 추천 핀이 잔류해 혼동되는 문제 방지
+    if (isLoading) return;
 
     // 순위별 핀 색상: 1위=파랑, 2~3위=인디고, 4~8위=보라
     const PIN_COLORS = ['#2563EB', '#4F46E5', '#4F46E5', '#7C3AED', '#7C3AED', '#7C3AED', '#7C3AED', '#7C3AED'];
@@ -303,6 +302,13 @@ export function MapPanel() {
         badge.style.transform = 'scale(1)';
         setHoveredRef.current(null);
       });
+      // 핀 클릭 → 해당 카드로 스크롤+flash (특히 모바일: hover 없이 탭으로 카드 위치 안내)
+      wrap.style.cursor = 'pointer';
+      wrap.addEventListener('click', () => {
+        tip.style.display = 'block'; // 탭 피드백(매물 N개 툴팁)
+        setHoveredRef.current(r.legalDongCode);
+        setFocusedRef.current(r.legalDongCode);
+      });
 
       // ── CustomOverlay 생성 ────────────────────────────────
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -315,30 +321,17 @@ export function MapPanel() {
       overlay.setMap(mapInstance);
       regionOverlaysRef.current.push(overlay);
     });
-  }, [recommendations, mapInstance, status]);
+  }, [recommendations, mapInstance, status, isLoading]);
 
   // ─── 좌상단 진행 배지 텍스트 결정 ──────────────────────────
+  //   추천 지역만 ODsay 실측 통근으로 시간대별 강조(초록~빨강).
   let badgeText: string | null = null;
-  let badgeKind: 'loading' | 'ok' | 'fallback' = 'fallback';
-  if (workplace && heatmapLoaded) {
-    if (matrixLoading) {
-      badgeText = `행정동 ${featureCount}개 · 통근시간 분석 중...`;
-      badgeKind = 'loading';
-    } else if (matrixStats) {
-      const { hit, nearby, miss, elapsedMs } = matrixStats;
-      if (miss === 0 && nearby === 0) {
-        badgeText = `행정동 ${featureCount}개 · 정확 캐시 즉시 응답 (${elapsedMs}ms)`;
-      } else if (miss === 0) {
-        // KNN 흡수만으로 해결
-        badgeText = `행정동 ${featureCount}개 · 정확 ${hit} + 근접 ${nearby} 흡수 (${elapsedMs}ms)`;
-      } else {
-        badgeText = `행정동 ${featureCount}개 · 정확 ${hit} / 근접 ${nearby} / 신규 ${miss}`;
-      }
-      badgeKind = 'ok';
-    } else {
-      badgeText = `행정동 ${featureCount}개 · 추정값 표시`;
-      badgeKind = 'fallback';
-    }
+  if (workplace && heatmapLoaded && recommendations.length > 0) {
+    const shown = recommendations.length > 8 ? 8 : recommendations.length;
+    const precise = Object.keys(commuteOverrides).length > 0;
+    badgeText = precise
+      ? `추천 ${shown}곳 · ODsay 실측 통근(초록~빨강)`
+      : `추천 ${shown}곳 · 통근 시간대별 강조(초록~빨강)`;
   }
 
   // CommutePatienceSlider 는 LeftPanel 로 이동 — MapPanel 은 순수 지도 배경만 담당
@@ -375,6 +368,26 @@ export function MapPanel() {
         </div>
       )}
 
+      {/* 추천 조회 중 — 지도 중앙 로딩 표시 (핀이 제거된 동안 "조회중" 안내) */}
+      {isLoading && workplace && status === 'ready' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 6 }}>
+          <div className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-elevated/95 dark:bg-surface-dark-elevated/95 border border-line-light dark:border-line-dark rounded-cardlg shadow-card-hover">
+            {/* 또렷한 SVG 호 스피너 — 기존 흐린 CSS 링은 다크 패널에서 빈 공간처럼 보였음 */}
+            <svg
+              className="animate-spin shrink-0 text-brand"
+              width="18" height="18" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2.5"
+              aria-hidden="true"
+            >
+              <path d="M21 12a9 9 0 1 1-6.22-8.56" strokeLinecap="round" />
+            </svg>
+            <span className="text-sm font-semibold text-ink-secondary dark:text-ink-secondary-dark">
+              추천 지역 조회 중…
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 데이터 로딩 배지 — 지도 하단 중앙 (모바일 숨김, 데스크톱만 표시) */}
       {badgeText && (
         <div
@@ -383,11 +396,7 @@ export function MapPanel() {
             'hidden md:block',
             'absolute bottom-12 left-1/2 -translate-x-1/2 pointer-events-none',
             'px-2.5 py-1 rounded-card text-xs shadow-card font-medium',
-            badgeKind === 'loading'
-              ? 'bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark text-ink-secondary dark:text-ink-secondary-dark animate-pulse'
-              : badgeKind === 'ok'
-              ? 'bg-brand-50 dark:bg-brand/[0.12] border border-brand/30 text-brand-700 dark:text-brand-100'
-              : 'bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark text-ink-tertiary dark:text-ink-tertiary-dark',
+            'bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark text-ink-tertiary dark:text-ink-tertiary-dark',
           ].join(' ')}
         >
           {badgeText}
@@ -410,12 +419,12 @@ export function MapPanel() {
         style={{ zIndex: 5 }}
         className="absolute bottom-0 left-0 right-0 px-4 py-2 bg-surface-elevated/90 dark:bg-surface-dark-elevated/90 backdrop-blur-sm border-t border-line-light dark:border-line-dark flex items-center gap-3 text-xs text-ink-secondary dark:text-ink-secondary-dark overflow-x-auto scroll-x-slider tabular-nums"
       >
-        <span className="font-semibold shrink-0">통근시간</span>
-        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-fastest rounded-sm" />20분 이내</span>
-        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-fast rounded-sm" />30분</span>
-        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-medium rounded-sm" />45분</span>
-        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-slow rounded-sm" />60분</span>
-        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 bg-commute-slowest rounded-sm" />60분 이상</span>
+        <span className="font-semibold shrink-0">추천지역 통근</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 rounded-sm" style={{ background: '#16A34A' }} />20분 이내</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 rounded-sm" style={{ background: '#65A30D' }} />30분</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 rounded-sm" style={{ background: '#EAB308' }} />45분</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 rounded-sm" style={{ background: '#F97316' }} />60분</span>
+        <span className="flex items-center gap-1.5 shrink-0"><span className="w-3.5 h-2.5 rounded-sm" style={{ background: '#EF4444' }} />60분 이상</span>
       </div>
     </div>
   );

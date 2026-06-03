@@ -33,12 +33,14 @@ import { CardPanel } from './components/CardPanel';
 import { CommutePatienceSlider } from './components/CommutePatienceSlider';
 import { WeightSliders } from './components/WeightSliders';
 import { isWeightsValid } from './components/WeightSliders';
+import { DealTypeToggle } from './components/DealTypeToggle';
+import { PropertyTypeFilter } from './components/PropertyTypeFilter';
 import {
   decodeParamsToState,
   encodeStateToParams,
   resolveWeights,
 } from './utils/urlState';
-import { QUINTILE_INCOME_MAP } from '../../types/recommendation';
+import { QUINTILE_INCOME_MAP, BUDGET_SLIDER, MONTHLY_RENT_SLIDER } from '../../types/recommendation';
 
 /** 패널 토글 버튼 공통 스타일 — 보더 제거, 그림자만으로 부유감 표현 (데스크톱 전용) */
 const TOGGLE_BTN_CLS = [
@@ -103,14 +105,23 @@ export function RecommendationPage() {
   // ─── 스토어 ──────────────────────────────────────────────────
   const workplace       = useRecommendationStore((s) => s.workplace);
   const budget          = useRecommendationStore((s) => s.budget);
+  const monthlyRentCap  = useRecommendationStore((s) => s.monthlyRentCap);
+  const setMonthlyRentCap = useRecommendationStore((s) => s.setMonthlyRentCap);
   const weights         = useRecommendationStore((s) => s.weights);
   const patience        = useRecommendationStore((s) => s.patience);
   const incomeQuintile  = useRecommendationStore((s) => s.incomeQuintile);
   const setIncomeQuintile = useRecommendationStore((s) => s.setIncomeQuintile);
+  const incomeManwon    = useRecommendationStore((s) => s.incomeManwon);
+  const setIncomeManwon = useRecommendationStore((s) => s.setIncomeManwon);
   const setRecommendations = useRecommendationStore((s) => s.setRecommendations);
+  const setLoading      = useRecommendationStore((s) => s.setLoading);
   const setWorkplace    = useRecommendationStore((s) => s.setWorkplace);
   const setBudget       = useRecommendationStore((s) => s.setBudget);
   const setPatience     = useRecommendationStore((s) => s.setPatience);
+  const dealType        = useRecommendationStore((s) => s.dealType);
+  const setDealType     = useRecommendationStore((s) => s.setDealType);
+  const propertyTypes   = useRecommendationStore((s) => s.propertyTypes);
+  const setPropertyTypes = useRecommendationStore((s) => s.setPropertyTypes);
   const setWeight       = useRecommendationStore((s) => s.setWeight);
   const bootstrap       = useAuthStore((s) => s.bootstrap);
 
@@ -128,6 +139,7 @@ export function RecommendationPage() {
     const shared = decodeParamsToState(params);
     if (shared.workplace)     setWorkplace(shared.workplace);
     if (shared.budget !== null)   setBudget(shared.budget);
+    if (shared.monthlyRentCap !== null) setMonthlyRentCap(shared.monthlyRentCap);
     if (shared.patience !== null) setPatience(shared.patience);
 
     const finalWeights = resolveWeights(shared);
@@ -138,7 +150,10 @@ export function RecommendationPage() {
       setWeight('life',          finalWeights.life);
     }
     if (shared.incomeQuintile !== null) setIncomeQuintile(shared.incomeQuintile);
-  }, [setWorkplace, setBudget, setPatience, setWeight, setIncomeQuintile]);
+    if (shared.incomeManwon !== null) setIncomeManwon(shared.incomeManwon);
+    if (shared.dealType !== null) setDealType(shared.dealType);
+    if (shared.propertyTypes !== null) setPropertyTypes(shared.propertyTypes);
+  }, [setWorkplace, setBudget, setMonthlyRentCap, setPatience, setWeight, setIncomeQuintile, setIncomeManwon, setDealType, setPropertyTypes]);
 
   // ─── 우측 패널 자동 펼침/접힘 (데스크톱) ─────────────────────
   useEffect(() => {
@@ -146,54 +161,66 @@ export function RecommendationPage() {
     if (!isMobile) setRightCollapsed(false);
   }, [workplace, isMobile]);
 
-  // ─── 데스크톱 상호배타 토글 ──────────────────────────────────
-  const openLeft  = () => { setLeftCollapsed(false);  if (isMobile) setRightCollapsed(true); };
+  // ─── 데스크톱 우측 패널 토글 (좌측은 항상 표시 — 패널 닫기 버튼 제거) ──
   const openRight = () => { setRightCollapsed(false); if (isMobile) setLeftCollapsed(true); };
-  const toggleLeft  = () => (leftCollapsed  ? openLeft()  : setLeftCollapsed(true));
   const toggleRight = () => (rightCollapsed ? openRight() : setRightCollapsed(true));
 
   // ─── 슬라이더 debounce (350ms) ───────────────────────────────
   const debouncedWeights  = useDebouncedValue(weights, 350);
   const debouncedBudget   = useDebouncedValue(budget,  350);
+  const debouncedMonthlyRentCap = useDebouncedValue(monthlyRentCap, 350);
   const debouncedPatience = useDebouncedValue(patience, 350);
 
   // ─── 추천 결과 fetch ─────────────────────────────────────────
   useEffect(() => {
-    if (!workplace) { setRecommendations([], null); return; }
+    if (!workplace) { setRecommendations([], null); setLoading(false); return; }
     if (!isWeightsValid(debouncedWeights)) return;
 
     const ac = new AbortController();
     let alive = true;
-    const incomeMonthly = incomeQuintile ? QUINTILE_INCOME_MAP[incomeQuintile] : undefined;
+    // 조건 변경 → 응답 대기 동안 핀 제거 + 카드 스켈레톤 (이전 데이터 잔류 혼동 방지)
+    setLoading(true);
+    // 직접 입력값(incomeManwon) 우선 — 분위 반올림 착시 제거. 없으면 분위 대표값.
+    const incomeMonthly =
+      incomeManwon ?? (incomeQuintile ? QUINTILE_INCOME_MAP[incomeQuintile] : undefined);
+
+    // 슬라이더 최대 위치 = 무제한 → 예산 필터 해제(undefined 전송, 전체 매물)
+    const budgetToSend =
+      debouncedBudget >= BUDGET_SLIDER[dealType].max ? undefined : debouncedBudget;
+    // 월세 한도는 MONTHLY 이고 최대 미만일 때만 전송 (전세·매매·최대에선 미전송)
+    const monthlyBudget =
+      dealType === 'MONTHLY' && debouncedMonthlyRentCap < MONTHLY_RENT_SLIDER.max
+        ? debouncedMonthlyRentCap
+        : undefined;
 
     fetchRecommendations(
-      { workplace, budget: debouncedBudget, weights: debouncedWeights, patience: debouncedPatience, incomeMonthly },
+      { workplace, budget: budgetToSend, monthlyBudget, weights: debouncedWeights, patience: debouncedPatience, incomeMonthly, dealType, propertyTypes },
       ac.signal,
     )
-      .then((result) => { if (!alive) return; setRecommendations(result.regions, result.source); })
+      .then((result) => { if (!alive) return; setRecommendations(result.regions, result.source, result.meta); })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
+        // 새 요청이 abort 한 게 아니면 로딩 종료 (실패해도 스피너에 갇히지 않도록)
+        if (alive) setLoading(false);
         console.error('[RecommendationPage] fetch fail:', err);
       });
 
     return () => { alive = false; ac.abort(); };
-  }, [workplace, debouncedBudget, debouncedWeights, debouncedPatience, incomeQuintile, setRecommendations]);
+  }, [workplace, debouncedBudget, debouncedMonthlyRentCap, debouncedWeights, debouncedPatience, incomeQuintile, incomeManwon, dealType, propertyTypes, setRecommendations, setLoading]);
 
   // ─── 스토어 → URL ─────────────────────────────────────────────
   useEffect(() => {
     if (!hydratedRef.current) return;
     const handle = window.setTimeout(() => {
-      const params = encodeStateToParams({ workplace, budget, weights, patience, incomeQuintile });
+      const params = encodeStateToParams({ workplace, budget, monthlyRentCap, weights, patience, incomeQuintile, incomeManwon, dealType, propertyTypes });
       const next = `${window.location.pathname}?${params.toString()}`;
       if (next === window.location.pathname + window.location.search) return;
       window.history.replaceState(null, '', next);
     }, 200);
     return () => window.clearTimeout(handle);
-  }, [workplace, budget, weights, patience, incomeQuintile]);
+  }, [workplace, budget, monthlyRentCap, weights, patience, incomeQuintile, incomeManwon, dealType, propertyTypes]);
 
-  // 토글 버튼 위치 (데스크톱)
-  const LEFT_OPEN   = '352px';
-  const LEFT_CLOSED = '12px';
+  // 우측 토글 버튼 위치 (데스크톱)
   const RIGHT_OPEN  = '340px';
   const RIGHT_CLOSED = '8px';
 
@@ -315,18 +342,6 @@ export function RecommendationPage() {
               <CardPanel />
             </div>
 
-            {/* 좌측 토글 버튼 */}
-            <button
-              type="button"
-              onClick={toggleLeft}
-              aria-label={leftCollapsed ? '가중치 패널 열기' : '가중치 패널 닫기'}
-              title={leftCollapsed ? '가중치 패널 열기' : '가중치 패널 닫기'}
-              style={{ left: leftCollapsed ? LEFT_CLOSED : LEFT_OPEN }}
-              className={TOGGLE_BTN_CLS}
-            >
-              {leftCollapsed ? '›' : '‹'}
-            </button>
-
             {/* 우측 토글 버튼 */}
             <button
               type="button"
@@ -396,7 +411,9 @@ export function RecommendationPage() {
               <div className="flex justify-center pt-2 pb-1 shrink-0">
                 <div className="w-8 h-1 rounded-full bg-line-light dark:bg-line-dark" />
               </div>
-              <div className="px-3 pb-3">
+              <div className="px-3 pb-3 flex flex-col gap-3">
+                <DealTypeToggle />
+                <PropertyTypeFilter />
                 <WeightSliders />
               </div>
             </div>

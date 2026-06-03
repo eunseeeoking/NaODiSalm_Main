@@ -138,7 +138,7 @@ export function WorkplaceSearch() {
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          className="w-full pl-9 pr-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated-hover border-0 rounded-card text-sm text-ink-primary dark:text-ink-primary-dark placeholder:text-ink-tertiary dark:placeholder:text-ink-tertiary-dark focus:outline-none transition-all"
+          className="w-full pl-9 pr-3 py-2 bg-surface-elevated dark:bg-surface-dark-elevated-hover border border-line-light dark:border-line-dark rounded-card text-sm text-ink-primary dark:text-ink-primary-dark placeholder:text-ink-tertiary dark:placeholder:text-ink-tertiary-dark focus:outline-none focus:border-brand transition-all"
         />
       </div>
       {open && results.length > 0 && (

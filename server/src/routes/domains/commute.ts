@@ -8,8 +8,8 @@
  *    }
  *    response: {
  *      cacheKey: string,
- *      cacheHit: number,      // 정확 좌표 일치 (4자리 동일)
- *      cacheNearby: number,   // 인접 격자에서 흡수 (KNN)
+ *      cacheHit: number,      // 같은 좌표 버킷 일치 (3자리 동일 ≈110m)
+ *      cacheNearby: number,   // 인접 격자에서 흡수 (KNN ≈330m)
  *      cacheMiss: number,     // 신규 ODsay 호출
  *      written: number,
  *      elapsedMs: number,
@@ -48,6 +48,7 @@ import {
   upsertCommuteEntries,
   type CommuteEntry,
 } from '../../services/repositories/commuteRepository';
+import { getOdsayUsageToday } from '../../services/external/odsayQuota';
 import { prisma } from '../../services/db';
 
 export const commuteRouter = Router();
@@ -175,7 +176,16 @@ commuteRouter.post('/matrix', async (req: Request, res: Response) => {
           };
         });
 
-        writtenCount = await upsertCommuteEntries(cacheKey, upsertEntries);
+        // ── 캐시 포이즈닝 방지 (KI-23) ─────────────────────────────
+        //   쿼터 차단(≥800) 중엔 ODsay 미호출 → transitMinutes 가 Haversine 폴백.
+        //   이 추정값을 저장하면 캐시 hit 으로 고착돼 쿼터 리셋 후에도 재호출 안 됨.
+        //   차단 중일 때는 추정 폴백(transfers=null)을 저장하지 않아 다음에 재조회되게 함.
+        //   (평시엔 진짜 no-route(-98/-99)도 저장 — 알려진 무경로 재호출 방지.)
+        const quotaBlocked = (await getOdsayUsageToday()).blocked;
+        const entriesToPersist = quotaBlocked
+          ? upsertEntries.filter((e) => e.transitTransfers !== null)
+          : upsertEntries;
+        writtenCount = await upsertCommuteEntries(cacheKey, entriesToPersist);
       }
 
       // ── 3) 응답 조립 ───────────────────────────────────────────
@@ -224,44 +234,58 @@ interface CommuteCompareDto {
 }
 
 commuteRouter.get('/compare', async (req: Request, res: Response) => {
-  const { complexId: rawId, wpLat: rawLat, wpLng: rawLng } = req.query as Record<string, string>;
+  const {
+    complexId: rawId,
+    wpLat: rawLat,
+    wpLng: rawLng,
+    oLat: rawOLat,
+    oLng: rawOLng,
+    legalDongCode: rawDongCode,
+  } = req.query as Record<string, string>;
 
-  // ── 검증 ────────────────────────────────────────────────────────
-  const complexId = parseInt(rawId, 10);
+  // ── 직장 좌표 검증 ───────────────────────────────────────────────
   const wpLat = parseFloat(rawLat);
   const wpLng = parseFloat(rawLng);
-  if (isNaN(complexId) || complexId <= 0) {
-    return res.status(400).json({ error: 'complexId must be a positive integer' });
-  }
   if (isNaN(wpLat) || isNaN(wpLng)) {
     return res.status(400).json({ error: 'wpLat and wpLng (float) required' });
   }
-
-  // ── 1) 단지 좌표 조회 ────────────────────────────────────────────
-  const complex = await prisma.aptComplex.findUnique({
-    where: { id: complexId },
-    select: { id: true, lat: true, lng: true, legalDong: true, sigunguCode: true },
-  }).catch(() => null);
-
-  if (!complex || complex.lat == null || complex.lng == null) {
-    return res.status(404).json({ error: 'Complex not found or missing coordinates', complexId });
-  }
-
-  const complexCoord = { lat: complex.lat, lng: complex.lng };
   const workCoord = { lat: wpLat, lng: wpLng };
 
-  // ── 2) legalDongCode 매핑 ────────────────────────────────────────
-  //    t_legal_dong: code 앞 5자리 = sigungu_code, dong = 법정동명
-  //    sigunguCode="11680" → code LIKE "11680_____" (10자리 전체)
-  const dongRow = await prisma.legalDong.findFirst({
-    where: {
-      code: { startsWith: complex.sigunguCode },
-      dong: complex.legalDong,
-    },
-    select: { code: true },
-  }).catch(() => null);
+  // ── 출발지 좌표 + legalDongCode 결정 ─────────────────────────────
+  //   (1) complexId 제공  → t_apt_complex 좌표 (APT 단지 정밀 비교)
+  //   (2) 미제공          → oLat/oLng(동 centroid) 직접 사용 (KI-18 동 상세 평가)
+  //       비아파트·미지오코딩 단지도 동 단위 통근 비교 가능. legalDongCode 는 캐시 키용.
+  let complexCoord: { lat: number; lng: number };
+  let legalDongCode: string | null = null;
 
-  const legalDongCode = dongRow?.code ?? null;
+  const complexId = parseInt(rawId, 10);
+  if (!isNaN(complexId) && complexId > 0) {
+    const complex = await prisma.aptComplex.findUnique({
+      where: { id: complexId },
+      select: { id: true, lat: true, lng: true, legalDong: true, sigunguCode: true },
+    }).catch(() => null);
+
+    if (!complex || complex.lat == null || complex.lng == null) {
+      return res.status(404).json({ error: 'Complex not found or missing coordinates', complexId });
+    }
+    complexCoord = { lat: complex.lat, lng: complex.lng };
+
+    // legalDongCode 매핑 — t_legal_dong: code 앞 5자리=sigungu_code, dong=법정동명
+    const dongRow = await prisma.legalDong.findFirst({
+      where: { code: { startsWith: complex.sigunguCode }, dong: complex.legalDong },
+      select: { code: true },
+    }).catch(() => null);
+    legalDongCode = dongRow?.code ?? null;
+  } else {
+    // 동 centroid 출발지 (oLat/oLng). 비아파트 포함 전 매물종류 공통.
+    const oLat = parseFloat(rawOLat);
+    const oLng = parseFloat(rawOLng);
+    if (isNaN(oLat) || isNaN(oLng)) {
+      return res.status(400).json({ error: 'complexId or origin (oLat, oLng) required' });
+    }
+    complexCoord = { lat: oLat, lng: oLng };
+    legalDongCode = /^\d{10}$/.test(rawDongCode ?? '') ? rawDongCode : null;
+  }
 
   let source: CommuteCompareDto['source'] = 'estimate';
 

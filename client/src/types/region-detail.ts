@@ -155,6 +155,93 @@ export interface LhSummary {
   sigunguTotalUnits?: number;
 }
 
+/**
+ * KI-18 (Depth 3 "동 상세 평가") — 매물종류 무관 공통 코어.
+ *  - GET /api/regions/:legalDongCode/detail?types=APT,OFFI,VILLA,SH
+ *  - 사용자 입력 무관 객관 데이터(4축 분해 + 시세 구조). 가중 4축 점수는 store 추천에서.
+ *  - 미적재 축(시드 전·표본 부족)은 null → 패널이 "추정·미집계" 표기.
+ */
+export type RegionDetailPropertyType = 'APT' | 'OFFI' | 'VILLA' | 'SH';
+
+/** 안전 3종 분해 (t_safety_index) — 0~100, 높을수록 양호 */
+export interface AxisSafety {
+  crimeScore: number;
+  lightScore: number;
+  cctvScore: number;
+  totalScore: number;
+}
+
+/** 생활 POI 8 카테고리 카운트 (t_poi_summary, 반경 500m) + 합성 lifeScore */
+export interface AxisLife {
+  subwayCount: number;
+  martCount: number;
+  convenienceCount: number;
+  cafeCount: number;
+  restaurantCount: number;
+  hospitalCount: number;
+  pharmacyCount: number;
+  bankCount: number;
+  lifeScore: number;
+}
+
+/** 교통 품질 (t_transit_route_summary, 반경 1km) */
+export interface AxisTransit {
+  stationCount: number;
+  avgHeadwayMin: number | null;
+  nightAccessible: boolean;
+  firstBusTime: string | null;
+  transitScore: number;
+}
+
+/** 시세 구조 — 매매/전세/월세 median + 표본 (KI-8/10/16 규약 동일) */
+export interface RegionPriceStructure {
+  sale: { medianManwon: number } | null;
+  jeonse: { depositMedianManwon: number; sampleCount: number } | null;
+  monthly: {
+    depositMedianManwon: number;
+    pureMonthlyMedianManwon: number;
+    sampleCount: number;
+  } | null;
+}
+
+/** 면적대별(소/중/대) 시세 분포 한 구간 (KI-18 P2 #1+#4) */
+export type AreaTier = '소형' | '중형' | '대형';
+export interface AreaTierPrice {
+  tier: AreaTier;
+  /** 전용면적 구간 라벨 (예: "60㎡ 미만") */
+  areaLabel: string;
+  sale: { medianManwon: number } | null;
+  jeonse: { depositMedianManwon: number; sampleCount: number } | null;
+  monthly: {
+    depositMedianManwon: number;
+    pureMonthlyMedianManwon: number;
+    sampleCount: number;
+  } | null;
+}
+
+export interface RegionDetail {
+  legalDongCode: string;
+  sigunguCode: string;
+  dongName: string;
+  propertyTypes: RegionDetailPropertyType[];
+  safety: AxisSafety | null;
+  life: AxisLife | null;
+  transit: AxisTransit | null;
+  price: RegionPriceStructure;
+  complexCount: number;
+  /** 면적대별(소/중/대) 시세 분포 (KI-18 P2 #1+#4). 빈 배열 = 미집계 */
+  priceByTier?: AreaTierPrice[];
+  /** 반전세 비율 (KI-18 P2 #2 · KI-10 후속). null = 표본 부족/미집계 */
+  semiJeonseRatio?: SemiJeonseRatio | null;
+}
+
+/** 반전세(준전세) 비율 — 월세 표본 중 보증금 큰 월세 비중 (KI-18 P2 #2) */
+export interface SemiJeonseRatio {
+  totalWolse: number;
+  semiJeonse: number;
+  ratioPct: number;
+}
+
 /** 통근 비교 — 대중교통 vs 자차 */
 export interface CommuteCompareData {
   /** 편도 분 — 대중교통 */

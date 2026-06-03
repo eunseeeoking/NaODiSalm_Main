@@ -1,6 +1,9 @@
 /**
  * TAGO 국가대중교통정보센터 API 클라이언트 (Day 2)
  *
+ *  ▷ TransitProvider 역할: **경기·인천**(비서울) 담당. 서울은 TAGO 시내버스 미등재(KI-6)라
+ *    seoulTopisClient 가 담당하며, 분기는 transitProvider.ts(디스패처)가 수행.
+ *
  *  ▷ 엔드포인트: https://apis.data.go.kr/1613000
  *    (구 tago.go.kr → 국토교통부 data.go.kr 로 이관 완료)
  *
@@ -25,6 +28,7 @@ import { XMLParser } from 'fast-xml-parser';
 const API_KEY = process.env.MOLIT_SERVICE_KEY;
 const BASE_URL = 'https://apis.data.go.kr/1613000';
 const SEOUL_CITY_CODE = '11';
+const DEBUG = process.env.TAGO_DEBUG === '1'; // 진단용: HTTP 상태·원문·결과 수 출력
 const PARSER = new XMLParser({ ignoreAttributes: false, parseAttributeValue: true });
 
 if (!API_KEY) {
@@ -99,9 +103,17 @@ async function tagoGet(
   url.searchParams.set('serviceKey', API_KEY);
   url.searchParams.set('_type', 'xml');
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url.toString(), { signal: AbortSignal.timeout(8_000) });
-  if (!res.ok) throw new Error(`TAGO HTTP ${res.status}`);
-  return PARSER.parse(await res.text()) as Record<string, unknown>;
+  const res = await fetch(url.toString(), { signal: AbortSignal.timeout(5_000) });
+  if (!res.ok) {
+    if (DEBUG) console.warn(`[tago:DEBUG] ${path} HTTP ${res.status}`);
+    throw new Error(`TAGO HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  if (DEBUG) {
+    // data.go.kr 은 키/한도 오류도 HTTP 200 + 에러 XML 로 응답 → 원문 앞부분 확인
+    console.log(`[tago:DEBUG] ${path} 200, body[0:300]: ${text.slice(0, 300).replace(/\s+/g, ' ')}`);
+  }
+  return PARSER.parse(text) as Record<string, unknown>;
 }
 
 /* ─── 1. 좌표 기반 정류장 목록 ─────────────────────────────── */
@@ -118,6 +130,10 @@ export async function fetchNearbyStations(
     );
     if (!data) return [];
     const raw = extractItems(data);
+    if (DEBUG) {
+      const n = raw == null ? 0 : Array.isArray(raw) ? raw.length : 1;
+      console.log(`[tago:DEBUG] fetchNearbyStations(${lat.toFixed(4)},${lng.toFixed(4)}) → 정류장 ${n}건`);
+    }
     if (!raw) return [];
     const arr: unknown[] = Array.isArray(raw) ? raw : [raw];
     return arr.map((item) => {
@@ -191,7 +207,7 @@ async function fetchRouteInfo(routeId: string, cityCode: string): Promise<RouteI
  *  3. 노선별 배차간격·첫막차 (최대 10개)
  *  4. transitScore 산출
  */
-export async function fetchTransitSummary(lat: number, lng: number): Promise<TransitSummary> {
+export async function fetchTagoTransitSummary(lat: number, lng: number): Promise<TransitSummary> {
   const fallback: TransitSummary = {
     lat, lng, stationCount: 0, avgHeadwayMin: null,
     nightAccessible: false, firstBusTime: null, transitScore: 0,
@@ -204,10 +220,20 @@ export async function fetchTransitSummary(lat: number, lng: number): Promise<Tra
     if (stationCount === 0) return fallback;
 
     // routeId → cityCode 매핑 (노선 상세 조회 시 도시코드 필요)
+    // 정류장별 경유노선 조회를 병렬(Promise.all, 최대 10개 동시)로 — 직렬 대비 동당 수 배 단축.
+    // 동시성은 정류장 수(≤10)로 묶여 있어 버스트 rate-limit 안전(총 호출수는 직렬과 동일).
     const routeMap = new Map<string, string>(); // routeId → cityCode
-    for (const st of stations.slice(0, 10)) {
-      const ids = await fetchStationRoutes(st.nodeId, st.cityCode);
-      for (const rid of ids) if (!routeMap.has(rid)) routeMap.set(rid, st.cityCode);
+    const perStation = await Promise.all(
+      stations.slice(0, 10).map(async (st) => ({
+        cityCode: st.cityCode,
+        ids: await fetchStationRoutes(st.nodeId, st.cityCode),
+      })),
+    );
+    for (const { cityCode, ids } of perStation) {
+      for (const rid of ids) {
+        if (!routeMap.has(rid)) routeMap.set(rid, cityCode);
+        if (routeMap.size >= 20) break;
+      }
       if (routeMap.size >= 20) break;
     }
 

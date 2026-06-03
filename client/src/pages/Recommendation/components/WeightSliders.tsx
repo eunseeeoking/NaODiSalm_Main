@@ -16,7 +16,7 @@
  *   │ [월 급여 입력]                     │  ← 항상
  *   └────────────────────────────────────┘
  */
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDragScroll } from '../../../hooks/useDragScroll';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { InfoTooltip } from '../../../components/InfoTooltip';
@@ -77,39 +77,60 @@ function isSamePreset(weights: Weights, preset: WeightPreset): boolean {
 
 const QUINTILE_KEYS = [1, 2, 3, 4, 5] as const;
 
-export function WeightSliders() {
+export function WeightSliders({ bare = false }: { bare?: boolean } = {}) {
   const weights           = useRecommendationStore((s) => s.weights);
   const setWeight         = useRecommendationStore((s) => s.setWeight);
   const applyPreset       = useRecommendationStore((s) => s.applyPreset);
   const incomeQuintile    = useRecommendationStore((s) => s.incomeQuintile);
   const setIncomeQuintile = useRecommendationStore((s) => s.setIncomeQuintile);
+  const setIncomeManwon   = useRecommendationStore((s) => s.setIncomeManwon);
 
   /** 슬라이더(통근/부담/안전/생활)만 접힘 — 소득분위는 별도 항상 표시 */
   const [slidersOpen, setSlidersOpen] = useState(false);
   // 소득 분위 칩 가로 스크롤 — 드래그 슬라이더 + 스크롤바 숨김
   const quintileScrollRef = useDragScroll<HTMLDivElement>();
 
+  const incomeManwon      = useRecommendationStore((s) => s.incomeManwon);
+
   const [salaryInput, setSalaryInput] = useState('');
   const [salaryHint,  setSalaryHint]  = useState<string | null>(null);
+
+  // URL 공유 등으로 store 에 직접입력 소득이 이미 있으면 입력란에 1회 반영
+  const salaryHydrated = useRef(false);
+  useEffect(() => {
+    if (salaryHydrated.current) return;
+    if (incomeManwon != null && incomeManwon > 0) {
+      salaryHydrated.current = true;
+      setSalaryInput(String(incomeManwon));
+      const q = salaryToQuintile(incomeManwon);
+      setSalaryHint(`월 ${incomeManwon.toLocaleString()}만원 그대로 적용 · ${QUINTILE_LABELS[q]} 구간`);
+    }
+  }, [incomeManwon]);
 
   function clearSalaryAndQuintile() {
     setSalaryInput('');
     setSalaryHint(null);
     setIncomeQuintile(null);
+    setIncomeManwon(null);
   }
 
   function handleSalaryChange(raw: string) {
     const cleaned = raw.replace(/[^0-9]/g, '');
     setSalaryInput(cleaned);
-    if (!cleaned) { setSalaryHint(null); setIncomeQuintile(null); return; }
+    if (!cleaned) { setSalaryHint(null); setIncomeQuintile(null); setIncomeManwon(null); return; }
     const salary = Number(cleaned);
+    // 핵심 수정: 분위로 반올림하지 않고 실제 입력값을 그대로 전송 (착시 제거).
+    //  분위 칩은 "구간" 표시용으로만 하이라이트, 점수 산출엔 정확한 salary 사용.
     const q = salaryToQuintile(salary);
+    setIncomeManwon(salary);
     setIncomeQuintile(q);
-    setSalaryHint(`월 ${salary.toLocaleString()}만원 → ${QUINTILE_LABELS[q]}`);
+    setSalaryHint(`월 ${salary.toLocaleString()}만원 그대로 적용 · ${QUINTILE_LABELS[q]} 구간`);
   }
 
   function handleQuintileChipClick(next: IncomeQuintile | null) {
     setIncomeQuintile(next);
+    // 칩 선택은 분위 대표값을 쓰므로 직접입력 override 해제
+    setIncomeManwon(null);
     if (salaryInput) { setSalaryInput(''); setSalaryHint(null); }
   }
 
@@ -120,17 +141,27 @@ export function WeightSliders() {
     : 'text-negative';
 
   return (
-    <div className="bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark rounded-cardlg p-4 shadow-card">
+    <div
+      className={
+        bare
+          ? ''
+          : 'bg-surface-elevated dark:bg-surface-dark-elevated border border-line-light dark:border-line-dark rounded-cardlg p-4 shadow-card'
+      }
+    >
 
-      {/* ── 헤더: 제목 + 합계 ── */}
+      {/* ── 헤더: 제목 + 합계 (bare 면 제목은 섹션이 대신 → 합계만) ── */}
       <div className="flex items-center justify-between mb-2 whitespace-nowrap">
-        <span className="text-sm font-bold text-ink-primary dark:text-ink-primary-dark flex items-center gap-1.5 shrink-0">
-          가중치
-          <InfoTooltip
-            text="4개 축의 중요도 비율을 설정합니다. 합계가 90~110이 되도록 조정하세요."
-            position="bottom"
-          />
-        </span>
+        {bare ? (
+          <span />
+        ) : (
+          <span className="text-sm font-bold text-ink-primary dark:text-ink-primary-dark flex items-center gap-1.5 shrink-0">
+            가중치
+            <InfoTooltip
+              text="4개 축의 중요도 비율을 설정합니다. 합계가 90~110이 되도록 조정하세요."
+              position="bottom"
+            />
+          </span>
+        )}
         <span
           className={`text-xs font-semibold tabular-nums shrink-0 ${sumColorCls}`}
           aria-live="polite"
@@ -227,7 +258,11 @@ export function WeightSliders() {
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
                 <span>
-                  가중치 합이 {sum}입니다. {WEIGHTS_SUM_MIN}~{WEIGHTS_SUM_MAX} 범위로 조정하거나 프리셋을 선택하세요.
+                  가중치 합이 {sum} 입니다. {WEIGHTS_SUM_MIN}~{WEIGHTS_SUM_MAX} 범위로 조정해야
+                  추천이 갱신됩니다.
+                  <br />
+                  <span className="font-semibold">[사회초년생] [신혼부부] [실거주] [직장인]</span>{' '}
+                  프리셋을 누르면 합 100 으로 자동 맞춰집니다.
                 </span>
               </div>
             )}
@@ -287,7 +322,7 @@ export function WeightSliders() {
         </div>
         {incomeQuintile === null && (
           <p className="mt-1.5 text-xs text-ink-tertiary dark:text-ink-tertiary-dark">
-            3분위(403만원) 기본값 적용 중
+            소득 미입력 — <b className="font-semibold text-ink-secondary dark:text-ink-secondary-dark">3분위(403만원)</b> 기준으로 주거비 부담을 추정 중
           </p>
         )}
 
@@ -329,37 +364,6 @@ export function WeightSliders() {
         )}
       </div>
 
-      {/* 합이 허용 범위 밖이면 인라인 경고 — 추천이 갱신되지 않는다는 사실을 명시 */}
-      {!valid && (
-        <div
-          role="alert"
-          className="mt-3 px-3 py-2 rounded-card bg-negative/10 border border-negative/30 text-xs font-medium text-negative flex items-start gap-2"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="mt-0.5 shrink-0"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          <span>
-            가중치 합이 {sum} 입니다. {WEIGHTS_SUM_MIN}~{WEIGHTS_SUM_MAX} 범위로 조정해야
-            추천이 갱신됩니다.
-            <br />
-            <span className="font-semibold">[사회초년생] [신혼부부] [실거주] [직장인]</span>{' '}
-            프리셋을 누르면 합 100 으로 자동 맞춰집니다.
-          </span>
-        </div>
-      )}
     </div>
   );
 }

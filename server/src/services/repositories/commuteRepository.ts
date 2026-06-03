@@ -1,17 +1,16 @@
 /**
  * 통근 매트릭스 캐시 리포지토리 (t_commute_matrix)
  *
- *  ▷ KNN 격자 확장 검색 (v1.1)
- *    - 4자리 반올림 cacheKey 외에 ±0.0001 인접 격자 8개도 같이 조회
+ *  ▷ KNN 격자 확장 검색 (v1.2 — 2026-06-03: 3자리 격자로 확대)
+ *    - 3자리 반올림 cacheKey(≈110m 버킷) 외에 ±0.001 인접 격자 8개도 같이 조회
  *    - 행정동마다 가장 가까운 워크포인트 캐시 선택
  *    - 한 번의 SQL 로 9개 키 IN 검색 → DB 부담 거의 같음
- *    - exactMatch 플래그로 정확 일치 / 근접 사용 구분
+ *    - exactMatch 플래그로 같은 버킷(≈110m) / 인접 흡수 구분
  *
- *  효과
- *    · 같은 빌딩 다른 출구 (수 m 차이) → exact hit
- *    · 광화문 옆 30m 빵집 → nearby hit (호출 0)
- *    · 같은 도로 양쪽 빌딩 (20m 폭) → nearby hit (호출 0)
- *    · 200m 이상 떨어진 곳 → miss (신규 호출)
+ *  효과 (3자리 기준)
+ *    · 같은 빌딩~인접 블록 (≈100m 이내) → exact hit
+ *    · 같은 동네 옆 회사 (≈100~330m) → nearby hit (호출 0)
+ *    · ~330m 이상 떨어진 곳 → miss (신규 호출)
  */
 import { prisma } from '../db';
 import { haversineKm, makeCacheKeyCandidates } from '../external/odsay';

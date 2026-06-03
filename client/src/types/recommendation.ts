@@ -78,7 +78,114 @@ export interface RegionRecommendation {
    *  - 0~100: 배차간격·야간접근성·정류장밀도 합성
    */
   transitScore?: number | null;
+  /**
+   * affordability 월 주거비 (만원) — RIR 분자. (2026-05-30 전월세 도입)
+   *  - dealType=JEONSE/MONTHLY: 실거래 전월세 환산 / SALE: 매매가 합성
+   */
+  monthlyHousingCost?: number;
+  /**
+   * affordability 산출 근거 (UI 칩/툴팁 표시용).
+   *  - 'rent':       실거래 전월세 시세 기반 (신뢰도 높음)
+   *  - 'sale-proxy': 매매가 합성 환산 폴백 (전월세 표본 부족 또는 SALE)
+   */
+  affordabilityBasis?: 'rent' | 'sale-proxy';
+  /** 선택 거래유형 실거래 환산 월주거비 (만원). null = 표본 부족 → sale-proxy */
+  rentMonthlyCost?: number | null;
+  /**
+   * 전월세 시세 집계 표본수 (2026-05-30 P3 #6) — "표본 N건" 신뢰 칩용.
+   *  null = sale-proxy / 표본 없음. 적으면(예: <10) 참고용 안내.
+   */
+  rentSampleCount?: number | null;
+  /**
+   * 보증금 중위값 (만원, KI-9) — 카드 분리 표기용.
+   *  - JEONSE: 전세금(=보증금)을 카드 대표값으로 표시. MONTHLY: "보증금 Y" 보조.
+   *  - null = SALE/sale-proxy(표본 부족) → representativePrice 로 폴백.
+   */
+  rentDepositManwon?: number | null;
+  /**
+   * 순수 월세 중위값 (만원, KI-9) — MONTHLY 카드 "월세 X만"(월세 한도 필터와 동일 기준).
+   *  - monthlyHousingCost(합산 월주거비, RIR 분자)와 다른 값 — 표시·필터 일치로 혼동 해소.
+   *  - null = SALE/JEONSE/표본 부족.
+   */
+  rentPureMonthlyManwon?: number | null;
+  /**
+   * 총점 분모에서 제외된 추정 축 (2026-05-30 P3 #5).
+   *  - 안전·생활이 더미(50)면 총점에 반영 안 함 → 카드에 "추정 · 점수 미반영" 표시.
+   *  - [] 또는 미정의 = 모든 축 반영.
+   */
+  estimatedAxes?: Array<'commute' | 'affordability' | 'safety' | 'life'>;
 }
+
+/**
+ * 거래유형 — affordability 산출 기준 시세 종류 (2026-05-30).
+ *  region-detail 의 DealType 과 동일 값이지만, Depth2 추천 요청용으로 별도 정의해
+ *  도메인 경계를 분리(추천 ↔ 단지 상세).
+ */
+export type RecDealType = 'SALE' | 'JEONSE' | 'MONTHLY';
+
+/** 거래유형 라벨 (토글 UI) */
+export const DEAL_TYPE_LABELS: Record<RecDealType, string> = {
+  SALE: '매매',
+  JEONSE: '전세',
+  MONTHLY: '월세',
+};
+
+/**
+ * 매물종류 (2026-05-30 P2 #3) — 전월세 시세 집계 풀 선택.
+ *  4종을 한 평균에 섞으면 아파트와 빌라·반지하가 합쳐져 동 시세가 오염되므로,
+ *  사용자가 실제로 찾는 종류만 골라 affordability 를 산출.
+ */
+export type RecPropertyType = 'APT' | 'OFFI' | 'VILLA' | 'SH';
+
+/** 매물종류 라벨 (필터 칩 UI) */
+export const PROPERTY_TYPE_LABELS: Record<RecPropertyType, string> = {
+  APT: '아파트',
+  OFFI: '오피스텔',
+  VILLA: '빌라',
+  SH: '단독·다가구',
+};
+
+/** 매물종류 표시 순서 */
+export const PROPERTY_TYPE_ORDER: readonly RecPropertyType[] = [
+  'APT',
+  'OFFI',
+  'VILLA',
+  'SH',
+];
+
+/**
+ * 기본 선택 매물종류 — 아파트·오피스텔·빌라.
+ *  단독·다가구(SH)는 면적=연면적·반지하 등 이질성이 커서 기본 제외(사용자가 명시 선택).
+ */
+export const DEFAULT_PROPERTY_TYPES: RecPropertyType[] = ['APT', 'OFFI', 'VILLA'];
+
+/**
+ * 거래유형별 예산(보증금/매매가) 슬라이더 설정 (만원). 2026-05-30 P3 후속.
+ *  - max = "무제한(최대)" 센티넬: 값이 max 이상이면 예산 필터를 끄고 전체 매물 표기.
+ *  - labels 는 슬라이더 하단 균등 분할 눈금(시작가 ~ 최대).
+ *  - SALE  : 1천만 ~ 30억 ~ 최대(40억 지점)
+ *  - 보증금: 1천만 ~ 20억 ~ 최대(25억 지점)
+ */
+export const BUDGET_SLIDER: Record<
+  RecDealType,
+  { min: number; max: number; step: number; labels: string[] }
+> = {
+  SALE: { min: 1000, max: 400000, step: 1000, labels: ['1천만', '10억', '20억', '30억', '최대'] },
+  JEONSE: { min: 1000, max: 250000, step: 1000, labels: ['1천만', '5억', '10억', '15억', '20억', '최대'] },
+  MONTHLY: { min: 1000, max: 250000, step: 1000, labels: ['1천만', '5억', '10억', '15억', '20억', '최대'] },
+};
+
+/**
+ * 월세 한도 슬라이더 설정 (만원/월). MONTHLY 전용.
+ *  - max = "무제한(최대)" 센티넬: 값이 max 이상이면 월세 필터를 끄고 전체 표기.
+ *  - 5만 ~ 400만 ~ 최대(500만 지점)
+ */
+export const MONTHLY_RENT_SLIDER = {
+  min: 5,
+  max: 500,
+  step: 5,
+  labels: ['5만', '100만', '200만', '300만', '400만', '최대'],
+};
 
 /**
  * 가중치 프리셋 — 합계 100

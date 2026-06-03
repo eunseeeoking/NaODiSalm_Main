@@ -6,10 +6,11 @@ import {
   type NormalizedRent,
 } from '../external/molit';
 import { geocodeFlexible } from '../external/geocoder';
-import { SEOUL_LAWD_CODES } from '../../data/seoulLawdCodes';
+import { CAPITAL_AREA_LAWD_CODES } from '../../data/seoulLawdCodes';
 
+// 수도권(서울·인천·경기) 전 코드를 인식. 서울 코드는 sido='서울특별시'로 동일하게 매핑됨.
 const SIGUNGU_BY_CODE = new Map<string, { sido: string; sigungu: string }>(
-  SEOUL_LAWD_CODES.map((s) => [s.code, { sido: '서울특별시', sigungu: s.name }]),
+  CAPITAL_AREA_LAWD_CODES.map((s) => [s.code, { sido: s.sido, sigungu: s.name }]),
 );
 
 function sigunguPrefix(code: string): string {
@@ -182,7 +183,6 @@ export async function ingestSigunguMonth(
         areaM2: t.areaM2,
         floor: t.floor,
         builtYear: t.builtYear,
-        rawPayload: t.raw as object,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -217,7 +217,6 @@ export async function ingestSigunguMonth(
         areaM2: r.areaM2,
         floor: r.floor,
         builtYear: r.builtYear,
-        rawPayload: r.raw as object,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
