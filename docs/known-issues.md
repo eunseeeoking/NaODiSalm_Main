@@ -206,6 +206,36 @@
 - **잔여(서브초 (필요 시))**: worst-case 는 매 요청 "raw 거래 median 재계산"이 본질 한계 → 쿼리 튜닝으로는 ~2.7s 가 바닥.
   **동별 (dealType×매물종류) median 을 배치 summary 테이블로 사전집계**(POI/safety 패턴) → 런타임 조회 ~10ms 가 유일한 근본 해법. (미착수)
 
+### KI-22 · 통근 게이트가 인내심에 비해 너무 헐거움 (인내심 45분인데 89분 매물 노출) 🟢 해결 (2026-06-03)
+- **증상**: 인내심(patience) 45분으로 조회했는데 결과 5~8위에 **commuteMinutes 60·69·75·89분** 지역이 뜸.
+  재현: 강남역·전세·예산 1.5억·인내심 45·통근35/주거20/안전15/생활30 → 5위 남동구 만수동 **commuteMinutes=89, commuteScore=0** 인데 totalScore 53.
+- **원인**: 후보 게이트가 `recommendationRepository.ts` 의 **`if (commuteMinutes > safePatience * 2) continue`** (인내심 × **2**).
+  45×2=90분이라 89·75·69·60분이 다 통과 → 통근점수 0이어도 **affordability 100·life 81** 가 총점을 끌어올려 top8 진입.
+  서울 한정 universe 일 땐 다 가까워 안 보였으나, **수도권 확장(KI-19)으로 멀고 싼 경기·인천**이 새어 들어옴.
+  (추가로 거리 1차 필터 `maxKm = patience*0.75km` 도 시간 대비 헐거움 — patience45→33.75km 는 통근 ~60~90분에 해당.)
+- **제안**: 게이트를 **`safePatience * 1.2`(±버퍼)** 수준으로 강화 → 인내심 ~1.2배 초과 통근은 제외(추정오차 버퍼만 허용).
+  관측상 서울(≤43분)과 경기·인천(≥60분) 사이 명확한 갭이 있어 1.0~1.3배 어디든 분리 가능. (commute 는 Haversine 추정이라 약간의 버퍼 권장.)
+  보조로 maxKm 도 시간정합되게 재산정 검토. **commute 는 demand-driven ODsay 전까지 Haversine 추정**임을 감안.
+- **영향/주의**: 게이트 강화 시 인내심 낮으면 결과 수 감소(의도된 동작 — 사용자 인내심 존중). 점수 로직(가중합)은 변경 불필요(게이트만).
+- **해결(2026-06-03)**: `recommendationRepository.ts` 에 `PATIENCE_GATE_MULT = 1.2` 상수 도입 →
+  ① 시간 게이트 `commuteMinutes > safePatience * 2` → **`* PATIENCE_GATE_MULT`(=1.2)** 로 강화.
+  ② 보조 1차 거리필터 `maxKm` 도 시간정합: 게이트 시간(patience×1.2)을 km 환산(×0.5) 후 Haversine↔cached 슬랙용
+     1.3× 패딩 → `safePatience × 1.2 × 0.5 × 1.3`(기존 ×0.75 → ≈×0.78, 사실상 유지하되 게이트 배율에 종속화).
+  cached 통근(실측)이 Haversine 보다 빠를 수 있어 **정밀 제외는 시간 게이트**가 담당, maxKm 은 coarse 사전필터로 버퍼 유지.
+  typecheck OK. (재현 케이스: 인내심 45 → 45×1.2=54분 초과인 만수동 89분 등 제외 기대.)
+
+### KI-23 · ODsay 쿼터 차단 중 Haversine 폴백이 캐시에 고착 🟢 해결 (2026-06-03)
+- **증상(잠복)**: 일 800 쿼터 소진(`≥ODSAY_DAILY_LIMIT`) 상태에서 **신규 미캐시 지역** 통근 조회 시,
+  `fetchOdsayRoute` 가 차단으로 `null` 반환 → 라우트가 `Math.round(carMin*1.4)` Haversine 폴백.
+  사용자엔 에러 없이 추정 표시(정상)지만, **이 폴백값이 `t_commute_matrix` 에 저장**됨([commute.ts](../server/src/routes/domains/commute.ts)).
+  → 다음부터 캐시 hit 으로 ODsay 재호출 안 함 + **쿼터 리셋 후에도 추정값 고착**(TTL 없음).
+  쿼터 터진 날 처음 등장한 지역이 영구히 Haversine 으로 박제됨.
+- **원인**: `fetchOdsayRoute` 가 **"쿼터 차단"과 "진짜 무경로(-98/-99)"를 둘 다 `null`** 로 반환 → 구분 없이 저장.
+  (기존부터 있던 잠복 버그. 2026-06-03 Depth 2 top-8 라이브 ODsay 도입으로 노출 빈도↑.)
+- **해결**: 저장 직전 `getOdsayUsageToday().blocked` 확인 → **차단 중이면 추정 폴백(`transitTransfers===null`)을
+  저장에서 제외**(다음 쿼터 가용 시 재조회). 평시엔 진짜 no-route 도 저장(알려진 무경로 재호출 방지). typecheck OK.
+- **잔여(선택)**: 추정 엔트리에 명시적 `estimated`/`source` 컬럼 + TTL 재검증을 두면 더 견고(미착수).
+
 ---
 
 ## C. 필터 / 예산 / 시세
