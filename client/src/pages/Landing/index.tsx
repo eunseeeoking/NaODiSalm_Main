@@ -12,7 +12,7 @@
  *    2) Pain       — 청년 주거 위기 4 통계 (§2 사회적 가치 골자)
  *    3) Flow       — Depth 1 → 2 → 3 사용 흐름 (mock 시각화)
  *    4) Diff       — 4축 가중합 + ARIMA 10.16% + 6개 공공기관 융합
- *    5) Numbers    — 20년치 / 7.3M 거래 / 20,589 단지 / ARIMA 10.16%
+ *    5) Numbers    — 730만 거래 / 22.5만 단지·건물(4종) / 1,187 행정동 / 20년
  *    6) DemoCTA    — 시연 동선 추천 + 큰 버튼
  *    7) Footer     — about/data, 기획서, ML repo 링크
  */
@@ -54,8 +54,8 @@ const PAIN_STATS: ReadonlyArray<{ value: string; label: string; source: string }
 const FLOW_STEPS: ReadonlyArray<{ step: string; title: string; desc: string }> = [
   {
     step: 'Depth 1',
-    title: '직장·예산·가중치 입력',
-    desc: '회사명 또는 지하철역 → 통근·주거비·안전·생활 4축 가중치 (합 100) → 인내심·소득 분위',
+    title: '직장·조건·가중치 입력',
+    desc: '회사명/지하철역 + 거래유형(매매·전세·월세)·매물종류(4종) → 통근·주거비·안전·생활 4축 가중치(합 100) → 인내심·소득 분위',
   },
   {
     step: 'Depth 2',
@@ -64,16 +64,16 @@ const FLOW_STEPS: ReadonlyArray<{ step: string; title: string; desc: string }> =
   },
   {
     step: 'Depth 3',
-    title: '단지 상세 + ARIMA 가격 분석',
-    desc: '단지 거래 시계열 + ARIMA(2,1,2) 3년 예측 + 통근 비교 + LH 행정동 정밀 배너.',
+    title: '동 시세 구조 + 단지 ARIMA 분석',
+    desc: '거래유형별·면적대별(소/중/대) 시세 분포 + 반전세 비율, 아파트는 ARIMA(2,1,2) 3년 예측·신뢰도, ODsay·카카오 통근 비교, LH 청년주택 행정동 배너.',
   },
 ];
 
 const NUMBER_CARDS: ReadonlyArray<{ value: string; unit: string; label: string; tone: 'brand' | 'positive' | 'amber' | 'purple' }> = [
-  { value: '20',     unit: '년치',  label: 'RTMS 시계열 (2006~2026)',     tone: 'brand' },
-  { value: '7.3M',   unit: '거래',  label: '수도권 RTMS 실거래 적재량',    tone: 'positive' },
-  { value: '20,589', unit: '단지',  label: '수도권 아파트 단지',           tone: 'amber' },
-  { value: '10.16',  unit: '%',     label: 'ARIMA MAPE (5단지 평균)',     tone: 'purple' },
+  { value: '730만',  unit: '건',   label: 'RTMS 실거래 (매매 193만 · 전월세 540만)',          tone: 'brand' },
+  { value: '22.5만', unit: '곳',   label: '4종 단지·건물 (아파트·오피스텔·빌라·단독다가구)',   tone: 'positive' },
+  { value: '1,187',  unit: '개',   label: '수도권 행정동 (82개 시군구)',                      tone: 'amber' },
+  { value: '20',     unit: '년치', label: 'RTMS 시계열 (2006~2026)',                         tone: 'purple' },
 ];
 
 /* ────────────────────────── 스크롤 리빌 훅 ────────────────────────── */
@@ -420,9 +420,13 @@ export function LandingPage() {
               <span className="text-brand"> 데이터가 답하는 청년 주거 의사결정</span>
             </h1>
             <p className="mt-4 md:mt-5 text-base md:text-lg text-ink-secondary leading-[1.75] max-w-2xl mx-auto">
-              직장·예산·통근·안전 4축을 한 번에 분석해 수도권 1,187개 행정동 중 나에게 맞는 동네를 추천합니다.
+              직장·예산·통근·안전 4축을 한 번에 분석해 수도권 1,187개 행정동 중 <br /> 나에게 맞는 동네를 추천합니다.
+              <br />
+              아파트는 물론{' '}
+              <strong className="text-ink-primary font-semibold">오피스텔·빌라·단독다가구 전월세</strong>까지 — <br /> 청년 1인가구 실수요를 그대로 담았습니다.
               <br />
               <strong className="text-ink-primary font-semibold">6개 공공기관 데이터에 민간 API(ODsay·카카오)를 융합</strong>해
+              <br />
               "분석은 우리가, 결정은 당신이" 의 도구를 만들었습니다.
             </p>
 
@@ -545,7 +549,7 @@ export function LandingPage() {
                 {
                   emoji: '🎯',
                   title: '매물이 아닌 동네 + 단지',
-                  desc: '추천 단위 자체를 바꿨습니다. 통근(transit) + 부담(RIR) + 안전(safety) + 생활(life) 4축 가중합으로 점수화합니다.',
+                  desc: '추천 단위를 "동네+단지"로 바꿨습니다. 아파트·오피스텔·빌라·단독다가구 4종을 매매·전세·월세로 다루고, 통근·부담(RIR)·안전·생활 4축 가중합으로 점수화합니다.',
                 },
                 {
                   emoji: '📊',
@@ -555,7 +559,7 @@ export function LandingPage() {
                     </>
                   ),
                   desc:
-                    '19년치 시계열로 5단지 백테스트. ARIMA(2,1,2)가 LSTM(20.4%) 대비 절반 오차. "정직한 한계 인지" 톤으로 학계 수준 정확도를 입증.',
+                    '20년치 시계열로 5단지 백테스트. ARIMA(2,1,2)가 LSTM(20.4%) 대비 절반 오차. "정직한 한계 인지" 톤으로 학계 수준 정확도를 입증.',
                 },
                 {
                   emoji: '🏛️',
@@ -617,11 +621,11 @@ export function LandingPage() {
         <SectionReveal>
           <section className="py-8 md:py-12 border-t border-line-light">
             <div className="rounded-cardxl bg-gradient-to-br from-brand-500 to-brand-700 text-white p-6 md:p-10 text-center shadow-card">
-              <h2 className="font-aggro text-2xl md:text-4xl font-bold tracking-tight">강남역으로 출퇴근하는 사회초년생이라면</h2>
+              <h2 className="font-aggro text-2xl md:text-4xl font-bold tracking-tight">강남역 출퇴근, 사당·일산·분당·부천 어디가 맞을까?</h2>
               <p className="mt-3 text-sm md:text-base opacity-90 leading-relaxed max-w-2xl mx-auto">
-                "강남역" 입력 → "사회초년생" 프리셋 → 1.5억 예산 → 90초 안에 추천 8선 도달.
+                "강남역" 입력 → "사회초년생" 프리셋 → 예산·거래유형 설정 → 90초 안에 수도권 통근권 추천 8선.
                 <br />
-                1위 카드 클릭 → 단지별 ARIMA 가격 안정성·통근 비교·LH 청년주택 배너까지.
+                1위 카드 클릭 → 거래유형·면적대별 시세 + 단지 ARIMA 가격 안정성 · 통근 비교 · LH 청년주택 배너까지.
               </p>
               <Link
                 to="/home"
