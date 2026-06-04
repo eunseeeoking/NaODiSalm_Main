@@ -20,6 +20,9 @@ if (!graph) { console.error('subway-graph.json 없음 — seed:subway-graph 먼�
 const WP: Record<string, { lat: number; lng: number }> = {
   '강남역': { lat: 37.4979, lng: 127.0276 },
   '부천시청 인근': { lat: 37.5035, lng: 126.766 },
+  '여의도역': { lat: 37.5215, lng: 126.9242 },
+  '판교역': { lat: 37.3947, lng: 127.1112 },
+  '잠실역': { lat: 37.5133, lng: 127.1001 },
 };
 
 interface Sample { lat: number; lng: number; distanceKm: number; straightEst: number; odsayMin: number | null }

@@ -47,10 +47,12 @@ const MAX_DIST_KM = Number(process.env.MAX_DIST_KM ?? '50');    // 분석 대상
 const BAND_KM = 5; // 층화표본 거리 구간
 const QUOTA_SAFETY_MARGIN = 50; // 라이브용으로 남겨둘 여유
 
-// 대표 직장 — radial hub(강남) + 경인선 corridor(부천: 삼산동 케이스의 무대)
+// 측정할 직장. 결과는 기존 commute-accuracy-samples.json 에 **병합**(기존 라벨 유지, 신규 추가/갱신).
+//  초기: 강남(radial hub)·부천(경인선 corridor). 표본 다양화 추가: 여의도·판교·잠실.
 const WORKPLACES: { lat: number; lng: number; label: string }[] = [
-  { lat: 37.4979, lng: 127.0276, label: '강남역' },
-  { lat: 37.5035, lng: 126.766, label: '부천시청 인근' },
+  { lat: 37.5215, lng: 126.9242, label: '여의도역' },
+  { lat: 37.3947, lng: 127.1112, label: '판교역' },
+  { lat: 37.5133, lng: 127.1001, label: '잠실역' },
 ];
 
 interface DongMetric {
@@ -253,15 +255,20 @@ function analyze(wpLabel: string, metrics: DongMetric[]) {
       allSamples[wp.label] = metrics.filter((m) => m.odsayMin != null);
     }
 
-    // 표본 저장 (라우터 캘리브레이션용)
+    // 표본 저장 — 기존 JSON 에 병합(기존 직장 유지, 이번 직장 추가/갱신). 캘리브레이션 누적.
     if (!DRY_RUN) {
       const outPath = path.join(__dirname, '..', 'doc', '2026-06-04', 'commute-accuracy-samples.json');
+      let existing: Record<string, DongMetric[]> = {};
+      try {
+        existing = JSON.parse(fs.readFileSync(outPath, 'utf-8')).samples ?? {};
+      } catch { /* 최초 실행 */ }
+      const mergedSamples = { ...existing, ...allSamples };
       fs.writeFileSync(
         outPath,
-        JSON.stringify({ measuredAt: new Date().toISOString(), patienceLevels: PATIENCE_LEVELS, gateMult: GATE_MULT, samples: allSamples }, null, 2),
+        JSON.stringify({ measuredAt: new Date().toISOString(), patienceLevels: PATIENCE_LEVELS, gateMult: GATE_MULT, samples: mergedSamples }, null, 2),
         'utf-8',
       );
-      console.log(`\n💾 표본 저장: ${outPath}`);
+      console.log(`\n💾 표본 저장(병합): ${outPath}  직장 ${Object.keys(mergedSamples).length}곳`);
     }
 
     const after = await getOdsayUsageToday();

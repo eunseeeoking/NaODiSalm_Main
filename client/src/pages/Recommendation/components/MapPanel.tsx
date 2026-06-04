@@ -16,6 +16,7 @@ import { useDragScroll } from '../../../hooks/useDragScroll';
 import { useChoroplethLayer } from '../hooks/useChoroplethLayer';
 import { haversineKm, pickCommuteTierColor } from '../utils/commuteEstimate';
 import { fetchCommuteMatrix } from '../../../api/commute';
+import { rerankByCommuteOverrides } from '../rerank';
 // CommutePatienceSlider → LeftPanel 로 이동
 
 interface RegionCentroid {
@@ -52,6 +53,8 @@ export function MapPanel({ showLegend = true }: { showLegend?: boolean } = {}) {
   const setFocused = useRecommendationStore((s) => s.setFocused);
   const isLoading = useRecommendationStore((s) => s.isLoading);
   const commuteOverrides = useRecommendationStore((s) => s.commuteOverrides);
+  const weights = useRecommendationStore((s) => s.weights);
+  const patience = useRecommendationStore((s) => s.patience);
   const setCommuteOverrides = useRecommendationStore((s) => s.setCommuteOverrides);
   const setHoveredRef = useRef(setHovered);
   setHoveredRef.current = setHovered;
@@ -122,6 +125,13 @@ export function MapPanel({ showLegend = true }: { showLegend?: boolean } = {}) {
       controller.abort();
     };
   }, [workplace, recommendations]);
+
+  // top-8 ODsay 실측 재정렬 — 마커 순위 번호를 카드 리스트와 일치(거짓양성 표시-순위 모순 완화).
+  //   폴리곤 하이라이트 SET 은 서버 top-8 유지(아래 recAdmCodes) — 색만 override, 깜빡임 방지.
+  const ranked = useMemo(
+    () => rerankByCommuteOverrides(recommendations, commuteOverrides, weights, patience),
+    [recommendations, commuteOverrides, weights, patience],
+  );
 
   // ── 추천(법정동) → 최근접 행정동 폴리곤 매핑 (2026-06-03 재설계) ──
   //   추천 top-8 만 강조. GeoJSON 은 행정동이라 좌표 최근접 행정동에 매핑.
@@ -221,7 +231,7 @@ export function MapPanel({ showLegend = true }: { showLegend?: boolean } = {}) {
     // 순위별 핀 색상: 1위=파랑, 2~3위=인디고, 4~8위=보라
     const PIN_COLORS = ['#2563EB', '#4F46E5', '#4F46E5', '#7C3AED', '#7C3AED', '#7C3AED', '#7C3AED', '#7C3AED'];
 
-    recommendations.slice(0, 8).forEach((r, i) => {
+    ranked.slice(0, 8).forEach((r, i) => {
       const rank = i + 1;
       const color = PIN_COLORS[i] ?? '#7C3AED';
       const count = r.complexCount ?? 0;
@@ -322,7 +332,7 @@ export function MapPanel({ showLegend = true }: { showLegend?: boolean } = {}) {
       overlay.setMap(mapInstance);
       regionOverlaysRef.current.push(overlay);
     });
-  }, [recommendations, mapInstance, status, isLoading]);
+  }, [ranked, mapInstance, status, isLoading]);
 
   // ─── 좌상단 진행 배지 텍스트 결정 ──────────────────────────
   //   추천 지역만 ODsay 실측 통근으로 시간대별 강조(초록~빨강).

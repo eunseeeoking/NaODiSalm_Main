@@ -5,8 +5,10 @@
  *  - 안의 elevated 카드들이 옅은 회색 트레이 위에 떠 있는 시각 구조
  *  - 가중치 슬라이더는 LeftPanel 로 분리됨
  */
+import { useMemo } from 'react';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { BUDGET_SLIDER, MONTHLY_RENT_SLIDER } from '../../../types/recommendation';
+import { rerankByCommuteOverrides } from '../rerank';
 import { RegionCard } from './RegionCard';
 import { EmptyState } from './EmptyState';
 
@@ -15,6 +17,9 @@ const TOP_N = 8;
 export function CardPanel() {
   const workplace = useRecommendationStore((s) => s.workplace);
   const recommendations = useRecommendationStore((s) => s.recommendations);
+  const commuteOverrides = useRecommendationStore((s) => s.commuteOverrides);
+  const weights = useRecommendationStore((s) => s.weights);
+  const patience = useRecommendationStore((s) => s.patience);
   const isLoading = useRecommendationStore((s) => s.isLoading);
   const budgetFilteredCount = useRecommendationStore((s) => s.budgetFilteredCount);
   const budgetFilteredBreakdown = useRecommendationStore((s) => s.budgetFilteredBreakdown);
@@ -25,7 +30,12 @@ export function CardPanel() {
   const dealType = useRecommendationStore((s) => s.dealType);
 
   const isEmpty = workplace != null && recommendations.length === 0;
-  const top = recommendations.slice(0, TOP_N);
+  // top-8 ODsay 실측(commuteOverrides)으로 재정렬 — 표시-순위 모순(거짓양성) 완화.
+  const ranked = useMemo(
+    () => rerankByCommuteOverrides(recommendations, commuteOverrides, weights, patience),
+    [recommendations, commuteOverrides, weights, patience],
+  );
+  const top = ranked.slice(0, TOP_N);
   const hasMore = recommendations.length > TOP_N;
 
   // 예산 상한 1.5배(천만 단위), 거래유형별 슬라이더 최대(=무제한)로 클램프
