@@ -176,7 +176,14 @@ npx tsx scripts/sanityRealStory.ts
 
 - [x] **활성화 4단계 실행** (위 5장) — 서브초 복구 ✅ (warm rent 78ms)
 - [x] 커밋 — `feat/KI-24-inventory-gate` (코드 `26d7629` + ODsay 분석 doc `4c0ff4a`) ✅
-- [ ] **클라이언트 카드 "예산 내 N건" 칩** 라벨 — 서버는 준비됨(rentSampleCount=감당구간 건수), 화면 반영 필요
+- [x] **클라이언트 카드 "예산 내 N건" 칩** 라벨 — `RegionCard.tsx` 반영 ✅
+  - 예산 활성(`budget < BUDGET_SLIDER[dealType].max`) + rent basis → 기존 "표본 N" 칩을 **"예산 내 N건"**(감당 가능 매물 실재 신호=입소문 디지털화)으로 전환. 표본 충분 시 **brand(파랑)**, <10이면 amber·참고(시세 신뢰도 caveat 유지).
+  - LH 청년주택 배지(초록)와 색 충돌 방지 위해 칩은 brand 톤으로 구분(LH는 시드 희소 특이케이스).
+  - 예산 미지정/SALE → 기존 "표본 N" 신뢰 칩 그대로(하위호환). `npm run typecheck` 통과.
+- [x] **Depth-3 LH 배너 공식 링크** — `LhAggregateBanner.tsx` ✅
+  - "LH 공식 사이트 참고"(정적 텍스트) → **"마이홈 지도찾기에서 확인 ↗"** 실제 링크(`myhome.go.kr` 주거복지 지도찾기, `target=_blank`/`noopener`/카드 클릭 전파차단).
+  - **데이터 의미 정합 수정**: 우리 LH 시드 출처(data.go.kr 15059475 '임대주택단지 조회')는 **기존(공급 완료) 재고**라, 처음 연결했던 LH청약플러스 '모집공고' 목록과 의미가 어긋남(공고는 접수 시점에만 노출 → 강동구 등 평소 빈 결과로 사용자 혼란). 기존 공공임대 단지를 지역·지도로 보여주는 마이홈 지도찾기로 교체. 배너 카피도 "합산(기존 공급분) · 단지 위치·입주정보"로 정합화.
+  - 지역 GET 파라미터 딥링크는 보류(검색이 POST 기반 SPA → 잘못된 파라미터로 빈 결과 유도 위험). 지역명은 링크 툴팁으로 안내. 사유 코드 주석 명시.
 - [ ] **배포** — 브랜치 머지 → push → Render 재배포(DB 이미 마이그레이션됨, 코드만 반영)
 - [ ] (후속) 마이그레이션 파일 정리 (`prisma migrate dev --name add_deposit_histogram`)
 - [ ] (후속) SALE(매매) 경로도 재고 게이트 적용 — 현재는 매매 중위값 게이트 유지

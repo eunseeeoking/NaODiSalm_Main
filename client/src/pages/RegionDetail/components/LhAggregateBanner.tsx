@@ -29,6 +29,16 @@ function scopeMeta(scope: LhSummaryScope | undefined) {
   }
 }
 
+/**
+ * 공공임대주택 조회 링크 (마이홈포털 주거복지 지도찾기).
+ *  - 우리 LH 데이터 출처(data.go.kr 15059475 '임대주택단지 조회')는 **기존(공급 완료) 재고** 단지.
+ *    → LH청약플러스 '모집공고' 목록과 의미가 어긋남(공고는 접수 시점에만 노출 → 평소 빈 결과).
+ *    그래서 **기존 공공임대 단지를 지역별·지도로 보여주는** 마이홈포털 지도찾기로 연결(데이터 의미 일치).
+ *  - 지역 검색은 POST 기반 SPA 라 GET 파라미터 사전필터가 안 걸림 → 파라미터 없이 보내고 툴팁으로 안내.
+ */
+const PUBLIC_RENTAL_MAP_URL =
+  'https://www.myhome.go.kr/hws/portal/gis/mnvPosblHouseMap.do';
+
 function rentRangeLabel(min: number | null, max: number | null): string {
   if (min == null && max == null) return '월세 정보 없음';
   if (min != null && max != null && min !== max) return `월세 ${min}~${max}만`;
@@ -67,7 +77,17 @@ export function LhAggregateBanner({ summary, sigunguDisplayName, dongDisplayName
             <span className={`ml-2 text-2xs font-semibold px-1.5 py-0.5 rounded ${meta.tone}`}>{meta.label}</span>
           </h3>
           <p className="text-2xs text-ink-tertiary dark:text-ink-tertiary-dark mt-0.5">
-            행복주택·청년매입임대·전세임대 합산 · 단지 단위 정보는 LH 공식 사이트 참고
+            행복주택·청년매입임대·전세임대 합산(기존 공급분) · 단지 위치·입주정보는{' '}
+            <a
+              href={PUBLIC_RENTAL_MAP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title={`마이홈포털 지도찾기에서 ${where} 공공임대주택 조회`}
+              className="font-semibold text-brand hover:underline underline-offset-2"
+            >
+              마이홈 지도찾기에서 확인 ↗
+            </a>
             {showSigunguHint && (
               <span className="ml-1 opacity-80">
                 · 시군구 전체 {summary.sigunguTotalUnits!.toLocaleString()}호

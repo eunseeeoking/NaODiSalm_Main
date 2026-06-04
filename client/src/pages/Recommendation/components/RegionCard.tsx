@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { InfoTooltip } from '../../../components/InfoTooltip';
+import { BUDGET_SLIDER } from '../../../types/recommendation';
 import type { RegionRecommendation } from '../../../types/recommendation';
 
 interface Props {
@@ -74,6 +75,9 @@ export function RegionCard({ region, rank }: Props) {
   const hoveredRegion = useRecommendationStore((s) => s.hoveredRegion);
   const setHovered = useRecommendationStore((s) => s.setHovered);
   const dealType = useRecommendationStore((s) => s.dealType);
+  // 예산 필터 활성 여부 — 슬라이더 '최대'(무제한 센티넬)면 비활성. index.tsx 의 전송 로직과 동일 기준.
+  const budget = useRecommendationStore((s) => s.budget);
+  const budgetActive = budget < BUDGET_SLIDER[dealType].max;
   // 통근시간: top-8 ODsay 실측(commuteOverrides) 우선, 없으면 서버 Haversine 추정.
   const commuteMin = useRecommendationStore(
     (s) => s.commuteOverrides[region.legalDongCode],
@@ -129,9 +133,14 @@ export function RegionCard({ region, rank }: Props) {
   const estimatedSet = new Set<ScoreAxis>(region.estimatedAxes ?? []);
   const estimatedLabels = (region.estimatedAxes ?? []).map((a) => AXIS_LABEL[a]);
 
-  // P3 #6: 전월세 표본수 신뢰 칩 (rent basis 일 때만)
+  // 전월세 표본수 칩 (rent basis 일 때만). 의미가 예산 유무에 따라 달라짐:
+  //  · 예산 지정(KI-24 재고 게이트): sampleCount = '예산 이하 실거래 건수' → "예산 내 N건"
+  //    칩으로 입소문("여기 N건 있어") 디지털화. 게이트(≥5)라 항상 5건 이상.
+  //  · 예산 미지정: sampleCount = 동 전체 표본수 → 기존 "표본 N" 신뢰 칩(P3 #6).
   const sampleCount = isRentBasis ? region.rentSampleCount ?? null : null;
   const lowSample = sampleCount != null && sampleCount < 10;
+  // 예산 활성 + rent basis 일 때만 재고(예산 내 N건) 칩으로 전환.
+  const isInventoryChip = budgetActive && isRentBasis && sampleCount != null;
 
   const base = 'rounded-cardlg p-4 transition-all cursor-pointer relative';
   const color = isTop
@@ -171,21 +180,32 @@ export function RegionCard({ region, rank }: Props) {
         <span className="text-sm font-semibold text-ink-primary dark:text-ink-primary-dark flex-1 truncate">
           {region.displayName}
         </span>
-        {/* 전월세 표본수 신뢰 칩 — 표본 적으면(amber·참고용) 신뢰도 경고 */}
+        {/* 전월세 표본 칩 —
+            · 예산 활성: "예산 내 N건"(감당 가능 매물 실재 신호). 표본 충분하면 positive,
+              적으면(<10) amber·참고(시세 신뢰도 caveat).
+            · 예산 미지정: 기존 "표본 N" 신뢰 칩(적으면 amber·참고). */}
         {sampleCount != null && (
           <span
             title={
-              lowSample
+              isInventoryChip
+                ? lowSample
+                  ? `예산 이하 실거래 ${sampleCount}건 — 감당 가능한 매물은 실재하나 표본이 적어 시세는 참고용`
+                  : `예산 이하 실거래 ${sampleCount}건 — 감당 가능한 매물이 실재해요`
+                : lowSample
                 ? `실거래 ${sampleCount}건으로 산출 — 표본이 적어 참고용`
                 : `실거래 ${sampleCount}건으로 산출한 동 시세`
             }
             className={
               lowSample
                 ? 'shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                : isInventoryChip
+                ? 'shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand/[.15] text-brand dark:text-brand-300'
                 : 'shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-surface dark:bg-surface-dark text-ink-tertiary dark:text-ink-tertiary-dark'
             }
           >
-            표본 {sampleCount}{lowSample ? '·참고' : ''}
+            {isInventoryChip
+              ? `예산 내 ${sampleCount}건${lowSample ? '·참고' : ''}`
+              : `표본 ${sampleCount}${lowSample ? '·참고' : ''}`}
           </span>
         )}
         {/* LH 청년주택 배지 — lhComplexNearby 1개 이상일 때만 노출 */}
