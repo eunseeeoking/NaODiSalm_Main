@@ -30,6 +30,7 @@ import { findCachedMatrix, type CommuteEntry } from './commuteRepository';
 import { batchAdjustReturns } from '../recommendation/rebNormalize';
 import {
   JEONSE_TO_MONTHLY_RATE,
+  HIST_BUCKET_MANWON,
   ALL_PROPERTY_TYPES,
   type RegionCandidate,
   type DealType,
@@ -263,27 +264,101 @@ async function fetchSaleSummary(
   return map;
 }
 
-/** KI-21 — 전월세 사전집계 조회. JEONSE 는 cost=deposit×RATE(시드 저장), monthly=0. */
+/** KI-24 보증금 히스토그램 타입 [idx, n, sumDeposit, sumMonthly]. */
+type HistBucket = [number, number, number, number];
+
+/**
+ * KI-24 — 히스토그램에서 '예산 이하 감당 구간' 통계 산출(live 스캔 없이 JS 합산).
+ *  버킷 시작값(idx×BUCKET)이 예산 이하면 포함 → 라운드 예산값(1억 등) 경계 포착.
+ *  monthlyCap 은 보증금 히스토그램으로 정확 반영 불가 → 호출부가 monthly 한도 지정 시 이 경로를 건너뜀.
+ */
+function affordableFromHistogram(
+  hist: HistBucket[],
+  depositCap: number,
+  isJeonse: boolean,
+  rate: number,
+): RentStat | null {
+  let n = 0;
+  let sumDep = 0;
+  let sumMon = 0;
+  for (const [idx, cnt, sd, sm] of hist) {
+    if (idx * HIST_BUCKET_MANWON <= depositCap) {
+      n += cnt;
+      sumDep += sd;
+      sumMon += sm;
+    } else {
+      break; // hist 는 idx 오름차순
+    }
+  }
+  if (n < 5) return null; // 재고 게이트: 감당 표본 < 5 → 후보 제외
+  const deposit = Math.round(sumDep / n);
+  const monthly = isJeonse ? 0 : Math.round(sumMon / n);
+  const cost = isJeonse ? deposit * rate : (sumMon + sumDep * rate) / n;
+  return {
+    monthlyCost: Math.round(cost * 100) / 100,
+    depositManwon: deposit,
+    monthlyRentManwon: monthly,
+    sampleCount: n,
+  };
+}
+
+/**
+ * KI-21/24 — 전월세 사전집계 조회.
+ *  · 예산 미지정: 저장된 median 사용(KI-21, 서브초).
+ *  · 예산 지정(budgetOpts): 보증금 히스토그램에서 '감당 구간'을 JS 합산(KI-24, live 스캔 없이 서브초).
+ *    - 히스토그램이 있는 동은 coveredKeys 에 기록 → 호출부가 live 재계산에서 제외(중복/되살림 방지).
+ *    - 감당 표본 <5 면 map 미적재 + outStats.budgetExcluded++('예산으로 숨김').
+ *    - monthlyCap 유한(월세 한도 지정) 시 히스토그램으로 정확 반영 불가 → 커버 안 함(호출부 live 폴백).
+ */
 async function fetchRentSummary(
   aggs: RegionAggregate[],
   dealType: DealType,
   propertyTypes: readonly PropertyType[],
+  budgetOpts?: { depositCap: number; monthlyCap: number },
+  coveredKeys?: Set<string>,
+  outStats?: { budgetExcluded: number },
 ): Promise<Map<string, RentStat>> {
   const map = new Map<string, RentStat>();
   if (aggs.length === 0 || propertyTypes.length === 0) return map;
   const typeKey = [...propertyTypes].sort().join('+');
-  type Row = { sigungu_code: string; dong: string; cost_median: number | null; deposit_median: number | null; monthly_median: number | null; sample_count: number };
+  const useHist = !!budgetOpts && !(dealType === 'MONTHLY' && budgetOpts.monthlyCap !== Infinity);
+  type Row = {
+    sigungu_code: string;
+    dong: string;
+    cost_median: number | null;
+    deposit_median: number | null;
+    monthly_median: number | null;
+    sample_count: number;
+    deposit_histogram: unknown;
+  };
   const rows = await prisma
     .$queryRaw<Row[]>(Prisma.sql`
-      SELECT sigungu_code, dong, cost_median, deposit_median, monthly_median, sample_count
+      SELECT sigungu_code, dong, cost_median, deposit_median, monthly_median, sample_count, deposit_histogram
       FROM t_dong_price_summary
       WHERE deal_type = ${dealType} AND type_key = ${typeKey} AND ${summaryTupleFilter(aggs)}
     `)
     .catch(() => [] as Row[]);
+  const isJeonse = dealType === 'JEONSE';
   for (const r of rows) {
+    const key = `${r.sigungu_code}|${r.dong}`;
+    if (useHist) {
+      // 예산 경로 — 히스토그램이 있어야 커버. (구버전 row 는 null → 미커버 → 호출부 live 폴백)
+      const hist = parseHistogram(r.deposit_histogram);
+      if (!hist) continue;
+      if (coveredKeys) coveredKeys.add(key);
+      const stat = affordableFromHistogram(hist, budgetOpts!.depositCap, isJeonse, JEONSE_TO_MONTHLY_RATE);
+      if (stat) {
+        map.set(key, stat);
+      } else if (Number(r.sample_count) >= 5 && outStats) {
+        outStats.budgetExcluded += 1; // 전체 표본 ≥5 였으나 예산 내 <5 → 예산으로 숨김
+      }
+      continue;
+    }
+    // 예산 미지정 — 저장된 median 사용(KI-21).
+    if (coveredKeys) coveredKeys.add(key);
     const cost = Number(r.cost_median ?? 0);
     if (cost > 0) {
-      map.set(`${r.sigungu_code}|${r.dong}`, {
+      map.set(key, {
         monthlyCost: Math.round(cost * 100) / 100,
         depositManwon: Math.round(Number(r.deposit_median ?? 0)),
         monthlyRentManwon: Math.round(Number(r.monthly_median ?? 0)),
@@ -292,6 +367,22 @@ async function fetchRentSummary(
     }
   }
   return map;
+}
+
+/** JSON 컬럼(문자열 또는 파싱된 배열) → HistBucket[] | null. */
+function parseHistogram(raw: unknown): HistBucket[] | null {
+  if (raw == null) return null;
+  const arr = typeof raw === 'string' ? safeJsonArray(raw) : Array.isArray(raw) ? raw : null;
+  if (!arr || arr.length === 0) return null;
+  return arr as HistBucket[];
+}
+function safeJsonArray(s: string): unknown[] | null {
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchRepresentativePrices(
@@ -430,18 +521,47 @@ async function fetchRentCostByRegion(
   propertyTypes: readonly PropertyType[],
   // 면적 필터(KI-18 P2). 기본 = 전체 9~330(기존과 동일, 핫패스 무변경). 면적대별만 반개구간 밴드 주입.
   areaFilter: Prisma.Sql = FULL_AREA_FILTER,
+  // KI-24(2026-06-04) 재고 게이트: 예산 지정 시 '예산 이하 실거래'만 풀에 넣어 median/표본을 산출한다.
+  //  → 동 중위값이 비싸도 감당 가능 구간(예: 하남 망월동 1억 이하 161건)이 있으면 그 구간 시세로 후보 유지.
+  //    median/sampleCount 이 자동으로 '감당 구간' 값이 되고, HAVING≥5 가 곧 재고 게이트가 된다.
+  //  미지정(Infinity)이면 기존 전체-동 median (하위호환·핫패스 무변경).
+  budgetOpts: { budget?: number; monthlyBudget?: number } = {},
+  // KI-24 — 예산 경로의 '예산으로 숨김' 동 수를 한 패스에서 회신(별도 스캔 쿼리 제거). 미전달 시 무시.
+  outStats?: { budgetExcluded: number },
 ): Promise<Map<string, RentStat>> {
   const map = new Map<string, RentStat>();
   if (dealType === 'SALE' || aggregates.length === 0 || propertyTypes.length === 0) {
     return map;
   }
 
-  // KI-21: 전체 면적 경로는 사전집계 summary 우선 → 미적재 동만 live 재계산.
+  // 예산 캡 — 양수 유한값만 활성. Infinity/미지정이면 비활성(전체-동 median, 기존 동작).
+  const depositCap =
+    typeof budgetOpts.budget === 'number' && Number.isFinite(budgetOpts.budget) && budgetOpts.budget > 0
+      ? Math.round(budgetOpts.budget)
+      : Infinity;
+  const monthlyCap =
+    typeof budgetOpts.monthlyBudget === 'number' &&
+    Number.isFinite(budgetOpts.monthlyBudget) &&
+    budgetOpts.monthlyBudget > 0
+      ? Math.round(budgetOpts.monthlyBudget)
+      : Infinity;
+  const budgetActive = depositCap !== Infinity || (dealType === 'MONTHLY' && monthlyCap !== Infinity);
+
+  // 사전집계(t_dong_price_summary) 우선 — 예산 미지정은 저장 median, 예산 지정은 보증금 히스토그램(KI-24).
+  //  둘 다 live 스캔 없이 서브초. 히스토그램 미적재(구버전)·미커버 동만 아래 live 폴백으로 재계산.
   let liveAggs = aggregates;
   if (areaFilter === FULL_AREA_FILTER) {
-    const summ = await fetchRentSummary(aggregates, dealType, propertyTypes);
+    const covered = new Set<string>();
+    const summ = await fetchRentSummary(
+      aggregates,
+      dealType,
+      propertyTypes,
+      budgetActive ? { depositCap, monthlyCap } : undefined,
+      covered,
+      outStats,
+    );
     for (const [k, v] of summ) map.set(k, v);
-    liveAggs = aggregates.filter((a) => !map.has(`${a.sigunguCode}|${a.dong}`));
+    liveAggs = aggregates.filter((a) => !covered.has(`${a.sigunguCode}|${a.dong}`));
     if (liveAggs.length === 0) return map;
   }
 
@@ -486,6 +606,19 @@ async function fetchRentCostByRegion(
       ? Prisma.empty
       : Prisma.raw(`AND p.monthly_manwon >= p.deposit_manwon * ${rateLit}`);
 
+  // KI-24 재고 게이트 예산 술어 — 숫자 상수라 SQL 인라인(파라미터 바인딩 순서 꼬임 방지, KI-21 교훈).
+  //  JEONSE: 보증금 ≤ 예산. MONTHLY: 보증금 ≤ 예산 AND 순수월세 ≤ 월세한도(각각 지정된 것만).
+  const budgetPred = (() => {
+    if (!budgetActive) return Prisma.empty;
+    if (isJeonse) {
+      return depositCap !== Infinity ? Prisma.raw(`AND p.deposit_manwon <= ${depositCap}`) : Prisma.empty;
+    }
+    const parts: string[] = [];
+    if (depositCap !== Infinity) parts.push(`p.deposit_manwon <= ${depositCap}`);
+    if (monthlyCap !== Infinity) parts.push(`p.monthly_manwon <= ${monthlyCap}`);
+    return parts.length ? Prisma.raw('AND ' + parts.join(' AND ')) : Prisma.empty;
+  })();
+
   type MedRow = {
     sigungu_code: string;
     legal_dong: string;
@@ -493,19 +626,22 @@ async function fetchRentCostByRegion(
     median_deposit: number | null;
     median_monthly: number | null;
     sample_count: bigint | number;
+    /** KI-24 예산 경로에서만 채워짐 — 동 전체 표본수(감당/숨김 판정용). median 경로는 undefined. */
+    total_cnt?: bigint | number;
   };
 
   // 중위값: 동별 정렬 후 가운데 1~2건 평균 (홀수=1건, 짝수=2건 평균). MySQL 8 윈도우 함수.
   //  ⚡ 성능(KI-21 후속): JEONSE 는 cost = deposit×RATE(단조증가) → median(cost)=median(deposit)×RATE,
   //   monthly=0. 즉 **정렬 1개(deposit)만으로 충분**(median_cost 는 JS 에서 ×RATE 환산). 정렬 3→1 로 ~3배↓.
   //   MONTHLY 는 cost·deposit·monthly 가 독립이라 3개 유지(반전세 제외 필터 포함).
-  const rentQuery = isJeonse
+  const rentQueryMedian = isJeonse
     ? Prisma.sql`
       WITH pooled AS (
         SELECT sigungu_code, legal_dong, deposit_manwon
         FROM ( ${unioned} ) p
         WHERE ${areaFilter}
         ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
+        ${budgetPred}
       ),
       ranked AS (
         SELECT sigungu_code, legal_dong, deposit_manwon,
@@ -532,6 +668,7 @@ async function fetchRentCostByRegion(
         WHERE ${areaFilter}
         ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
         ${semiJeonseFilter}
+        ${budgetPred}
       ),
       ranked AS (
         SELECT
@@ -554,14 +691,72 @@ async function fetchRentCostByRegion(
       GROUP BY sigungu_code, legal_dong
       HAVING MAX(cnt) >= 5
     `;
+
+  // KI-24 재고 게이트 예산 경로: 윈도우 median 대신 '감당 구간(예산 이하) 조건부 AVG' 집계.
+  //  · 윈도우 함수(ROW_NUMBER ×N) 제거 → 단순 GROUP BY → 4종 풀 1회 스캔만(~5배 빠름).
+  //  · 예산 술어를 WHERE 가 아니라 CASE WHEN 으로 → 한 패스에서 '감당 표본수(sample_count)'와
+  //    '전체 표본수(total_cnt)'를 동시 산출 → 별도 '숨김' 카운트 쿼리 불필요(스캔 1회).
+  //  · 재고 게이트(감당 표본 ≥5)와 '숨김'(전체 ≥5 이나 감당 <5)은 아래 JS 파싱에서 분기.
+  //  · 컬럼 alias 를 median 경로와 동일하게 맞춰 파싱 로직 공유. 예산으로 상한이 잘린 부분집합이라
+  //    AVG 가 median 만큼 안정적(위쪽 이상치 제거됨).
+  const affConds: string[] = [];
+  if (depositCap !== Infinity) affConds.push(`deposit_manwon <= ${depositCap}`);
+  if (!isJeonse && monthlyCap !== Infinity) affConds.push(`monthly_manwon <= ${monthlyCap}`);
+  const affCond = Prisma.raw(affConds.length ? affConds.join(' AND ') : '1=1');
+
+  const rentQueryBudget = isJeonse
+    ? Prisma.sql`
+      SELECT
+        sigungu_code,
+        legal_dong,
+        NULL AS median_cost,
+        ROUND(AVG(CASE WHEN ${affCond} THEN deposit_manwon END)) AS median_deposit,
+        0 AS median_monthly,
+        SUM(CASE WHEN ${affCond} THEN 1 ELSE 0 END) AS sample_count,
+        COUNT(*) AS total_cnt
+      FROM ( ${unioned} ) p
+      WHERE ${areaFilter}
+      ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
+      AND deposit_manwon > 0
+      GROUP BY sigungu_code, legal_dong
+    `
+    : Prisma.sql`
+      WITH pooled AS (
+        SELECT sigungu_code, legal_dong, deposit_manwon, monthly_manwon, (${costExpr}) AS cost
+        FROM ( ${unioned} ) p
+        WHERE ${areaFilter}
+        ${cutoff ? Prisma.sql`AND p.contract_date >= ${cutoff}` : Prisma.empty}
+        ${semiJeonseFilter}
+      )
+      SELECT
+        sigungu_code,
+        legal_dong,
+        AVG(CASE WHEN ${affCond} THEN cost END) AS median_cost,
+        ROUND(AVG(CASE WHEN ${affCond} THEN deposit_manwon END)) AS median_deposit,
+        ROUND(AVG(CASE WHEN ${affCond} THEN monthly_manwon END)) AS median_monthly,
+        SUM(CASE WHEN ${affCond} THEN 1 ELSE 0 END) AS sample_count,
+        COUNT(*) AS total_cnt
+      FROM pooled
+      WHERE cost > 0
+      GROUP BY sigungu_code, legal_dong
+    `;
+
+  const rentQuery = budgetActive ? rentQueryBudget : rentQueryMedian;
   const rows = await prisma.$queryRaw<MedRow[]>(rentQuery).catch((e: unknown) => {
     console.warn('[recommendations] 전월세 집계 실패 → 매매가 합성 폴백:', e);
     return [] as MedRow[];
   });
 
+  let budgetExcluded = 0;
   for (const r of rows) {
+    const sample = Number(r.sample_count ?? 0);
+    // 재고 게이트: 예산 활성 시 '감당 표본 <5'면 후보 제외. 단 전체 표본 ≥5 였다면 '예산으로 숨김'.
+    if (budgetActive && sample < 5) {
+      if (Number(r.total_cnt ?? 0) >= 5) budgetExcluded++;
+      continue;
+    }
     const deposit = Math.round(Number(r.median_deposit ?? 0));
-    // JEONSE 는 SQL 정렬 1개로 축소(median_cost=NULL) → JS 에서 cost = deposit×RATE 환산, monthly=0.
+    // JEONSE 는 median_cost=NULL → JS 에서 cost = deposit×RATE 환산, monthly=0.
     const cost = isJeonse ? deposit * RATE : Number(r.median_cost ?? 0);
     const monthly = isJeonse ? 0 : Math.round(Number(r.median_monthly ?? 0));
     if (cost > 0) {
@@ -569,10 +764,11 @@ async function fetchRentCostByRegion(
         monthlyCost: Math.round(cost * 100) / 100,
         depositManwon: deposit,
         monthlyRentManwon: monthly,
-        sampleCount: Number(r.sample_count),
+        sampleCount: sample,
       });
     }
   }
+  if (outStats) outStats.budgetExcluded += budgetExcluded; // 사전집계(히스토그램) 숨김 + live 폴백 숨김 합산
   return map;
 }
 
@@ -851,6 +1047,7 @@ export interface BudgetFilteredBreakdown {
   salePrice: number;
 }
 
+
 /**
  * 진입점 — 추천용 후보 행정동 산출.
  *
@@ -947,6 +1144,8 @@ export async function fetchRegionCandidates(
 
   // 3) 가격 + 수익률 + (전월세 시) 실거래 월주거비 일괄 조회
   const targetAggs = withDistance.map((x) => x.agg);
+  // KI-24: 재고 게이트 예산 경로의 '예산으로 숨김' 동 수를 rent 집계와 같은 패스에서 회신받는다.
+  const rentStats = { budgetExcluded: 0 };
   const [priceMap, returnMap, commuteMap, rentCostMap] = await Promise.all([
     timed('price', fetchRepresentativePrices(targetAggs, priceTypes)),
     timed('returns', fetchExpectedReturns(targetAggs)),
@@ -956,7 +1155,9 @@ export async function fetchRegionCandidates(
         Map<string, CommuteEntry>
       >,
     ),
-    timed('rent', fetchRentCostByRegion(targetAggs, dealType, propertyTypes)),
+    // KI-24 재고 게이트: 예산을 집계 쿼리로 내려보냄 → rentStat 이 '감당 구간' median·표본.
+    //  HAVING≥5 가 재고 게이트 역할 → 감당 매물 <5건 동은 rentStat 없음 → 아래 루프에서 제외.
+    timed('rent', fetchRentCostByRegion(targetAggs, dealType, propertyTypes, FULL_AREA_FILTER, { budget, monthlyBudget }, rentStats)),
   ]);
   if (REC_DEBUG) console.log(`[perf] candidates=${targetAggs.length}`);
 
@@ -1150,6 +1351,10 @@ export async function fetchRegionCandidates(
       rentPureMonthlyManwon: rentStat?.monthlyRentManwon ?? null,
     };
   });
+
+  // KI-24: 재고 게이트 하 전월세 예산 '숨김' 카운트는 fetchRentCostByRegion 가 rent 집계와 같은
+  //  패스에서 산출(rentStats.budgetExcluded). 별도 스캔 쿼리 없음(핫패스 +1.5s 방지).
+  budgetFilteredBreakdown.deposit += rentStats.budgetExcluded;
 
   const budgetFilteredCount =
     budgetFilteredBreakdown.deposit +

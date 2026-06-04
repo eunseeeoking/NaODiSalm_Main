@@ -270,6 +270,13 @@ const MONTHLY_COST_RATE = (JEONSE_PRICE_RATIO * ANNUAL_CONVERSION_RATE) / 12; //
 export const JEONSE_TO_MONTHLY_RATE = ANNUAL_CONVERSION_RATE / 12; // 기본 ≈ 0.00375
 
 /**
+ * KI-24 보증금 히스토그램 버킷 폭(만원).
+ *  사전집계(seed:price-summary)와 런타임(recommendationRepository)이 공유 — 같은 폭이어야 정합.
+ *  500 = 보증금 ±500만 해상도(예산 경계 근사). 버킷 idx = floor(deposit / 500).
+ */
+export const HIST_BUCKET_MANWON = 500;
+
+/**
  * 사용자 소득 미입력 시 기본값 — 통계청 3분위 월평균 가처분소득 (2023).
  *  seed:income 실행 후 t_income_quintile.avg_income(quintile=3) 와 일치.
  */

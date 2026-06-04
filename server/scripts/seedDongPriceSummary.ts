@@ -27,7 +27,7 @@
 import 'dotenv/config';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../src/services/db';
-import { JEONSE_TO_MONTHLY_RATE } from '../src/services/recommendation/scoring';
+import { JEONSE_TO_MONTHLY_RATE, HIST_BUCKET_MANWON } from '../src/services/recommendation/scoring';
 
 type PType = 'APT' | 'OFFI' | 'VILLA' | 'SH';
 const SALE_TYPES: PType[] = ['APT', 'OFFI', 'VILLA']; // SH 매매 없음
@@ -45,6 +45,23 @@ const RENT: Record<PType, string> = {
 const RATE = JEONSE_TO_MONTHLY_RATE;
 const MIN_SAMPLE = 5;
 const CONCURRENCY = 8;
+
+/** 전월세 raw → 보증금 히스토그램 [[idx, n, sumDep, sumMon], …] (sparse, idx 오름차순).
+ *  idx = floor(deposit / HIST_BUCKET_MANWON). 런타임이 'idx*BUCKET ≤ 예산' 버킷을 합산.
+ *  JEONSE 는 monthly 0 → sumMon=0. cost 는 런타임에서 sumMon + sumDep×RATE 로 환산. */
+function buildHistogram(rows: { deposit: number; monthly: number }[]): [number, number, number, number][] {
+  const m = new Map<number, [number, number, number, number]>();
+  for (const r of rows) {
+    if (r.deposit <= 0) continue;
+    const idx = Math.floor(r.deposit / HIST_BUCKET_MANWON);
+    const b = m.get(idx) ?? [idx, 0, 0, 0];
+    b[1] += 1;
+    b[2] += r.deposit;
+    b[3] += r.monthly;
+    m.set(idx, b);
+  }
+  return [...m.values()].sort((a, b) => a[0] - b[0]);
+}
 
 /** SQL 윈도우 median 규약과 동일: 정렬 후 가운데 1(홀수)·2(짝수) 평균. */
 function median(sorted: number[]): number {
@@ -70,6 +87,8 @@ function nonEmptySubsets(arr: PType[]): PType[][] {
 
 type SaleRow = { t: PType; price: number };
 type RentRow = { t: PType; deposit: number; monthly: number; contract: string };
+/** createMany 입력 — depositHistogram(KI-24)은 prisma generate 후 정식 필드. 그 전엔 캐스팅으로 통과. */
+type SummaryInput = Prisma.DongPriceSummaryCreateManyInput & { depositHistogram?: unknown };
 
 /** 단일 동의 매매 raw 거래 (APT/OFFI/VILLA pooled, area·cutoff·price>0). */
 async function fetchSale(sigungu: string, dong: string, cut: Date | null): Promise<SaleRow[]> {
@@ -110,8 +129,8 @@ async function computeDong(
   rentCut: Date | null,
   saleSubsets: PType[][],
   rentSubsets: PType[][],
-): Promise<Prisma.DongPriceSummaryCreateManyInput[]> {
-  const out: Prisma.DongPriceSummaryCreateManyInput[] = [];
+): Promise<SummaryInput[]> {
+  const out: SummaryInput[] = [];
 
   // ── SALE ──
   const saleRows = await fetchSale(sigungu, dong, saleCut);
@@ -140,6 +159,7 @@ async function computeDong(
           sigunguCode: sigungu, dong, dealType: 'JEONSE', typeKey: keyOf(sub),
           depositMedian: depM, costMedian: Math.round(depM * RATE * 100) / 100, monthlyMedian: 0,
           sampleCount: jeon.length,
+          depositHistogram: buildHistogram(jeon),
         });
       }
       // MONTHLY — 반전세 제외(monthly >= deposit×RATE), cost>0, HAVING≥5.
@@ -153,6 +173,7 @@ async function computeDong(
           depositMedian: Math.round(median(wol.map((r) => r.deposit).sort((a, b) => a - b))),
           monthlyMedian: Math.round(median(wol.map((r) => r.monthly).sort((a, b) => a - b))),
           sampleCount: wol.length,
+          depositHistogram: buildHistogram(wol),
         });
       }
     }
@@ -195,7 +216,8 @@ async function main() {
     );
     const flat = results.flat();
     if (flat.length > 0) {
-      await prisma.dongPriceSummary.createMany({ data: flat });
+      // depositHistogram 은 generate 후 정식 필드. 런타임(재생성된 클라이언트)에선 정상 적재.
+      await prisma.dongPriceSummary.createMany({ data: flat as Prisma.DongPriceSummaryCreateManyInput[] });
       rowsTotal += flat.length;
     }
     processed += batch.length;

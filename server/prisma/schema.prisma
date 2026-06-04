@@ -483,6 +483,10 @@ model DongPriceSummary {
   depositMedian Int?     @map("deposit_median")             /// 보증금 median (만원)
   monthlyMedian Int?     @map("monthly_median")             /// 순수 월세 median (만원) — MONTHLY
   sampleCount   Int      @default(0) @map("sample_count")
+  /// KI-24 보증금 히스토그램(예산 재고 게이트용) — 500만 버킷 sparse 배열 [[idx,n,sumDep,sumMon],…].
+  ///  예산 지정 시 런타임이 'idx*500 ≤ 예산' 버킷을 합산해 감당구간 건수·시세를 live 스캔 없이 산출.
+  ///  SALE 은 미사용(null). JEONSE 는 sumMon=0.
+  depositHistogram Json?  @map("deposit_histogram")
   computedAt    DateTime @default(now()) @map("computed_at")
 
   @@unique([sigunguCode, dong, dealType, typeKey], map: "uniq_dong_price")
