@@ -275,7 +275,13 @@
   (기존부터 있던 잠복 버그. 2026-06-03 Depth 2 top-8 라이브 ODsay 도입으로 노출 빈도↑.)
 - **해결**: 저장 직전 `getOdsayUsageToday().blocked` 확인 → **차단 중이면 추정 폴백(`transitTransfers===null`)을
   저장에서 제외**(다음 쿼터 가용 시 재조회). 평시엔 진짜 no-route 도 저장(알려진 무경로 재호출 방지). typecheck OK.
-- **잔여(선택)**: 추정 엔트리에 명시적 `estimated`/`source` 컬럼 + TTL 재검증을 두면 더 견고(미착수).
+- **✅ 후속 보강(2026-06-04, odsay 분석 §8-2·3)**: `/matrix` 만 막던 가드의 두 구멍을 닫음.
+  - **`/compare` 우회 차단**: `/compare` 는 ODsay 실패 시 `transfers=0~3 정수`(null 아님)로 무조건 저장해
+    `transitTransfers===null` 필터를 우회했음 → 저장 조건을 `source==='odsay'` 일 때만으로 강화([commute.ts:348](../server/src/routes/domains/commute.ts#L348)).
+  - **TTL 도입**: `t_commute_matrix.computedAt`(미사용이던 컬럼)으로 만료 정책 실구현 — `findCachedMatrix` 가
+    만료 행 조회 제외 + `upsertCommuteEntries` 가 만료 행 deleteMany 후 재적재(self-heal, `createMany skipDuplicates`
+    가 stale 못 덮던 문제 해소). 기본 90일, env `COMMUTE_TTL_DAYS`. → "쿼터 리셋 후에도 고착" 잔재가 TTL 로 자연 해소.
+- **잔여(선택)**: 추정 엔트리 명시적 `estimated`/`source` 컬럼은 미도입(현재는 추정을 아예 저장 안 함 + TTL 로 충분).
 
 ---
 

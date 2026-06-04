@@ -15,6 +15,21 @@
 import { prisma } from '../db';
 import { haversineKm, makeCacheKeyCandidates } from '../external/odsay';
 
+/**
+ * 캐시 TTL (§8-3) — 통근 매트릭스 항목 유효기간(일).
+ *  GTX·노선 개편이나 §8-2 이전에 새던 오염값이 영구 잔존하지 않도록, computedAt 이
+ *  TTL 보다 오래된 행은 **조회에서 제외**(= miss 취급 → 재조회)하고, 재조회 시
+ *  upsert 가 만료 행을 지우고 새로 써서 self-heal 한다. env COMMUTE_TTL_DAYS 로 조절.
+ *  schema 주석의 "90일 후 만료" 정책을 실제 구현.
+ */
+const COMMUTE_TTL_DAYS = Number(process.env.COMMUTE_TTL_DAYS ?? '90');
+
+/** TTL 컷오프 시각 — 이보다 오래된 computedAt 은 만료. (TTL≤0 이면 만료 비활성=무기한) */
+function commuteTtlCutoff(): Date | null {
+  if (!Number.isFinite(COMMUTE_TTL_DAYS) || COMMUTE_TTL_DAYS <= 0) return null;
+  return new Date(Date.now() - COMMUTE_TTL_DAYS * 24 * 60 * 60 * 1000);
+}
+
 export interface CommuteEntry {
   legalDongCode: string;
   transitMinutes: number;
@@ -48,6 +63,7 @@ export async function findCachedMatrix(
 ): Promise<Map<string, CommuteEntry>> {
   const candidates = makeCacheKeyCandidates(origin.lat, origin.lng);
   const exactKey = candidates[4]; // 가운데 (3×3 중 중심) = 정확 일치 키
+  const ttlCutoff = commuteTtlCutoff(); // §8-3: 만료 행은 조회 제외 → miss 취급
 
   const rows = await prisma.commuteMatrix.findMany({
     where: {
@@ -55,6 +71,7 @@ export async function findCachedMatrix(
       ...(dongCodes && dongCodes.length > 0
         ? { legalDongCode: { in: dongCodes } }
         : {}),
+      ...(ttlCutoff ? { computedAt: { gte: ttlCutoff } } : {}),
     },
     select: {
       cacheKey: true,
@@ -105,13 +122,31 @@ export async function findCachedMatrix(
  *    - 변경: createMany({ skipDuplicates }) 한 번 → DB 왕복 N→1
  *    - 미스 경로에서만 호출되므로 (cacheKey, legalDongCode) 행은 정의상 아직 없음.
  *      드물게 동시 요청으로 먼저 생긴 행은 skipDuplicates(=INSERT IGNORE)로 건너뜀.
- *    - 기존 행 갱신(update/computedAt)은 제거 — 캐시이므로 stale 은 TTL/재시드로 처리.
+ *
+ *  ▷ TTL self-heal (§8-3)
+ *    - createMany({ skipDuplicates }) 는 만료된 *기존* exact-key 행을 덮어쓰지 못한다
+ *      (unique 충돌로 skip → stale 영구 잔존, TTL 조회제외로 매번 재호출만 반복).
+ *    - 그래서 쓰기 전에 같은 cacheKey + 이 코드들의 **만료 행만 deleteMany** → 충돌 해소 후
+ *      createMany 가 신선한 값으로 재적재. 미스 경로(이미 ODsay 호출)라 추가 쿼리 비용 무시 가능.
  */
 export async function upsertCommuteEntries(
   cacheKey: string,
   entries: UpsertEntry[],
 ): Promise<number> {
   if (entries.length === 0) return 0;
+
+  // 만료 행 정리(§8-3) — TTL 지난 exact-key 행을 지워 skipDuplicates 가 갱신을 막지 않게.
+  const ttlCutoff = commuteTtlCutoff();
+  if (ttlCutoff) {
+    await prisma.commuteMatrix.deleteMany({
+      where: {
+        cacheKey,
+        legalDongCode: { in: entries.map((e) => e.legalDongCode) },
+        computedAt: { lt: ttlCutoff },
+      },
+    });
+  }
+
   const result = await prisma.commuteMatrix.createMany({
     data: entries.map((e) => ({
       cacheKey,

@@ -25,7 +25,7 @@
  */
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
-import { haversineKm } from '../external/odsay';
+import { haversineKm, estimateTransitMinutesByKm } from '../external/odsay';
 import { findCachedMatrix, type CommuteEntry } from './commuteRepository';
 import { batchAdjustReturns } from '../recommendation/rebNormalize';
 import {
@@ -37,15 +37,10 @@ import {
   type PropertyType,
 } from '../recommendation/scoring';
 
-/** Haversine 거리 (km) → 대중교통 추정 시간 (분).
- *  - 평균 속도 25 km/h ≈ 0.42 km/min + 환승/대기 5분 패딩
- *  - work-log: 더 정확한 추정은 t_commute_matrix 가 채워질 때 자연스럽게 교체
- */
-function estimateTransitMinutesByKm(km: number): number {
-  return Math.round(km / 0.42 + 5);
-}
+// Haversine km → 대중교통 추정 통근분: 단일 폴백 공식(odsay.estimateTransitMinutesByKm, §8-4)으로
+// 통일. 이전 로컬 정의(`km/0.42+5`)는 그 canonical 과 동일 — 추천·/matrix·/compare 가 한 식을 공유.
 
-interface RegionAggregate {
+export interface RegionAggregate {
   legalDongCode: string;
   sigunguCode: string;
   sigungu: string;
@@ -127,7 +122,7 @@ function tradeSource(type: PropertyType, dongFilter: Prisma.Sql): Prisma.Sql {
  *  - ⚠️ 매칭은 **시군구 코드(5자리) + 동명** 기반 (KI-19): 이전 sigungu **이름** 매칭은
  *    수도권 확장 시 인천 중구↔서울 중구 등 동명 시군구가 충돌 → 코드 prefix 로 교체.
  */
-async function fetchRegionAggregates(
+export async function fetchRegionAggregates(
   propertyTypes: readonly PropertyType[],
   sigunguCodePrefixes: readonly string[] = ['11', '28', '41'],
 ): Promise<RegionAggregate[]> {

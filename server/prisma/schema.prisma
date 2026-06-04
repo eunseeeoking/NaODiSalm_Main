@@ -365,8 +365,8 @@ model TrainingResult {
 /// 직장 ↔ 행정동 통근시간 매트릭스 (t_commute_matrix)
 ///  - cacheKey = 직장 좌표 4자리 반올림 ("37.4979_127.0276")
 ///    같은 빌딩 다른 층 입력해도 캐시 hit → ODsay 호출 0
-///  - 신규 직장 첫 입력 시에만 ODsay 호출, 이후 영구 hit
-///  - 90일 후 만료 정책은 추후 추가 (현재는 무기한 보관)
+///  - 신규 직장 첫 입력 시에만 ODsay 호출, 이후 hit (TTL 내)
+///  - TTL 만료(기본 90일, env COMMUTE_TTL_DAYS) 행은 조회 제외 + 재조회 시 self-heal (§8-3, commuteRepository)
 model CommuteMatrix {
   id               Int      @id @default(autoincrement()) /// 캐시 레코드 ID
   cacheKey         String   @map("cache_key") @db.VarChar(40) /// "lat_lng" 4자리 반올림, 직장 그룹화 키

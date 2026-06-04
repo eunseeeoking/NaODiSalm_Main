@@ -44,6 +44,8 @@ coverage/
 server/data/legal_dong_codes.txt
 server/data/*.csv
 server/data/*.zip
+# 전국도시철도 표준데이터 원본(대용량 17MB) — 그래프 JSON(subway-graph.json)만 커밋. 재생성: npm run seed:subway-graph
+server/data/*.xlsx
 
 # Ingest 체크포인트 (런타임 산출물 — 재실행 시 자동 생성)
 server/reports/

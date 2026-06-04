@@ -215,6 +215,21 @@ export function seoulRushHourCarMinutes(km: number): number {
   return       Math.round(km * 5) + 20;
 }
 
+/**
+ * 직선거리(km) → 대중교통 통근시간 추정 (분) — **단일 폴백 공식** (KI / odsay 분석 §8-4).
+ *
+ *  ODsay 캐시 miss·쿼터 차단·API 미설정 시 쓰는 추정값. 이전엔 추천 리포(`km/0.42+5`)·
+ *  `/matrix`(`carMin×1.4`)·`/compare`(`km/25×60+…`) 가 **서로 다른 공식**을 써서, 같은 동의
+ *  추정 통근분이 경로마다 달라졌다(랭킹↔표시 불일치). → 여기 한 곳으로 통일.
+ *
+ *  공식: 표정속도 ~25 km/h(= km × 2.4분) + 환승·대기 패딩 5분. (기존 추천 리포 규약 유지 —
+ *  KI-22 통근 게이트 캘리브레이션 보존. km/0.42 ≈ km × 2.381 ≈ km/25×60.)
+ *  ※ ODsay 캐시 hit 시 이 값은 사용되지 않음(실측 우선).
+ */
+export function estimateTransitMinutesByKm(km: number): number {
+  return Math.round(km / 0.42 + 5);
+}
+
 // ─── 카카오 모빌리티 자차 경로 ───────────────────────────────────
 
 const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY;

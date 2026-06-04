@@ -30,6 +30,9 @@
     "seed:safety": "tsx scripts/seedSafetyIndex.ts",
     "seed:life": "tsx scripts/seedPoiSummary.ts",
     "seed:price-summary": "tsx scripts/seedDongPriceSummary.ts",
+    "seed:subway-graph": "tsx scripts/seedSubwayGraph.ts",
+    "commute:measure-accuracy": "tsx scripts/measureCommuteAccuracy.ts",
+    "commute:validate-router": "tsx scripts/validateSubwayRouter.ts",
     "export:tidb": "tsx scripts/exportToTidb.ts",
     "archive:raw": "tsx scripts/archiveRawPayload.ts",
     "db:snapshot": "tsx scripts/dbSnapshot.ts",
@@ -59,6 +62,7 @@
     "prisma": "^5.15.0",
     "tsx": "^4.10.5",
     "typescript": "^5.4.5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "xlsx": "^0.18.5"
   }
 }

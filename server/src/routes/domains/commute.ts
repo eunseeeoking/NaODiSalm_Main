@@ -40,6 +40,7 @@ import {
   fetchOdsayRoute,
   fetchKakaoCarRoute,
   estimateCarMinutes,
+  estimateTransitMinutesByKm,
   makeCacheKey,
   haversineKm,
 } from '../../services/external/odsay';
@@ -153,8 +154,10 @@ commuteRouter.post('/matrix', async (req: Request, res: Response) => {
         const upsertEntries = missTargets.map((t, i) => {
           const transit = odsayResults[i];
           const carMin = estimateCarMinutes(origin, t);
+          // 단일 폴백 공식(§8-4): ODsay miss 시 직선거리 기반 추정 통근분(추천 리포와 동일 식).
+          //   기존 carMin×1.4 는 자차 러시추정을 또 1.4배 해 과대(8km→88분)였음.
           const transitMinutes =
-            transit?.transitMinutes ?? Math.round(carMin * 1.4);
+            transit?.transitMinutes ?? estimateTransitMinutesByKm(haversineKm(origin, t));
           const entry: CommuteEntry = {
             legalDongCode: t.code,
             transitMinutes,
@@ -290,10 +293,11 @@ commuteRouter.get('/compare', async (req: Request, res: Response) => {
   let source: CommuteCompareDto['source'] = 'estimate';
 
   // ── Haversine 기본값 (캐시/ODsay 실패 시 사용) ─────────────────
+  //   통근분은 단일 폴백 공식(§8-4)으로 통일 — 추천 리포·/matrix 와 같은 추정값.
+  //   환승수·비용은 표시 보조 추정(이 추정 폴백은 §8-2 가드로 캐시에 저장 안 됨).
   const kmBase = haversineKm(workCoord, complexCoord);
-  const transitBase0 = (kmBase / 25) * 60;
   const tfCount0 = Math.min(3, Math.max(0, Math.floor(kmBase / 3) - 1));
-  let transitMinutes: number = Math.round(transitBase0 + tfCount0 * 5 + 8);
+  let transitMinutes: number = estimateTransitMinutesByKm(kmBase);
   let transfers: number = tfCount0;
   let transitCostWon: number = Math.round(1500 + Math.max(0, kmBase - 5) * 100);
 
@@ -344,8 +348,11 @@ commuteRouter.get('/compare', async (req: Request, res: Response) => {
   const carCost = Math.round(4000 + (kmRoad / 12) * 1700 + kmRoad * 50);
 
   // ── 캐시 저장 (비동기 — 응답 지연 없음) ────────────────────────
-  //    캐시 miss 시에만 저장, Kakao 실경로 carMinutes 포함
-  if (!cacheHit && legalDongCode) {
+  //    캐시 miss 시에만, **ODsay 실측일 때만** 저장 (§8-2 / KI-23 가드).
+  //    source==='estimate' 는 Haversine 폴백 — 환승수(transfers)가 0~3 정수라 KI-23 의
+  //    `transfers!==null` 필터로는 안 걸러진다. 저장하면 추정값이 실측인 척 캐시 hit 으로
+  //    고착(틸드 없이) → 다음 추천 랭킹까지 오염. 그래서 출처가 'odsay' 일 때만 기록.
+  if (!cacheHit && legalDongCode && source === 'odsay') {
     const cacheKey = makeCacheKey(wpLat, wpLng);
     upsertCommuteEntries(cacheKey, [{
       legalDongCode,
