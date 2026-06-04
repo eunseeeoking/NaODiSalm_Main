@@ -137,7 +137,7 @@
 
 ---
 
-## 5. 활성화 절차 (TODO — 운영 DB 작업, 저트래픽 시간 권장)
+## 5. 활성화 절차 (✅ 2026-06-04 적용·검증 완료)
 
 > ⚠️ **순서 중요**: 마이그레이션(컬럼 추가)이 코드 배포보다 **먼저**.
 > 컬럼 없으면 summary 조회가 에러→live 폴백(느려짐). 활성화 전까지 예산 추천은 live 폴백으로 정확히 동작.
@@ -154,13 +154,31 @@ npx tsx scripts/sanityRealStory.ts
 
 검증 시 ODsay 미사용(통근은 캐시+Haversine), 운영 prod 무영향.
 
+### 적용 결과 (2026-06-04 실행)
+
+`db push`(TiDB에 `deposit_histogram` 컬럼 추가) → `seed:price-summary`(히스토그램 재적재) → 검증 완료.
+
+- **정확성**: 하남 1억 전세(오피스텔) → TOP8 중 하남 4개(신장 6분·덕풍 7분·망월 13분·풍산 12분). 의도대로.
+- **성능 (`REC_DEBUG=1` rent 단계)**:
+  | 실행 | rent | 비고 |
+  |---|---|---|
+  | warm | **78ms** | ✅ 히스토그램 summary 사용 — 서브초 확정 (수정 전 live 1.6s 대비 ~20배) |
+  | cold(첫 요청) | 943ms | aggregates·price도 동반 ~420ms = 연결+cutoff MAX 스캔 워밍업. 10분 TTL 캐시 후 78ms급. 회귀 아님 |
+- 예산 미지정 경로(0.4s)·강남 등 회귀 없음.
+
+> ⚠️ 마이그레이션 이력 부채: `db push`로 TiDB 컬럼은 들어갔으나 **migration 파일은 미생성**. 라이브는 정상
+> 동작하나, 배포 파이프라인(`migrate deploy`) 일관성을 위해 후속으로 `prisma migrate dev --name add_deposit_histogram`
+> 정리 권장(긴급 아님 — 컬럼·데이터 이미 적용됨).
+
 ---
 
-## 6. 남은 작업 (선택)
+## 6. 남은 작업
 
-- [ ] **활성화 4단계 실행** (위 5장) — 서브초 복구
+- [x] **활성화 4단계 실행** (위 5장) — 서브초 복구 ✅ (warm rent 78ms)
+- [x] 커밋 — `feat/KI-24-inventory-gate` (코드 `26d7629` + ODsay 분석 doc `4c0ff4a`) ✅
 - [ ] **클라이언트 카드 "예산 내 N건" 칩** 라벨 — 서버는 준비됨(rentSampleCount=감당구간 건수), 화면 반영 필요
-- [ ] 커밋 (현재 `main` 직접 작업 → 브랜치 분리 후 커밋 권장)
+- [ ] **배포** — 브랜치 머지 → push → Render 재배포(DB 이미 마이그레이션됨, 코드만 반영)
+- [ ] (후속) 마이그레이션 파일 정리 (`prisma migrate dev --name add_deposit_histogram`)
 - [ ] (후속) SALE(매매) 경로도 재고 게이트 적용 — 현재는 매매 중위값 게이트 유지
 - [ ] (후속) MONTHLY + 월세 한도(monthlyBudget) 지정 시 히스토그램이 보증금만 커버 → live 폴백(드묾)
 
