@@ -34,7 +34,9 @@ const OUT_FILE = path.join(DATA_DIR, 'subway-graph.json');
 
 const TRANSFER_MAX_KM = 1.0;     // 동일역명이 이보다 멀면 다른 물리역(이름충돌)으로 간주
 const MAX_SEGMENT_MIN = 20;      // 구간 소요분 상한(이상치 컷)
-const MAX_ADJ_KM = 6;            // 연속 정거장 후보쌍 채택 거리 상한(이보다 멀면 잘못 매칭으로 간주)
+// 연속 정거장 채택 거리 상한. run 노선고정 해소가 있어 오매칭 위험이 낮으므로 넉넉히.
+//  6km 면 신분당 판교~청계산입구(청계산터널 ~7km)·경춘선 등 실제 장구간이 잘렸음 → 15km.
+const MAX_ADJ_KM = 15;
 const ALLSTOP_TYPES = new Set(['일반']); // 인접 도출에 쓸 운행유형(완행). 급행/특급 제외.
 
 const norm = (s: unknown): string => String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -159,8 +161,11 @@ function main() {
     const min = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     return min > 0 ? min : null;
   };
-  // 순서 접두사 제거: "001-성수"·"D19-광교"·"K01-…" 등 ([문자]*숫자-). 신분당선은 D-접두사.
+  // 순서 접두사 제거: "001-성수"·"D19-광교"·"3125-예술회관" 등 ([문자]*숫자-). 신분당=D-, 인천=숫자-.
   const stripSeq = (t: string) => t.replace(/^[A-Za-z]*\d+\s*-\s*/, '').trim();
+  // Format B 구분자 — 서울="+", 인천=",". 단 역명 내부 콤마("아라(북부법원, 검찰청)")는 보존 위해
+  //  **다음 토큰의 순서접두사 앞에서만** 분리.
+  const SEP = /[+,]\s*(?=[A-Za-z]*\d+\s*-)/;
 
   /**
    * run(한 열차=한 노선) 단위 처리 — **run 전체를 지배적 역사 노선명으로 고정** 해소.
@@ -225,13 +230,13 @@ function main() {
   for (const r of opRows) {
     if (!ALLSTOP_TYPES.has(norm(r.운행유형))) { flushA(); curKey = ''; continue; } // 급행 등 제외
     const raw = norm(r.운행구간정거장);
-    const isFormatB = raw.includes('+') || /^[A-Za-z]*\d+\s*-/.test(raw);
+    const isFormatB = /^[A-Za-z]*\d+\s*-/.test(raw); // 순서접두사로 시작하면 전체노선 1행(서울/인천)
 
     if (isFormatB) {
       flushA(); curKey = '';
-      const names = raw.split('+').map(stripSeq).map(normStation);
-      const arrs = norm(r.정거장도착시각).split('+').map((t) => parseHHMM(stripSeq(t)));
-      const deps = norm(r.정가장출발시각).split('+').map((t) => parseHHMM(stripSeq(t)));
+      const names = raw.split(SEP).map(stripSeq).map(normStation);
+      const arrs = norm(r.정거장도착시각).split(SEP).map((t) => parseHHMM(stripSeq(t)));
+      const deps = norm(r.정가장출발시각).split(SEP).map((t) => parseHHMM(stripSeq(t)));
       const segs: (number | undefined)[] = names.map((_, i) => {
         const dep = deps[i], arrNext = arrs[i + 1];
         if (dep == null || arrNext == null) return undefined;
