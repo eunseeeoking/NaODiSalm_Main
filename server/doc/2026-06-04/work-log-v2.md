@@ -184,10 +184,15 @@ npx tsx scripts/sanityRealStory.ts
   - "LH 공식 사이트 참고"(정적 텍스트) → **"마이홈 지도찾기에서 확인 ↗"** 실제 링크(`myhome.go.kr` 주거복지 지도찾기, `target=_blank`/`noopener`/카드 클릭 전파차단).
   - **데이터 의미 정합 수정**: 우리 LH 시드 출처(data.go.kr 15059475 '임대주택단지 조회')는 **기존(공급 완료) 재고**라, 처음 연결했던 LH청약플러스 '모집공고' 목록과 의미가 어긋남(공고는 접수 시점에만 노출 → 강동구 등 평소 빈 결과로 사용자 혼란). 기존 공공임대 단지를 지역·지도로 보여주는 마이홈 지도찾기로 교체. 배너 카피도 "합산(기존 공급분) · 단지 위치·입주정보"로 정합화.
   - 지역 GET 파라미터 딥링크는 보류(검색이 POST 기반 SPA → 잘못된 파라미터로 빈 결과 유도 위험). 지역명은 링크 툴팁으로 안내. 사유 코드 주석 명시.
-- [ ] **배포** — 브랜치 머지 → push → Render 재배포(DB 이미 마이그레이션됨, 코드만 반영)
-- [ ] (후속) 마이그레이션 파일 정리 (`prisma migrate dev --name add_deposit_histogram`)
-- [ ] (후속) SALE(매매) 경로도 재고 게이트 적용 — 현재는 매매 중위값 게이트 유지
-- [ ] (후속) MONTHLY + 월세 한도(monthlyBudget) 지정 시 히스토그램이 보증금만 커버 → live 폴백(드묾)
+- [x] (후속) **MONTHLY + 월세 한도 폴백** — `recommendationRepository.ts` `fetchRentSummary` ✅ (commit `3dc26f1`)
+  - **실제 잠복 버그였음**: MONTHLY+월세한도(monthlyCap 유한) 시 `useHist=false`인데도 저장 median(예산 미반영) 분기로 빠져 `coveredKeys` 등록 → live 폴백이 건너뛰어져 보증금·월세 한도·재고 게이트가 모두 무시됨. 예산 경로인데 히스토그램으로 정확 반영 불가하면 즉시 빈 맵 반환(커버 안 함)하도록 수정 → 보증금·월세 한도를 SQL 술어로 적용하는 live 경로(`rentQueryBudget`)가 감당구간 산출.
+  - ⚠️ **검증 대기**: 논리상 안전(이미 동작하는 budget-aware live 경로로 라우팅)하나 MONTHLY+월세한도 실데이터 동작 확인은 미실행. 다음 세션 또는 배포 전 sanity 권장.
+- [x] (후속) **마이그레이션 파일 정리** — `prisma/migrations/20260604120000_add_deposit_histogram/` ✅ (commit `a79e562`)
+  - `db push`로만 들어가 있던 `deposit_histogram`(JSON NULL) 컬럼을 정식 마이그레이션 파일로 추가. 해당 DB(`127.0.0.1:3306/molit_contest`)에는 컬럼이 이미 존재 → `migrate deploy`(중복 컬럼 에러) 대신 **`migrate resolve --applied`** 로 적용됨 표시 → `migrate status` "up to date".
+  - ⚠️ **prod 배포 시 주의**: Render(prod)가 이 DB와 **다른 별도 DB**이고 거기에도 db push로 컬럼이 이미 있다면, 배포의 `migrate deploy`가 동일하게 중복 컬럼 에러 → prod에도 `migrate resolve --applied 20260604120000_add_deposit_histogram` 필요. **(prod DB가 이 DB와 동일/터널이면 이미 완료.)** ← 배포 전 DB 토폴로지 확인 필수.
+- [ ] (후속·**다음 세션 인계**) SALE(매매) 경로 재고 게이트 — 볼륨 큼 → 별도 설계 문서: **`server/doc/2026-06-05/handoff-KI-24-sale-inventory-gate.md`**
+- [ ] **배포** — 브랜치 머지 → push → Render 재배포(코드 반영 + 위 prod 마이그레이션 주의)
+- [ ] (후속) 클라이언트 카드 시각 확인 — dev 서버로 "예산 내 N건"(brand)·LH 마이홈 링크 눈으로 확인(미실행)
 
 ---
 
