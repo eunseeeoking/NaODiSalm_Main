@@ -56,8 +56,8 @@ if (dealType === 'SALE') {
 전월세와 동일 구조. 일관성·성능(서브초) 확보.
 
 1. **스키마**: `DongPriceSummary` 에 `salePriceHistogram Json? @map("sale_price_histogram")` 추가.
-   - 마이그레이션 파일은 ②와 동일 패턴: `ALTER TABLE t_dong_price_summary ADD COLUMN sale_price_histogram JSON NULL;`
-     → `db push` 후 `migrate resolve --applied`, 또는 신규 환경은 `migrate deploy` 가 적용.
+   - **로컬**: `prisma migrate dev --name add_sale_price_histogram`(또는 ②처럼 `db push` 후 수기 마이그레이션 파일 + `migrate resolve --applied`).
+   - **prod(TiDB)**: 마이그레이션 안 씀 → `DATABASE_URL=$TIDB npx prisma db push --skip-generate --accept-data-loss`(멱등) + 재적재는 `export:tidb`. 자세히는 [tidb-migration.md](../tidb-migration.md).
 2. **seed** (`seedDongPriceSummary.ts`): SALE 블록에서 `prices[]` → 히스토그램 적재.
    - 버킷: 매매가는 수억~수십억이라 `HIST_BUCKET_MANWON`(500만)이면 버킷이 과다(40억=800버킷, sparse라
      동작은 하나 비효율). **별도 `SALE_HIST_BUCKET_MANWON`(예: 2500~5000만)을 `scoring.ts` 공용 상수로**
@@ -110,6 +110,8 @@ if (dealType === 'SALE') {
 
 ## 6. 함께 남은 자잘한 후속 (이번 세션에서 발견)
 - **④ 검증**: MONTHLY+월세한도 폴백 수정(commit `3dc26f1`)은 실데이터 sanity 미실행 — 배포 전 확인.
-- **② prod 마이그레이션**: prod DB가 로컬(`127.0.0.1:3306`)과 다른 별도 DB면 prod에도
-  `migrate resolve --applied 20260604120000_add_deposit_histogram` 필요(중복 컬럼 에러 방지). 배포 전 토폴로지 확인.
+- **② prod(TiDB) 컬럼·데이터**: prod TiDB는 migrate deploy 가 아니라 `db push`(멱등)+`export:tidb` 로 관리
+  ([tidb-migration.md](../tidb-migration.md)) → resolve 불필요. 다만 KI-24 `deposit_histogram` 컬럼·데이터가
+  **prod TiDB에 이미 반영됐는지 확인** 필요(미반영 시 `db push` + `export:tidb -- --tables=t_dong_price_summary`).
+  로컬 마이그레이션 파일(`20260604120000_add_deposit_histogram`)은 로컬 워크플로용이라 prod에 영향 없음.
 - **카드 시각 확인**: "예산 내 N건"(brand) 칩 + LH 마이홈 지도찾기 링크 dev 서버 육안 확인 미실행.

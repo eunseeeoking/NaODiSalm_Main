@@ -189,7 +189,11 @@ npx tsx scripts/sanityRealStory.ts
   - ⚠️ **검증 대기**: 논리상 안전(이미 동작하는 budget-aware live 경로로 라우팅)하나 MONTHLY+월세한도 실데이터 동작 확인은 미실행. 다음 세션 또는 배포 전 sanity 권장.
 - [x] (후속) **마이그레이션 파일 정리** — `prisma/migrations/20260604120000_add_deposit_histogram/` ✅ (commit `a79e562`)
   - `db push`로만 들어가 있던 `deposit_histogram`(JSON NULL) 컬럼을 정식 마이그레이션 파일로 추가. 해당 DB(`127.0.0.1:3306/molit_contest`)에는 컬럼이 이미 존재 → `migrate deploy`(중복 컬럼 에러) 대신 **`migrate resolve --applied`** 로 적용됨 표시 → `migrate status` "up to date".
-  - ⚠️ **prod 배포 시 주의**: Render(prod)가 이 DB와 **다른 별도 DB**이고 거기에도 db push로 컬럼이 이미 있다면, 배포의 `migrate deploy`가 동일하게 중복 컬럼 에러 → prod에도 `migrate resolve --applied 20260604120000_add_deposit_histogram` 필요. **(prod DB가 이 DB와 동일/터널이면 이미 완료.)** ← 배포 전 DB 토폴로지 확인 필수.
+  - ℹ️ **prod(TiDB)는 migrate deploy 안 씀 → resolve 불필요**: prod TiDB는 Prisma 마이그레이션이 아니라
+    **`db push`(멱등) + `export:tidb`** 로 관리([tidb-migration.md](../tidb-migration.md)). 따라서 이 마이그레이션 파일은
+    **로컬 migrate 워크플로·파이프라인 일관성용**이며 prod엔 실행되지 않음(중복 컬럼 에러 우려 없음).
+    - prod에 컬럼·데이터 반영이 필요하면 가이드대로: ① `DATABASE_URL=$TIDB npx prisma db push --skip-generate --accept-data-loss`(컬럼 없으면 추가) → ② `npm run export:tidb -- --tables=t_dong_price_summary`(히스토그램 값 이관).
+    - ⚠️ **확인 필요**: KI-24 당시 §5 `db push`가 로컬만 친 건지 TiDB까지 친 건지 불명 → **prod TiDB에 `deposit_histogram` 컬럼·데이터가 이미 있는지 배포 전 확인**(없으면 위 ①②).
 - [ ] (후속·**다음 세션 인계**) SALE(매매) 경로 재고 게이트 — 볼륨 큼 → 별도 설계 문서: **`server/doc/2026-06-05/handoff-KI-24-sale-inventory-gate.md`**
 - [ ] **배포** — 브랜치 머지 → push → Render 재배포(코드 반영 + 위 prod 마이그레이션 주의)
 - [ ] (후속) 클라이언트 카드 시각 확인 — dev 서버로 "예산 내 N건"(brand)·LH 마이홈 링크 눈으로 확인(미실행)
