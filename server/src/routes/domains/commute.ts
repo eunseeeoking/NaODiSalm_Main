@@ -50,6 +50,7 @@ import {
   type CommuteEntry,
 } from '../../services/repositories/commuteRepository';
 import { getOdsayUsageToday } from '../../services/external/odsayQuota';
+import { hybridTransitMinutes } from '../../services/commute/subwayRouterSingleton';
 import { prisma } from '../../services/db';
 
 export const commuteRouter = Router();
@@ -154,10 +155,11 @@ commuteRouter.post('/matrix', async (req: Request, res: Response) => {
         const upsertEntries = missTargets.map((t, i) => {
           const transit = odsayResults[i];
           const carMin = estimateCarMinutes(origin, t);
-          // 단일 폴백 공식(§8-4): ODsay miss 시 직선거리 기반 추정 통근분(추천 리포와 동일 식).
-          //   기존 carMin×1.4 는 자차 러시추정을 또 1.4배 해 과대(8km→88분)였음.
+          // ODsay miss(쿼터차단·무경로) 폴백: 비대칭 하이브리드(라우터>직선일 때만 라우터, 쿼터0).
+          //   §8-1 처럼 쿼터 소진돼도 폴백이 직선→환승인지로 바뀜. 단일 직선식(§8-4)은 기준·폴백.
+          const straightMin = estimateTransitMinutesByKm(haversineKm(origin, t));
           const transitMinutes =
-            transit?.transitMinutes ?? estimateTransitMinutesByKm(haversineKm(origin, t));
+            transit?.transitMinutes ?? hybridTransitMinutes(origin, { lat: t.lat, lng: t.lng }, straightMin);
           const entry: CommuteEntry = {
             legalDongCode: t.code,
             transitMinutes,
@@ -297,7 +299,8 @@ commuteRouter.get('/compare', async (req: Request, res: Response) => {
   //   환승수·비용은 표시 보조 추정(이 추정 폴백은 §8-2 가드로 캐시에 저장 안 됨).
   const kmBase = haversineKm(workCoord, complexCoord);
   const tfCount0 = Math.min(3, Math.max(0, Math.floor(kmBase / 3) - 1));
-  let transitMinutes: number = estimateTransitMinutesByKm(kmBase);
+  // 비대칭 하이브리드(라우터>직선일 때만 라우터) — ODsay/캐시 실패 시 표시값. 단일 직선식(§8-4)은 기준.
+  let transitMinutes: number = hybridTransitMinutes(workCoord, complexCoord, estimateTransitMinutesByKm(kmBase));
   let transfers: number = tfCount0;
   let transitCostWon: number = Math.round(1500 + Math.max(0, kmBase - 5) * 100);
 

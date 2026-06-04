@@ -27,6 +27,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { haversineKm, estimateTransitMinutesByKm } from '../external/odsay';
 import { findCachedMatrix, type CommuteEntry } from './commuteRepository';
+import { hybridTransitMinutesMany } from '../commute/subwayRouterSingleton';
 import { batchAdjustReturns } from '../recommendation/rebNormalize';
 import {
   JEONSE_TO_MONTHLY_RATE,
@@ -1169,6 +1170,18 @@ export async function fetchRegionCandidates(
     rawReturn: number;
   }> = [];
 
+  // 캐시 미스 동의 통근분 폴백 — 비대칭 하이브리드(내부 지하철 라우터, 쿼터 0).
+  //  라우터가 직선추정보다 *느리다*고 할 때만 채택(거짓양성 교정, calibrateRouter 검증).
+  //  Dijkstra 1회로 전 후보 일괄 처리. 라우터 비활성/미적재 시 직선 그대로.
+  const straightArr = withDistance.map((x) => estimateTransitMinutesByKm(x.distanceKm));
+  const hybridArr = hybridTransitMinutesMany(
+    workplace,
+    withDistance.map((x) => ({ lat: x.agg.centroidLat, lng: x.agg.centroidLng })),
+    straightArr,
+  );
+  const hybridByCode = new Map<string, number>();
+  withDistance.forEach((x, i) => hybridByCode.set(x.agg.legalDongCode, hybridArr[i]));
+
   for (const { agg, distanceKm } of withDistance) {
     const priceKey = `${agg.sigunguCode}|${agg.dong}`;
     const price = priceMap.get(priceKey);
@@ -1194,11 +1207,11 @@ export async function fetchRegionCandidates(
     const repPrice = price ?? 0;
     const rawReturn = returnMap.get(priceKey) ?? 0;
 
-    // 통근 — matrix 우선, 없으면 Haversine 추정
+    // 통근 — ODsay 캐시 실측 우선, 없으면 비대칭 하이브리드(라우터>직선일 때만 라우터, 아니면 직선)
     const cached = commuteMap.get(agg.legalDongCode);
     const commuteMinutes = cached
       ? cached.transitMinutes
-      : estimateTransitMinutesByKm(distanceKm);
+      : (hybridByCode.get(agg.legalDongCode) ?? estimateTransitMinutesByKm(distanceKm));
 
     // patience × 1.2 초과 통근은 후보에서 강제 제외 (KI-22)
     if (commuteMinutes > safePatience * PATIENCE_GATE_MULT) continue;

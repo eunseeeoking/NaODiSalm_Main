@@ -33,6 +33,7 @@
     "seed:subway-graph": "tsx scripts/seedSubwayGraph.ts",
     "commute:measure-accuracy": "tsx scripts/measureCommuteAccuracy.ts",
     "commute:validate-router": "tsx scripts/validateSubwayRouter.ts",
+    "commute:calibrate-router": "tsx scripts/calibrateRouter.ts",
     "export:tidb": "tsx scripts/exportToTidb.ts",
     "archive:raw": "tsx scripts/archiveRawPayload.ts",
     "db:snapshot": "tsx scripts/dbSnapshot.ts",

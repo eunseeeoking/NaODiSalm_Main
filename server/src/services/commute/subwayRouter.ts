@@ -72,7 +72,8 @@ export const DEFAULT_ROUTER_CONFIG: RouterConfig = {
   walkSpeedKmH: 4,
   walkMaxKm: 1.2,
   maxAccessStations: 3,
-  boardingOverheadMin: 4,
+  // 초기대기(배차/2)+승하차+시각표 낙관 보정. ODsay 240표본 캘리브레이션값(bias≈0, scripts/calibrateRouter.ts).
+  boardingOverheadMin: 14,
 };
 
 export interface RouteResult {
@@ -157,29 +158,19 @@ export class SubwayRouter {
     }));
   }
 
-  /**
-   * 출발 좌표 → 도착 좌표 지하철 통근 (소요분, 환승수).
-   *  둘 다 도보권 역이 없거나 경로가 끊기면 null (호출자가 다른 폴백 사용).
-   */
-  route(origin: LatLng, dest: LatLng): RouteResult | null {
-    const starts = this.accessStations(origin);
-    const goals = this.accessStations(dest);
-    if (starts.length === 0 || goals.length === 0) return null;
-
-    const goalWalk = new Map<number, number>();
-    for (const g of goals) goalWalk.set(g.idx, g.walkMin);
-
+  /** 멀티소스 다익스트라 — 출발 접근역들을 도보분으로 초기화. dist/prev/prevKind 반환. */
+  private dijkstra(starts: { idx: number; walkMin: number }[]): {
+    dist: number[];
+    prev: number[];
+    prevKind: (Edge['kind'] | null)[];
+  } {
     const N = this.stations.length;
     const dist = new Array<number>(N).fill(Infinity);
     const prev = new Array<number>(N).fill(-1);
     const prevKind = new Array<Edge['kind'] | null>(N).fill(null);
 
-    // 다익스트라 — 출발 후보들을 도보분으로 초기화 (멀티 소스)
-    // 간단 우선순위큐 (배열 기반; 수도권 ~750 노드 규모엔 충분)
+    // 간단 배열 PQ (수도권 ~1100 노드, 1회 전탐색이라 충분)
     const pq: { node: number; d: number }[] = [];
-    const push = (node: number, d: number) => {
-      pq.push({ node, d });
-    };
     const popMin = (): { node: number; d: number } | null => {
       if (pq.length === 0) return null;
       let mi = 0;
@@ -190,52 +181,72 @@ export class SubwayRouter {
     for (const s of starts) {
       if (s.walkMin < dist[s.idx]) {
         dist[s.idx] = s.walkMin;
-        push(s.idx, s.walkMin);
+        pq.push({ node: s.idx, d: s.walkMin });
       }
     }
-
-    let bestGoal = -1;
-    let bestTotal = Infinity;
-
     while (pq.length > 0) {
       const cur = popMin();
       if (!cur) break;
       if (cur.d > dist[cur.node]) continue; // stale
-
-      // 이 노드가 도착 도보권이면 총 소요 후보 갱신
-      const gw = goalWalk.get(cur.node);
-      if (gw != null) {
-        const total = cur.d + gw;
-        if (total < bestTotal) {
-          bestTotal = total;
-          bestGoal = cur.node;
-        }
-      }
-      // 이미 찾은 최선보다 멀면 가지치기
-      if (cur.d >= bestTotal) continue;
-
       for (const e of this.adj[cur.node]) {
         const nd = cur.d + e.weight;
         if (nd < dist[e.to]) {
           dist[e.to] = nd;
           prev[e.to] = cur.node;
           prevKind[e.to] = e.kind;
-          push(e.to, nd);
+          pq.push({ node: e.to, d: nd });
         }
       }
     }
+    return { dist, prev, prevKind };
+  }
 
+  /** 계산된 dist/prev 에서 도착 접근역들 중 최선 → RouteResult (도보+승하차 포함). */
+  private extract(
+    dist: number[],
+    prev: number[],
+    prevKind: (Edge['kind'] | null)[],
+    goals: { idx: number; walkMin: number }[],
+  ): RouteResult | null {
+    let bestGoal = -1;
+    let bestTotal = Infinity;
+    for (const g of goals) {
+      const total = dist[g.idx] + g.walkMin;
+      if (total < bestTotal) { bestTotal = total; bestGoal = g.idx; }
+    }
     if (bestGoal === -1 || !isFinite(bestTotal)) return null;
-
-    // 환승수 = 경로상 transfer 엣지 수
     let transfers = 0;
     for (let n = bestGoal; prev[n] !== -1; n = prev[n]) {
       if (prevKind[n] === 'transfer') transfers++;
     }
+    return { minutes: Math.round(bestTotal + this.cfg.boardingOverheadMin), transfers };
+  }
 
-    return {
-      minutes: Math.round(bestTotal + this.cfg.boardingOverheadMin),
-      transfers,
-    };
+  /**
+   * 출발 좌표 → 도착 좌표 지하철 통근 (소요분, 환승수).
+   *  둘 다 도보권 역이 없거나 경로가 끊기면 null (호출자가 다른 폴백 사용).
+   */
+  route(origin: LatLng, dest: LatLng): RouteResult | null {
+    const starts = this.accessStations(origin);
+    const goals = this.accessStations(dest);
+    if (starts.length === 0 || goals.length === 0) return null;
+    const { dist, prev, prevKind } = this.dijkstra(starts);
+    return this.extract(dist, prev, prevKind, goals);
+  }
+
+  /**
+   * 단일 출발 → 다수 도착 일괄 라우팅 (Dijkstra **1회**).
+   *  추천처럼 한 직장에서 수백 동을 평가할 때 per-dong route() 보다 훨씬 빠름.
+   *  origin 도보권 역이 없으면 전부 null.
+   */
+  routeMany(origin: LatLng, dests: LatLng[]): (RouteResult | null)[] {
+    const starts = this.accessStations(origin);
+    if (starts.length === 0) return dests.map(() => null);
+    const { dist, prev, prevKind } = this.dijkstra(starts);
+    return dests.map((d) => {
+      const goals = this.accessStations(d);
+      if (goals.length === 0) return null;
+      return this.extract(dist, prev, prevKind, goals);
+    });
   }
 }
