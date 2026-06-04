@@ -25,7 +25,7 @@ const WP: Record<string, { lat: number; lng: number }> = {
   '잠실역': { lat: 37.5133, lng: 127.1001 },
 };
 
-interface Sample { lat: number; lng: number; distanceKm: number; straightEst: number; odsayMin: number | null }
+interface Sample { code: string; lat: number; lng: number; distanceKm: number; straightEst: number; odsayMin: number | null }
 const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'doc', '2026-06-04', 'commute-accuracy-samples.json'), 'utf-8'));
 const samplesByWp: Record<string, Sample[]> = raw.samples;
 
@@ -93,13 +93,14 @@ if (best) {
 //    핵심: 라우터를 *언제* 채택해야 직선보다 나은가? (FP 신호=라우터가 더 느리다고 할 때만?)
 const CFG = { transferPenaltyMin: 4, walkMaxKm: 1.2, boardingOverheadMin: 14 }; // 배선 설정
 const router = new SubwayRouter(graph, CFG);
-const all: { straight: number; router: number | null; odsay: number }[] = [];
+const all: { straight: number; router: number | null; odsay: number; region: '서울' | '수도권'; wp: string }[] = [];
 for (const [wpLabel, samples] of Object.entries(samplesByWp)) {
   const wp = WP[wpLabel]; if (!wp) continue;
   for (const s of samples) {
     if (s.odsayMin == null) continue;
     const r = router.route({ lat: s.lat, lng: s.lng }, wp);
-    all.push({ straight: s.straightEst, router: r ? r.minutes : null, odsay: s.odsayMin });
+    const region = (s.code ?? '').startsWith('11') ? '서울' : '수도권'; // 28 인천·41 경기
+    all.push({ straight: s.straightEst, router: r ? r.minutes : null, odsay: s.odsayMin, region, wp: wpLabel });
   }
 }
 const maeOf = (pick: (x: typeof all[number]) => number) =>
@@ -131,3 +132,28 @@ const maeFp = (pick: (x: typeof all[number]) => number) =>
 console.log(`\n[거짓양성 부분집합 n=${fp.length}] (직선이 10분+ 과소)`);
 console.log(`  직선만        MAE ${maeFp((x) => x.straight).toFixed(1)}`);
 console.log(`  S3(느릴때채택) MAE ${maeFp((x) => (x.router != null && x.router > x.straight ? x.router : x.straight)).toFixed(1)}`);
+
+// 5) **목적지 동 권역별 분리** — 가설: 서울은 직선 유효(밀집), 수도권에서 깨짐.
+//    S3+T18(배선과 동일 전략) 기준으로 서울 dong vs 수도권 dong MAE 비교.
+const T = 18;
+const estS3 = (x: typeof all[number]) =>
+  x.router != null && x.straight >= T && x.router > x.straight ? x.router : x.straight;
+const regMae = (rows: typeof all, pick: (x: typeof all[number]) => number) =>
+  rows.length ? rows.reduce((s, x) => s + Math.abs(pick(x) - x.odsay), 0) / rows.length : NaN;
+const regBias = (rows: typeof all, pick: (x: typeof all[number]) => number) =>
+  rows.length ? rows.reduce((s, x) => s + (pick(x) - x.odsay), 0) / rows.length : NaN;
+console.log('\n[목적지 동 권역별] 직선 vs 라우터적용(S3+T18) — 가설 검증');
+for (const reg of ['서울', '수도권'] as const) {
+  const rows = all.filter((x) => x.region === reg);
+  const adopted = rows.filter((x) => x.router != null && x.straight >= T && x.router > x.straight).length;
+  console.log(
+    `  ${reg} (n=${rows.length}): 직선 MAE ${regMae(rows, (x) => x.straight).toFixed(1)} bias ${regBias(rows, (x) => x.straight).toFixed(1)}` +
+    `  →  라우터적용 MAE ${regMae(rows, estS3).toFixed(1)} (채택 ${adopted})`,
+  );
+}
+console.log('\n[직장별] 직선 MAE / bias (직장 위치별 직선추정 신뢰도)');
+for (const wpLabel of Object.keys(samplesByWp)) {
+  const rows = all.filter((x) => x.wp === wpLabel);
+  if (!rows.length) continue;
+  console.log(`  ${wpLabel.padEnd(12)} n=${String(rows.length).padStart(3)}  직선 MAE ${regMae(rows, (x) => x.straight).toFixed(1)} bias ${regBias(rows, (x) => x.straight).toFixed(1)}  →  라우터적용 MAE ${regMae(rows, estS3).toFixed(1)}`);
+}
