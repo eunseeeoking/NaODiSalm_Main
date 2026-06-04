@@ -317,7 +317,13 @@ async function fetchRentSummary(
   const map = new Map<string, RentStat>();
   if (aggs.length === 0 || propertyTypes.length === 0) return map;
   const typeKey = [...propertyTypes].sort().join('+');
-  const useHist = !!budgetOpts && !(dealType === 'MONTHLY' && budgetOpts.monthlyCap !== Infinity);
+  const budgetPath = !!budgetOpts;
+  const useHist = budgetPath && !(dealType === 'MONTHLY' && budgetOpts!.monthlyCap !== Infinity);
+  // 예산 경로인데 보증금 히스토그램으로 정확 반영 불가(MONTHLY + 월세 한도 지정): 사전집계로 커버하지
+  //  않고 즉시 반환(빈 맵 → coveredKeys 비움) → 호출부가 보증금·월세 한도를 모두 SQL 술어로 적용하는
+  //  live 폴백(rentQueryBudget)으로 감당구간을 산출(KI-24 재고 게이트 유지). 저장 median 으로 잘못
+  //  커버해 예산을 무시하던 버그 차단.
+  if (budgetPath && !useHist) return map;
   type Row = {
     sigungu_code: string;
     dong: string;
