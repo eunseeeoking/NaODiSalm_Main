@@ -15,12 +15,24 @@
  *   node server/scripts/loadTest.mjs --endpoint /health --concurrency 50 --total 500  # 가벼운 헬스만
  */
 
-const args = Object.fromEntries(
-  process.argv.slice(2).map((a) => {
-    const m = a.match(/^--([^=]+)=?(.*)$/);
-    return m ? [m[1], m[2] === '' ? true : m[2]] : [a, true];
-  }),
-);
+// --key=value 와 --key value(공백) 둘 다 지원
+const args = {};
+{
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a.startsWith('--')) continue;
+    const eq = a.indexOf('=');
+    if (eq !== -1) {
+      args[a.slice(2, eq)] = a.slice(eq + 1);
+    } else {
+      const key = a.slice(2);
+      const nxt = argv[i + 1];
+      if (nxt !== undefined && !nxt.startsWith('--')) { args[key] = nxt; i++; }
+      else args[key] = true;
+    }
+  }
+}
 
 const BASE = String(args.url ?? 'https://api.naodisalm.kr').replace(/\/$/, '');
 const ENDPOINT = String(args.endpoint ?? '/api/recommendations');
