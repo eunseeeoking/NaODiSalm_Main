@@ -15,5 +15,8 @@
     "moduleResolution": "node"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  // *.parity.test.ts 는 모노레포 클라 코드를 cross-import 한다(드리프트 알람). 클라 파일은
+  //  rootDir(./src) 밖이라 tsc 빌드에 포함되면 TS6059. vitest 는 rootDir 무시하고 실행하므로
+  //  빌드에서만 제외(테스트 실행·타입 추론은 vitest/esbuild 가 담당).
+  "exclude": ["node_modules", "dist", "src/**/*.parity.test.ts"]
 }

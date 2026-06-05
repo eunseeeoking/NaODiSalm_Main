@@ -58,7 +58,10 @@ function recomputeTotal(
  * commuteOverrides(legalDongCode → ODsay 실측 분) 로 재정렬한 새 배열.
  *  - override 있는 동: commuteMinutes/commuteScore/totalScore 를 실측 기준으로 교체.
  *  - 없는 동: 서버값 유지.
- *  - 정렬: totalScore desc, 동점 시 commuteMinutes asc(서버 tie-break 정합).
+ *  - 정렬: totalScore desc, 동점 시 commuteScore desc(서버 pickTopRegions 와 동일 tie-break).
+ *    ⚠️ 과거 commuteMinutes asc 였으나, transitScore 보정이 섞이면 commuteScore 순서가
+ *       분(minutes) 순서와 갈려 서버와 정렬이 어긋났음(soundless drift). 서버 키로 정합.
+ *       회귀 방지: rerank.parity.test.ts.
  *  override 가 비었으면 입력 배열을 그대로 반환(참조 동일 — 불필요 렌더 방지).
  */
 export function rerankByCommuteOverrides(
@@ -81,12 +84,12 @@ export function rerankByCommuteOverrides(
     };
   });
 
-  // 안정 정렬: 총점 desc → 통근분 asc
+  // 안정 정렬: 총점 desc → commuteScore desc (서버 pickTopRegions 와 동일 tie-break) → 입력순(안정)
   return adjusted
     .map((r, i) => ({ r, i }))
     .sort((a, b) =>
       b.r.totalScore - a.r.totalScore ||
-      a.r.commuteMinutes - b.r.commuteMinutes ||
+      b.r.commuteScore - a.r.commuteScore ||
       a.i - b.i,
     )
     .map((x) => x.r);
