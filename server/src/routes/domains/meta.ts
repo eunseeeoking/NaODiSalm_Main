@@ -72,15 +72,32 @@ function formatYmd(d: Date | null | undefined): string | null {
   return kst.toISOString().slice(0, 10);
 }
 
+/**
+ * 콜드 내성 재시도 — TiDB Serverless 콜드스타트/대형 테이블 COUNT(*) 가 느려 1차에 타임아웃나도
+ *  region 워밍 후 재시도로 성공시킨다. (이게 없으면 safeCount 가 0 으로 삼켜 적재현황이 반토막 표기됨.)
+ */
+async function withRetry<T>(fn: () => Promise<T>, tries = 3, delayMs = 400): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
 async function safeCount<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try {
-    return await fn();
+    return await withRetry(fn);
   } catch {
     return fallback;
   }
 }
 
-/** 테이블명 화이트리스트 기반 raw COUNT(*) — 모델명 의존 없이 안전. 실패 시 0. */
+/** 테이블명 화이트리스트 기반 raw COUNT(*) — 모델명 의존 없이 안전. 실패 시(재시도 후에도) 0. */
 function tableCount(table: string): Promise<number> {
   return safeCount(
     () =>
@@ -104,7 +121,7 @@ function tableMaxDate(table: string, col: string): Promise<Date | null> {
 
 /* ─── GET /api/meta/data-sources ────────────────────── */
 
-metaRouter.get('/data-sources', async (_req, res) => {
+async function computeDataSources(): Promise<DataSourcesDto> {
   // 병렬 카운트 — 테이블 미생성/미적재 시 0 fallback
   const [
     aptTrade, offiTrade, villaTrade,
@@ -235,5 +252,33 @@ metaRouter.get('/data-sources', async (_req, res) => {
     totalRows: sources.reduce((s, src) => s + src.rowCount, 0),
     sources,
   };
-  res.json(dto);
+  return dto;
+}
+
+/* ─── 캐시 (5분 TTL + stale 가드) ─────────────────────────
+ *  · 매 로드마다 14개 COUNT(*) 재실행 방지(TiDB RU 절약).
+ *  · 콜드 등으로 일부 COUNT 가 0 으로 빠져 totalRows 가 직전 good 의 90% 미만이면 → 캐시 갱신 보류,
+ *    직전 good 을 제공(반토막 표기 차단). 완전 실패 시에도 직전 good 으로 stale 응답.
+ */
+const DS_TTL_MS = 5 * 60 * 1000;
+let dsCache: { dto: DataSourcesDto; at: number } | null = null;
+
+metaRouter.get('/data-sources', async (_req, res) => {
+  const now = Date.now();
+  if (dsCache && now - dsCache.at < DS_TTL_MS) {
+    return res.json(dsCache.dto);
+  }
+  let dto: DataSourcesDto;
+  try {
+    dto = await computeDataSources();
+  } catch {
+    if (dsCache) return res.json(dsCache.dto); // 완전 실패 → 직전 good
+    return res.status(503).json({ error: 'data-sources temporarily unavailable' });
+  }
+  // 비정상 하락(콜드로 큰 테이블 COUNT 가 0) → 직전 good 유지, 새 값 캐시 안 함(다음 호출이 재계산)
+  if (dsCache && dto.totalRows < dsCache.dto.totalRows * 0.9) {
+    return res.json(dsCache.dto);
+  }
+  dsCache = { dto, at: now };
+  return res.json(dto);
 });
