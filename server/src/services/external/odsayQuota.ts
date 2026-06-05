@@ -2,8 +2,9 @@
  * ODsay LAB 일일 호출량 게이트
  *
  *  ▷ 정책
- *    · 무료 한도         일 1,000건
- *    · 내부 차단 임계값  일   800건 (마진 20% 확보)
+ *    · 무료 한도         일 1,000건 (ODsay 계정 전체 — 로컬+prod 합산 기준)
+ *    · 내부 차단 임계값  env ODSAY_DAILY_LIMIT (기본 800). 로컬·prod 카운터가 DB별로 독립이라
+ *                       환경별로 나눠 합 ≤1,000 유지 (권장: 로컬 200 / prod 800).
  *    · 리셋 시각         KST 자정 (date 키 변경 시 새 row)
  *    · 카운트 단위       실제 ODsay 외부 호출 1건 = +1
  *                       (캐시 hit / 게이트 차단 / -98 -99 에러는 미카운트)
@@ -23,8 +24,16 @@
  */
 import { prisma } from '../db';
 
-/** 차단 임계값 — 무료 한도(1000) 의 80% */
-export const ODSAY_DAILY_LIMIT = 800;
+/**
+ * 차단 임계값 — env `ODSAY_DAILY_LIMIT` 로 환경별 분할 (미설정 시 800).
+ *  ⚠️ 카운터(t_odsay_usage_daily)는 **DB별로 독립**이라 로컬(MySQL)·prod(TiDB)가 따로 누적되는데,
+ *     둘 다 **같은 ODsay 계정의 1,000/일 실쿼터**를 깎는다. 따라서 각 환경 캡의 **합이 1,000 이하**여야
+ *     실쿼터를 안 넘긴다. 권장 분할: 로컬 .env=200, prod=800 → 합 1,000.
+ *  유효하지 않은 값(NaN·≤0)이면 800 폴백.
+ */
+const _rawDailyLimit = Number(process.env.ODSAY_DAILY_LIMIT);
+export const ODSAY_DAILY_LIMIT =
+  Number.isFinite(_rawDailyLimit) && _rawDailyLimit > 0 ? Math.floor(_rawDailyLimit) : 800;
 
 /**
  * KST 기준 오늘 날짜 'YYYY-MM-DD'

@@ -39,4 +39,6 @@ services:
       # ── 비밀 아님 (인라인) ──
       - key: ODSAY_REFERER
         value: https://api.naodisalm.kr # ODsay 'URI(Service URI)' 환경 등록값과 정확히 일치시킬 것
+      - key: ODSAY_DAILY_LIMIT
+        value: "800" # ODsay 일일 차단 임계값. 로컬(.env=200)과 합 ≤1,000 유지 (실쿼터 공유)
 
