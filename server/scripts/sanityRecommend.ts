@@ -17,6 +17,7 @@ interface Scenario {
   patience: number;
   dealType: DealType;
   budget?: number; // 만원 (보증금/매매가 상한)
+  monthlyBudget?: number; // 만원/월 (MONTHLY 월세 한도) — ④ MONTHLY+월세한도 경로 검증용
   income?: number; // 만원/월
 }
 
@@ -39,6 +40,18 @@ const scenarios: Scenario[] = [
     income: 300,
   },
   {
+    // ④ 검증: MONTHLY + 월세한도(monthlyBudget 유한) → fetchRentSummary 가 사전집계 우회 후
+    //  live 폴백(보증금·월세 한도 SQL 술어)을 타는지. 한도 무시 버그면 비싼 동까지 다 떠오름.
+    name: '강남 직장 1인가구 (월세, 보증금 5천·월세한도 70만)',
+    workplace: { lat: 37.4979, lng: 127.0276, label: '강남역' },
+    weights: { commute: 30, affordability: 30, safety: 25, life: 15 },
+    patience: 45,
+    dealType: 'MONTHLY',
+    budget: 5000, // 보증금 5천만 상한
+    monthlyBudget: 70, // 월세 70만/월 상한
+    income: 300,
+  },
+  {
     name: '여의도 직장 (전세, 통근 최우선)',
     workplace: { lat: 37.5215, lng: 126.9242, label: '여의도역' },
     weights: { commute: 50, affordability: 25, safety: 15, life: 10 },
@@ -53,7 +66,7 @@ async function run(s: Scenario) {
   const { candidates, budgetFilteredCount } = await fetchRegionCandidates(
     s.workplace,
     s.patience,
-    { dealType: s.dealType, budget: s.budget },
+    { dealType: s.dealType, budget: s.budget, monthlyBudget: s.monthlyBudget },
   );
   const top = pickTopRegions(candidates, s.weights, s.patience, 8, s.income);
 
@@ -61,7 +74,7 @@ async function run(s: Scenario) {
   console.log(`📍 ${s.name}`);
   console.log(
     `   직장=${s.workplace.label} | 가중치 통근${s.weights.commute}/주거비${s.weights.affordability}/안전${s.weights.safety}/생활${s.weights.life}` +
-      ` | 인내심 ${s.patience}분 | ${s.dealType}${s.budget ? ` | 예산 ${(s.budget / 10000).toFixed(1)}억` : ''}`,
+      ` | 인내심 ${s.patience}분 | ${s.dealType}${s.budget ? ` | 예산 ${(s.budget / 10000).toFixed(1)}억` : ''}${s.monthlyBudget ? ` | 월세한도 ${s.monthlyBudget}만` : ''}`,
   );
   console.log(
     `   후보 ${candidates.length}개 · 예산초과 숨김 ${budgetFilteredCount}개`,
