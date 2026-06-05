@@ -17,8 +17,9 @@
  *       - 정상 응답·정상 비즈 에러(경로 없음 등)는 환불 X
  *
  *  ▷ 동시성
- *    · 단일 서버 / 저동시성 가정 — read-check-increment 사이 미세 race 허용
- *    · 약간 over-count(±5건) 발생해도 800 마진 안에서 흡수
+ *    · 증가는 `INSERT ... ON DUPLICATE KEY UPDATE` 단일 문장 → 동시 호출에도 PK 충돌 없이 +1 누적.
+ *    · 임계 판정은 증가 직후 findUnique 재조회라, 경계(800 부근)에서 동시 증가분이 함께 읽혀
+ *      미세 over/under-count(±몇 건) 가능 — 200 마진(1000-800) 안에서 흡수되므로 허용.
  */
 import { prisma } from '../db';
 
@@ -70,15 +71,22 @@ export async function getOdsayUsageToday(): Promise<{
 export async function checkAndConsumeOdsayQuota(): Promise<boolean> {
   const date = todayKstYmd();
 
-  // upsert + increment 한 번에 — 동시성 안전
-  const updated = await prisma.odsayUsageDaily.upsert({
-    where: { date },
-    create: { date, callCount: 1 },
-    update: { callCount: { increment: 1 } },
-  });
+  // 원자적 증가 — MySQL `INSERT ... ON DUPLICATE KEY UPDATE` **한 문장**이라 동시 호출에도
+  //  PK 충돌(P2002) 없이 누계가 정확히 +1 된다.
+  //  ⚠️ Prisma `upsert` 는 find→insert/update 2단계(비원자적)라, 그날 row 가 아직 없을 때
+  //     fetchOdsayBatch 의 Promise.all 동시 호출이 모두 INSERT 를 시도→PK 충돌로 P2002 폭발했음.
+  //  · updated_at 은 @updatedAt(앱 관리)라 raw 경로에선 DB 가 안 채움 → 명시적으로 UTC 세팅.
+  await prisma.$executeRaw`
+    INSERT INTO t_odsay_usage_daily (\`date\`, call_count, updated_at)
+    VALUES (${date}, 1, UTC_TIMESTAMP(3))
+    ON DUPLICATE KEY UPDATE call_count = call_count + 1, updated_at = UTC_TIMESTAMP(3)
+  `;
 
-  if (updated.callCount > ODSAY_DAILY_LIMIT) {
-    // 임계 초과 — 방금 한 증가를 환불 (정확성보다 단순함 우선)
+  const row = await prisma.odsayUsageDaily.findUnique({ where: { date } });
+  const callCount = row?.callCount ?? 1;
+
+  if (callCount > ODSAY_DAILY_LIMIT) {
+    // 임계 초과 — 방금 한 증가를 환불 (decrement 도 단일 UPDATE 라 원자적)
     await prisma.odsayUsageDaily.update({
       where: { date },
       data: { callCount: { decrement: 1 } },
