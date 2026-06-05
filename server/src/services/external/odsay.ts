@@ -26,6 +26,14 @@ if (!API_KEY) {
   console.warn('[odsay] ODSAY_API_KEY is not set');
 }
 
+// ODsay 키를 'Server IP' 화이트리스트 대신 'URI(Service URI)' 환경으로 등록한 경우.
+//  서버사이드 호출은 브라우저가 아니라 기본 Referer 가 없어 URI 검증을 못 통과하므로,
+//  콘솔의 Service URI 와 **정확히 일치하는** Referer 를 수동으로 실어 보낸다(Node fetch 는
+//  수동 Referer 를 그대로 전송함을 확인). 미설정이면 헤더 미부착 = 기존 IP 화이트리스트 모드.
+//  Render 무료 티어(회전 outbound IP)에서 고정 IP 없이 ODsay 를 쓰기 위한 경로. 도메인 변경 시
+//  재배포 없이 env 만 바꾸면 됨.
+const ODSAY_REFERER = process.env.ODSAY_REFERER;
+
 const ENDPOINT = 'https://api.odsay.com/v1/api/searchPubTransPathT';
 
 export interface OdsayResult {
@@ -93,7 +101,8 @@ export async function fetchOdsayRoute(
   }
 
   try {
-    const res = await fetch(url);
+    // URI 환경 등록 시 Referer 부착(IP 화이트리스트 우회). 미설정이면 헤더 없이 기존 동작.
+    const res = await fetch(url, ODSAY_REFERER ? { headers: { Referer: ODSAY_REFERER } } : undefined);
     if (!res.ok) {
       console.warn(`[odsay] HTTP ${res.status}`);
       return null;
