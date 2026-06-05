@@ -56,10 +56,10 @@ interface OdsayRawResponse {
       };
     }>;
   };
-  error?: {
-    code?: string;
-    msg?: string;
-  };
+  // ODsay 는 error 를 객체 또는 배열([{code,msg}])로 반환 — 둘 다 수용.
+  error?:
+    | { code?: string; msg?: string }
+    | Array<{ code?: string; msg?: string }>;
 }
 
 /**
@@ -110,10 +110,15 @@ export async function fetchOdsayRoute(
     const json = (await res.json()) as OdsayRawResponse;
 
     if (json.error) {
-      // -98 = 도보 단거리(경로 없음), -99 = 출발지/도착지 동일
-      const code = json.error.code;
+      // error 가 객체/배열 둘 다 올 수 있어 정규화. 모양이 예상과 달라도 raw 로 원문 노출
+      //  (code=undefined 만 찍혀 원인 못 보던 문제 — 화이트리스트/키 오류 메시지를 그대로 본다).
+      const e = Array.isArray(json.error) ? json.error[0] : json.error;
+      const code = e?.code;
+      // -98 = 도보 단거리(경로 없음), -99 = 출발지/도착지 동일 — 정상이라 로그 생략
       if (code !== '-98' && code !== '-99') {
-        console.warn(`[odsay] error code=${code} msg=${json.error.msg}`);
+        console.warn(
+          `[odsay] error code=${code ?? '?'} msg=${e?.msg ?? '?'} raw=${JSON.stringify(json.error)}`,
+        );
       }
       return null;
     }
