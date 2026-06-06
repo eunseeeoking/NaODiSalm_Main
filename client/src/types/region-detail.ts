@@ -21,6 +21,22 @@ export type PropertyKind = 'APT' | 'VILLA' | 'OFFICETEL';
 export type DealType = 'SALE' | 'JEONSE' | 'MONTHLY';
 
 /** 매물 단지 — 현재는 APT/SALE 만 흐름. Phase 3 에서 VILLA/OFFICETEL 추가 예정. */
+/** 단지 실거래 1건 (원본, 모달 표시용) — GET /api/complexes/:complexId/trades */
+export interface ComplexTrade {
+  /** 거래월 "YYYY-MM" */
+  ym: string;
+  /** 거래일 "YYYY-MM-DD" */
+  dealDate: string;
+  /** 전용면적 (㎡) */
+  areaM2: number;
+  /** 층 (null=정보없음) */
+  floor: number | null;
+  /** 거래가 (만원) */
+  priceManwon: number;
+  /** m²당 단가 (만원/㎡) */
+  pricePerM2: number;
+}
+
 export interface AptComplex {
   /** 단지 고유 ID (서버 발급) */
   complexId: string;

@@ -10,7 +10,7 @@
  *    - AbortError 는 그대로 re-throw (호출처 무시)
  */
 import { apiFetch, ApiError } from './client';
-import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData, LhSummary, RegionDetail } from '../types/region-detail';
+import type { AptComplex, LstmAnalysis, ArimaAnalysis, CommuteCompareData, LhSummary, RegionDetail, ComplexTrade } from '../types/region-detail';
 import type { RecPropertyType } from '../types/recommendation';
 import { getMockComplexesForRegion } from '../pages/RegionDetail/data/mockComplexes';
 import { getMockLstm } from '../pages/RegionDetail/data/mockLstmResults';
@@ -186,6 +186,30 @@ export async function fetchArima(
     };
     return { analysis: arimaMock, source: 'mock' };
   }
+}
+
+// ─── 실거래 원본 ─────────────────────────────────────────────
+
+export interface ComplexTradesResult {
+  name: string;
+  count: number;
+  trades: ComplexTrade[];
+}
+
+/**
+ * 단지 실거래 내역 (최근 N건) — GET /api/complexes/:complexId/trades
+ *  - 모델 예측이 아닌 원본 데이터 → 폴백 mock 없음(실패 시 호출처가 빈/에러 처리).
+ */
+export async function fetchComplexTrades(
+  complexId: string,
+  limit = 100,
+  signal?: AbortSignal,
+): Promise<ComplexTradesResult> {
+  const data = await apiFetch<{ name: string; count: number; trades: ComplexTrade[] }>(
+    `/api/complexes/${complexId}/trades?limit=${limit}`,
+    { signal },
+  );
+  return { name: data.name, count: data.count, trades: data.trades ?? [] };
 }
 
 // ─── 통근 비교 ───────────────────────────────────────────────

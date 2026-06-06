@@ -10,6 +10,7 @@ import { recommendationsRouter } from './domains/recommendations';
 import { regionsRouter } from './domains/regions';
 import { lstmRouter } from './domains/lstm';
 import { arimaRouter } from './domains/arima';
+import { complexesRouter } from './domains/complexes';
 import { metaRouter } from './domains/meta';
 import { requireAuth } from '../middleware/requireAuth';
 
@@ -38,4 +39,5 @@ apiRouter.use('/recommendations', recommendationsRouter);
 apiRouter.use('/regions', regionsRouter);   // GET /api/regions/:legalDongCode/complexes
 apiRouter.use('/lstm', lstmRouter);         // GET /api/lstm/:complexId
 apiRouter.use('/arima', arimaRouter);       // GET /api/arima/:complexId (ARIMA 메인 모델)
+apiRouter.use('/complexes', complexesRouter); // GET /api/complexes/:complexId/trades (실거래 원본)
 apiRouter.use('/meta', metaRouter);         // GET /api/meta/data-sources (Phase 2-B, 4기관 융합 메타)

@@ -9,8 +9,9 @@
  *  ▷ 다크 모드 대응 — useThemeStore 구독으로 차트 색상 동기화
  *  ▷ "투자 수익률" 표현 제거 — 가격 안정성 지표로 재정의 (컨셉 전환 2026-05-24)
  */
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { InfoTooltip } from '../../../components/InfoTooltip';
+import { TradeHistoryModal } from './TradeHistoryModal';
 import {
   Chart,
   CategoryScale,
@@ -69,12 +70,36 @@ const SCOPE_META: Record<ConfidenceDataScope, { label: string; cls: string; }> =
   INSUFFICIENT: { label: '데이터 부족',   cls: 'bg-negative/15 text-negative' },
 };
 
+/** 3년 추세 → 정성 라벨 (수익률 숫자 대신 — 공포 제거·거주 프레임). */
+function trendLabel(ret3y: number): { label: string; hint: string } {
+  if (ret3y >= 5) return { label: '완만한 상승세', hint: '최근 실거래 추세 기준' };
+  if (ret3y > -5) return { label: '안정적', hint: '큰 변동 없음' };
+  if (ret3y > -15) return { label: '완만한 약세', hint: '매매 시 가격 협상 여지' };
+  return { label: '약세 추세', hint: '협상 여지 · 추정 불확실' };
+}
+
+/** 신뢰도 → 정성 라벨 (숫자만으론 뭘 하라는지 모호 → 평어). */
+function confidenceLabel(c: number): string {
+  if (c >= 75) return '높음';
+  if (c >= 62) return '보통';
+  return '낮음 · 참고만';
+}
+
 export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
 
   // ARIMA 우선, 없으면 LSTM 폴백 (메인 데이터 소스)
   const primary: LstmAnalysis | ArimaAnalysis | null = arima ?? lstm;
+
+  const ret3y = primary?.expectedReturn3y ?? 0;
+  const trend = trendLabel(ret3y);
+  const conf = primary?.confidence ?? 50;
+  // 추세 적합도 낮음(신뢰도 낮음) → 점예측을 단정 톤으로 보여주지 않음 (겁주지 않기).
+  const uncertain = conf < 62;
+
+  const [showTrades, setShowTrades] = useState(false);
+  const complexId = complex.complexId ?? primary?.complexId;
 
   // 차트 색상 팔레트 (토스 톤)
   const colors = useMemo(
@@ -106,22 +131,9 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
     arimaForecasts[lastActualIdx] = primary!.series[lastActualIdx].pricePerM2;
   }
 
-  // ── LSTM 보조 예측 라인 (arima가 있을 때만 표시) ─────────────
-  const lstmForecasts = useMemo(() => {
-    if (!arima || !lstm) return null;
-    const fcs: (number | null)[] = labels.map(() => null);
-    let lastActIdx = -1;
-    for (let i = lstm.series.length - 1; i >= 0; i--) {
-      if (lstm.series[i].kind === 'actual') { lastActIdx = i; break; }
-    }
-    lstm.series.forEach((p, i) => {
-      if (p.kind === 'forecast') fcs[i] = p.pricePerM2;
-    });
-    if (lastActIdx >= 0 && lastActIdx + 1 < fcs.length) {
-      fcs[lastActIdx] = lstm.series[lastActIdx].pricePerM2;
-    }
-    return fcs;
-  }, [arima, lstm, labels]);
+  // LSTM 보조선 제거 (2026-06-06): 라이브 LSTM 폐기(2026-05-25) 후 현재가에 평평한
+  //   장식선만 남아 "LSTM이 아무것도 안 한다"는 오해를 줘 삭제. LSTM 가치는 백테스트
+  //   연구 서사(왜 LSTM이 졌나 2×2)로 이전. 차트는 ARIMA 추세 + 신뢰구간만 표시.
 
   const datasets: ChartDataset<'line', (number | null)[]>[] = [
     // 신뢰구간 상한 (ARIMA)
@@ -171,19 +183,6 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
       spanGaps: false,
       order: 1,
     },
-    // LSTM 보조 (회색, arima 있을 때만)
-    ...(lstmForecasts ? [{
-      label: 'LSTM 변동성',
-      data: lstmForecasts,
-      borderColor: colors.lstm,
-      backgroundColor: colors.lstm,
-      borderWidth: 1.5,
-      borderDash: [3, 5],
-      pointRadius: 0,
-      tension: 0.2,
-      spanGaps: false,
-      order: 2,
-    }] : []),
   ];
 
   const lineData: ChartData<'line', (number | null)[], string> = { labels, datasets };
@@ -288,7 +287,7 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
         </span>
       </div>
 
-      {/* 4축 메트릭 — 모바일 2x2, 데스크톱 4컬 */}
+      {/* 메트릭 — 현재가 + 추정(저신뢰 시 '추정' 톤) + 가격 흐름(정성, 공포 숫자 대체) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <Metric
           label="현재 m²당"
@@ -296,25 +295,30 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
           sub={`총 ${formatPyMillion(primary?.currentPricePerM2 ?? 0, complex.exclusiveArea)}`}
         />
         <Metric
-          label="1년 후"
-          value={`${formatManwon(primary?.predicted1yPricePerM2 ?? 0)}만`}
-          sub={`총 ${formatPyMillion(primary?.predicted1yPricePerM2 ?? 0, complex.exclusiveArea)}`}
-        />
-        <Metric
-          label="3년 후"
-          value={`${formatManwon(primary?.predicted3yPricePerM2 ?? 0)}만`}
-          sub={`총 ${formatPyMillion(primary?.predicted3yPricePerM2 ?? 0, complex.exclusiveArea)}`}
-        />
-        <Metric
-          label="3년 변동성"
+          label="1년 후 (추정)"
           value={
-            <span className="text-ink-secondary dark:text-ink-secondary-dark">
-              {(primary?.expectedReturn3y ?? 0) >= 0 ? '+' : ''}
-              {primary?.expectedReturn3y ?? 0}%
+            <span className={uncertain ? 'text-ink-tertiary dark:text-ink-tertiary-dark' : undefined}>
+              {uncertain ? '≈' : ''}
+              {formatManwon(primary?.predicted1yPricePerM2 ?? 0)}만
             </span>
           }
-          sub="가격 변동 지표"
-          tooltip="현재 가격 대비 3년 후 예측 가격의 변동률(%). 투자 수익률이 아닌 가격 안정성 참고 지표입니다."
+          sub={uncertain ? '불확실 · 참고만' : `총 ${formatPyMillion(primary?.predicted1yPricePerM2 ?? 0, complex.exclusiveArea)}`}
+        />
+        <Metric
+          label="3년 후 (추정)"
+          value={
+            <span className={uncertain ? 'text-ink-tertiary dark:text-ink-tertiary-dark' : undefined}>
+              {uncertain ? '≈' : ''}
+              {formatManwon(primary?.predicted3yPricePerM2 ?? 0)}만
+            </span>
+          }
+          sub={uncertain ? '불확실 · 참고만' : `총 ${formatPyMillion(primary?.predicted3yPricePerM2 ?? 0, complex.exclusiveArea)}`}
+        />
+        <Metric
+          label="가격 흐름"
+          value={<span className="text-ink-secondary dark:text-ink-secondary-dark">{trend.label}</span>}
+          sub={trend.hint}
+          tooltip="최근 실거래 추세의 방향이에요. 투자 수익률이 아니라 거주·협상 참고용이며, 금리·정책 변화로 달라질 수 있습니다."
         />
       </div>
 
@@ -334,10 +338,10 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
                 primary?.confidenceDetail
                   ? `${primary.confidenceDetail} · ${
                       arima
-                        ? '회귀 적합도(R²) + 거래 데이터 수 반영. 50~88 범위.'
-                        : '학습 MAPE + 샘플 수 기반. 50~95 범위.'
+                        ? '추세 적합도(R²)와 실거래 양 기반. 낮을수록 추세가 불안정해 추정을 단정하기 어렵습니다.'
+                        : '학습 MAPE + 샘플 수 기반. 낮을수록 추정 불확실.'
                     }`
-                  : '회귀 적합도(R²)와 실거래 데이터 수를 반영한 신뢰 지수.'
+                  : '추세 적합도(R²)와 실거래 양을 반영한 신뢰 지수. 낮으면 참고용으로만 보세요.'
               }
               position="top"
             />
@@ -351,6 +355,9 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
               <span className="text-2xs text-ink-tertiary dark:text-ink-tertiary-dark">/ 100</span>
             </div>
           </div>
+          <span className="mt-2 text-xs font-bold text-ink-primary dark:text-ink-primary-dark">
+            신뢰도 {confidenceLabel(conf)}
+          </span>
           {/* 데이터 출처 칩 — 2026-05-27 추가 */}
           {primary?.dataScope && (
             <span
@@ -368,12 +375,31 @@ export function PriceStabilityAnalysis({ complex, lstm, arima }: Props) {
         </div>
       </div>
 
+      {/* 실거래 원본 보기 — 선택 도우미: 예측 근거 데이터를 그대로 노출 */}
+      {complexId && (
+        <button
+          type="button"
+          onClick={() => setShowTrades(true)}
+          className="self-start text-xs font-semibold text-brand hover:underline"
+        >
+          실제 거래 내역 보기 →
+        </button>
+      )}
+
       {/* disclaimer — 정직 톤 (컨셉 전환 핵심) */}
       <p className="text-2xs text-ink-tertiary dark:text-ink-tertiary-dark leading-relaxed border-t border-line-light dark:border-line-dark pt-2">
         {arima?.disclaimer
           ? arima.disclaimer
-          : 'ARIMA(2,1,2) 통계 모델 기반. 금리·정책 등 외생 충격(금리·정책)으로 본질적 한계 존재. LSTM 변동성 점수는 보조 지표.'}
+          : '최근 실거래 추세 기반 통계 추정이에요. 금리·정책 등 외생 변수는 반영되지 않아 참고용입니다.'}
       </p>
+
+      {showTrades && complexId && (
+        <TradeHistoryModal
+          complexId={complexId}
+          complexName={complex.name}
+          onClose={() => setShowTrades(false)}
+        />
+      )}
     </div>
   );
 }
