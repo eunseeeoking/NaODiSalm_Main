@@ -47,7 +47,7 @@ function arg(name: string): string | undefined {
 }
 const has = (name: string) => process.argv.includes(`--${name}`);
 
-const VALID = ['OFFI', 'VILLA', 'SH'] as const;
+const VALID = ['APT', 'OFFI', 'VILLA', 'SH'] as const;
 type CplxType = (typeof VALID)[number];
 
 const types = (arg('type') ?? 'OFFI')
@@ -71,6 +71,7 @@ const inCapital = (lat: number, lng: number) =>
 /* ─── 유형별 Prisma 델리게이트 ─────────────────────────────── */
 
 const DELEGATE: Record<CplxType, any> = {
+  APT: prisma.aptComplex,
   OFFI: prisma.offiComplex,
   VILLA: prisma.villaComplex,
   SH: prisma.shComplex,

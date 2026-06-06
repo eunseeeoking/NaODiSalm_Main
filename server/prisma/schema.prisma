@@ -535,3 +535,50 @@ model OdsayUsageDaily {
 
   @@map("t_odsay_usage_daily")
 }
+
+// ──────────────────────────────────────────────────────────────
+//  ML 피처 보강 — 거시·구조 공변량 (2026-06-06, ml-feature-data-handoff)
+//  - LSTM 다변량(direct multi-horizon) 입력용 시계열 공변량.
+//  - ym String VarChar(7) "YYYY-MM" 가 ML join 키 (REB 와 동일 규약).
+//  - 누수 방지: 각 ym 값은 "그 달에 실제 공표된" 값 (미래 수정치 backfill 금지).
+// ──────────────────────────────────────────────────────────────
+
+/// 거시 금융지표 (월별, 전국 단일) — 한국은행 ECOS
+///  - ym 으로 전 단지에 broadcast join.
+///  - 적재: npm run seed:macro-rate (ECOS_API_KEY 필요)
+model MacroRate {
+  ym           String   @id @db.VarChar(7)         /// "2025-04"
+  baseRate     Float?   @map("base_rate")          /// 한국은행 기준금리 (%)
+  mortgageRate Float?   @map("mortgage_rate")       /// 주담대 가중평균금리 (%, 신규취급액)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("t_macro_rate")
+}
+
+/// 거시 경제지표 (월별, 전국 단일) — 한국은행 ECOS
+///  - 적재: npm run seed:macro-econ (ECOS_API_KEY 필요)
+model MacroEcon {
+  ym            String   @id @db.VarChar(7)
+  cpi           Float?   /// 소비자물가지수 (2020=100)
+  m2            Float?   /// M2 광의통화 (말잔, 조원)
+  householdLoan Float?   @map("household_loan")     /// 가계대출(가계신용) 잔액 (조원)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("t_macro_econ")
+}
+
+/// 주택 공급/미분양 (시군구·월별) — 부동산원 R-ONE / KOSIS
+///  - 공급은 가격을 선행하는 핵심 신호. sigunguCode + ym 으로 단지 패널에 join.
+///  - 적재: npm run seed:housing-supply (R-ONE-KEY 또는 KOSIS_API_KEY + STATBL_ID 필요)
+model HousingSupply {
+  id          Int      @id @default(autoincrement())
+  sigunguCode String   @map("sigungu_code") @db.VarChar(5)
+  ym          String   @db.VarChar(7)
+  unsold      Int?     /// 미분양 호수
+  moveInUnits Int?     @map("move_in_units")        /// 입주(준공) 물량 호수
+  permitUnits Int?     @map("permit_units")         /// 인허가 호수 (선택)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([sigunguCode, ym], map: "uniq_housing_supply")
+  @@map("t_housing_supply")
+}

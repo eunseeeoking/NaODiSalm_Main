@@ -339,6 +339,120 @@ export async function fetchSingleIndex(
   return rows.find((r) => r.sigunguCode === sigunguCode && r.ym === ym)?.indexValue ?? null;
 }
 
+/* ─── 범용 원시 시계열 (REB 외 통계표 — 미분양/공급 등) ─────── */
+
+/** R-ONE 원시 행 (지역 필터·코드매핑 없이 그대로 반환) */
+export interface RebRawRow {
+  /** R-ONE 내부 분류 ID (CLS_ID, 5자리지만 LAWD 코드 아님!) */
+  clsId?: string;
+  /** 분류명 (CLS_NM, 계층형 통계표에선 "계" 등) */
+  clsName?: string;
+  /** 분류 풀네임 (CLS_FULLNM, 예: "서울>강남구") — 지역 식별의 실 근거 */
+  clsFullName?: string;
+  /** "YYYY-MM" */
+  ym: string;
+  /** DTA_VAL 숫자값 (지수/호수 등 통계표 의미에 따름) */
+  value: number;
+}
+
+/**
+ * R-ONE 통계표 원시 시계열 fetch (자동 페이지네이션, 지역 매핑 없음).
+ *
+ *  - fetchRebPriceIndex 는 서울 25구 CLS_NM 매핑에 특화돼 있어 계층형(시도>시군구)
+ *    통계표(미분양·공급)에는 부적합 → 이 함수로 CLS_FULLNM 을 보존해 반환하고,
+ *    호출부(seedHousingSupply 등)가 CLS_FULLNM 을 파싱해 자체 매핑한다.
+ *  - 키 미설정/statblId 누락 시 빈 배열.
+ */
+export async function fetchRebRawSeries(opts: {
+  statblId: string;
+  dtacycleCd?: 'MM' | 'QQ' | 'YY';
+  startWrttime?: string;
+  endWrttime?: string;
+  pSize?: number;
+}): Promise<RebRawRow[]> {
+  if (!API_KEY) {
+    console.warn('[rebClient] API 키 없음 — 빈 배열 반환');
+    return [];
+  }
+  if (!opts.statblId) {
+    console.error('[rebClient] statblId 미지정.');
+    return [];
+  }
+
+  const dtacycleCd = opts.dtacycleCd ?? 'MM';
+  const pSize = opts.pSize ?? 1000;
+  const now = new Date();
+  const defaultEnd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const startDate = new Date(now.getFullYear() - 3, now.getMonth(), 1);
+  const defaultStart = `${startDate.getFullYear()}${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+  const startWrttime = opts.startWrttime ?? defaultStart;
+  const endWrttime = opts.endWrttime ?? defaultEnd;
+
+  const results: RebRawRow[] = [];
+  let pIndex = 1;
+  let totalCount: number | null = null;
+
+  for (;;) {
+    const params = new URLSearchParams({
+      KEY: API_KEY,
+      Type: 'json',
+      pIndex: String(pIndex),
+      pSize: String(pSize),
+      STATBL_ID: opts.statblId,
+      DTACYCLE_CD: dtacycleCd,
+      START_WRTTIME: startWrttime,
+      END_WRTTIME: endWrttime,
+    });
+    const url = `${BASE_URL}?${params.toString()}`;
+
+    let body: RebApiResponse;
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) {
+        console.error(`[rebClient] HTTP ${res.status}`);
+        break;
+      }
+      body = (await res.json()) as RebApiResponse;
+    } catch (e) {
+      console.error('[rebClient] fetch 실패:', e);
+      break;
+    }
+
+    const { rows, resultCode, resultMessage } = extractRows(body);
+    if (resultCode && !/^INFO-000?$/.test(resultCode)) {
+      console.error(`[rebClient] R-ONE 오류: ${resultCode} ${resultMessage ?? ''}`);
+      break;
+    }
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const ym = row.WRTTIME_IDTFR_ID ? normalizeYm(row.WRTTIME_IDTFR_ID) : null;
+      const value = parseFloat(row.DTA_VAL ?? '');
+      if (!ym || !Number.isFinite(value)) continue;
+      results.push({
+        clsId: row.CLS_ID,
+        clsName: row.CLS_NM,
+        clsFullName: row.CLS_FULLNM,
+        ym,
+        value,
+      });
+    }
+
+    if (totalCount === null && 'SttsApiTblData' in body) {
+      for (const part of body.SttsApiTblData) {
+        if ('head' in part) for (const h of part.head) if (typeof h.list_total_count === 'number') totalCount = h.list_total_count;
+      }
+    }
+    if (rows.length < pSize) break;
+    if (totalCount !== null && pIndex * pSize >= totalCount) break;
+    pIndex++;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  console.log(`[rebClient] raw 수집 완료: ${results.length}건 (STATBL_ID=${opts.statblId})`);
+  return results;
+}
+
 /* ─── 하위 호환 ─────────────────────────────────────────── */
 
 /**
