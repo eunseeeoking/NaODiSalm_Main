@@ -52,10 +52,14 @@ export interface RegionAggregate {
 }
 
 /**
- * 매매 거래 테이블을 가진 매물종류 (SH=단독·다가구는 매매 거래 없음 — 전월세만).
- *  KI-2 대표 매매가 산출 시 SH 는 자동 제외.
+ * 매매 추천 universe·대표가 매물종류.
+ *  ⚠️ APT 만 — Depth 3 단지 상세가 아파트만 표시(VILLA/OFFI 는 Phase 3 까지 비활성, regions.ts §58)
+ *     하므로, 매매 추천 universe 도 APT 로 한정해야 "추천 1위지만 등록된 단지 없음" 불일치를 막는다.
+ *     (예: 수원 팔달구 장안동 = 빌라 2건 9천만 매매시세로 1위 → Depth3 아파트 0 → 빈 화면. 2026-06-06 fix)
+ *     ▷ Phase 3(빌라/오피 상세) 완성 시 ['APT','OFFI','VILLA'] 로 복원.
+ *  (SH=단독·다가구는 매매 거래 테이블 자체가 없어 원래 제외.)
  */
-const SALE_TRADE_TYPES: readonly PropertyType[] = ['APT', 'OFFI', 'VILLA'];
+const SALE_TRADE_TYPES: readonly PropertyType[] = ['APT'];
 
 /** 수도권 등 다중 시군구 prefix → `(sigungu_code LIKE '11%' OR ...)` 필터 (KI-19). */
 function sigunguPrefixFilter(prefixes: readonly string[]): Prisma.Sql {
