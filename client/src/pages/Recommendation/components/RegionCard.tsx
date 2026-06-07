@@ -58,7 +58,7 @@ const METRIC_BARS: ReadonlyArray<{
 }> = [
   { label: '통근', axis: 'commute', key: 'commuteScore' },
   { label: '부담', axis: 'affordability', key: 'affordabilityScore' },
-  { label: '안전', axis: 'safety', key: 'safetyScore' },
+  { label: '치안', axis: 'safety', key: 'safetyScore' },
   { label: '생활', axis: 'life', key: 'lifeScore' },
 ];
 
@@ -66,7 +66,7 @@ const METRIC_BARS: ReadonlyArray<{
 const AXIS_LABEL: Record<ScoreAxis, string> = {
   commute: '통근',
   affordability: '부담',
-  safety: '안전',
+  safety: '치안',
   life: '생활',
 };
 
@@ -338,7 +338,7 @@ export function RegionCard({ region, rank }: Props) {
           </div>
 
           {/* 4축 미니 막대 — 실데이터(안전·생활) 변별을 리스트에서도 노출. 라벨은 hover 툴팁. */}
-          <div className="mt-2 grid grid-cols-4 gap-1.5" aria-label="통근·부담·안전·생활 점수">
+          <div className="mt-2 grid grid-cols-4 gap-1.5" aria-label="통근·부담·치안·생활 점수">
             {METRIC_BARS.map((m) => {
               const estimated = estimatedSet.has(m.axis);
               return (

@@ -8,17 +8,29 @@
  *
  *  스크롤바 숨김은 `.scroll-x-slider` CSS 클래스가 담당한다.
  *  사용:  const ref = useDragScroll<HTMLDivElement>();  <div ref={ref} className="... scroll-x-slider" />
+ *
+ *  ▷ 콜백 ref 방식 (2026-06-07 수정 — Depth3 매물 카드 스와이퍼 먹통 근본 해결)
+ *    기존 `useRef + useEffect([])` 는 마운트 시점에 `ref.current` 가 가리키는 노드에만
+ *    1회 부착했다. "빈 상태(early-return·로딩) → 데이터 채워져 대상 div 가 뒤늦게 마운트"
+ *    되는 컴포넌트(예: ComplexCardList)에서는 effect 가 `el=null` 로 한 번 돌고 끝나
+ *    실제 카드 div 에는 리스너가 영영 안 붙었다(드래그·휠 전부 먹통).
+ *    → 콜백 ref 로 노드가 DOM 에 붙는/떨어지는 순간마다 (재)부착·정리해 타이밍 무관하게 동작.
  */
-import { useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 
 /** 드래그로 간주하는 최소 이동 거리(px) — 이보다 작으면 클릭으로 처리 */
 const DRAG_THRESHOLD = 5;
 
 export function useDragScroll<T extends HTMLElement = HTMLDivElement>() {
-  const ref = useRef<T | null>(null);
+  // 직전 부착 노드의 정리 함수 — 재마운트/언마운트 시 중복 부착 방지
+  const detachRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    const el = ref.current;
+  return useCallback((el: T | null) => {
+    // 이전 노드가 있으면 먼저 정리
+    if (detachRef.current) {
+      detachRef.current();
+      detachRef.current = null;
+    }
     if (!el) return;
 
     let isDown = false;
@@ -75,14 +87,13 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>() {
     el.addEventListener('click', onClickCapture, true);
     el.addEventListener('wheel', onWheel, { passive: false });
 
-    return () => {
+    detachRef.current = () => {
       el.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', endDrag);
       el.removeEventListener('click', onClickCapture, true);
       el.removeEventListener('wheel', onWheel);
+      el.classList.remove('is-dragging');
     };
   }, []);
-
-  return ref;
 }

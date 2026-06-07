@@ -22,12 +22,6 @@ function formatEok(manwon: number): string {
   return `${eok}억`;
 }
 
-/** 3년 가격 변동성 (%) — APT 매매 카드 한정 */
-function priceVolatility3y(c: AptComplex): number {
-  if (!c.pricePerM2 || !Number.isFinite(c.pricePerM2)) return 0;
-  return Math.round(((c.predictedPricePerM2_3y - c.pricePerM2) / c.pricePerM2) * 1000) / 10;
-}
-
 export function ComplexCardList({ complexes, selectedId, onSelect }: Props) {
   // 훅은 early return 보다 먼저 (Rules of Hooks)
   const cardScrollRef = useDragScroll<HTMLDivElement>();
@@ -63,7 +57,6 @@ export function ComplexCardList({ complexes, selectedId, onSelect }: Props) {
         <div className="flex gap-2.5 min-w-min">
           {complexes.map((c) => {
             const isSelected = c.complexId === selectedId;
-            const vol = priceVolatility3y(c);
 
             return (
               <button
@@ -96,16 +89,19 @@ export function ComplexCardList({ complexes, selectedId, onSelect }: Props) {
                     {c.builtYear}년
                   </span>
                 </div>
-                <div className="flex items-baseline justify-between">
+                {/* 매매가 + 전용면적. 3년 변동 %(수익률 오인)·추세 라벨은 제거(동 균일 배수라 신뢰 불가,
+                    진짜 가격 흐름은 카드 선택 시 ARIMA 패널). 우측엔 단지별로 실재하는 전용면적만 노출 —
+                    신뢰도(전 단지 50 균일)·세대수(t_apt_complex 미보유로 0 고정)는 의미 없어 표기 안 함. */}
+                <div className="flex items-baseline justify-between gap-2">
                   <span className="text-base font-bold text-ink-primary dark:text-ink-primary-dark tabular-nums tracking-tight">
                     {formatEok(c.recentPrice)}
                   </span>
-                  <span className="text-xs font-bold text-ink-secondary dark:text-ink-secondary-dark tabular-nums">
-                    3년 변동 {vol >= 0 ? '+' : ''}{vol}%
+                  <span className="text-xs font-medium text-ink-tertiary dark:text-ink-tertiary-dark tabular-nums shrink-0">
+                    전용 {c.exclusiveArea}㎡
                   </span>
                 </div>
                 <div className="mt-1.5 text-2xs text-ink-tertiary dark:text-ink-tertiary-dark tabular-nums">
-                  m²당 {c.pricePerM2.toLocaleString()}만 · {c.households.toLocaleString()}세대
+                  m²당 {c.pricePerM2.toLocaleString()}만
                 </div>
               </button>
             );

@@ -47,14 +47,14 @@ export function isWeightsValid(weights: Weights): boolean {
 const AXIS_TOOLTIPS: Record<keyof Weights, string> = {
   commute:       '직장까지 편도 통근 시간 기준. 시간이 짧을수록 높은 점수.',
   affordability: '월 소득 대비 주거비 비율(RIR). 낮을수록 부담이 적어 높은 점수.',
-  safety:        '1인가구 안전 지수. 범죄율·CCTV·가로등 밀도를 합산한 점수.',
+  safety:        '1인가구 치안 지수. 범죄율·CCTV·가로등 밀도를 합산한 점수.',
   life:          '주변 편의시설(마트·병원·카페) 접근성 지수.',
 };
 
 const ROWS: ReadonlyArray<{ key: keyof Weights; label: string }> = [
   { key: 'commute',       label: '통근' },
   { key: 'affordability', label: '부담' },
-  { key: 'safety',        label: '안전' },
+  { key: 'safety',        label: '치안' },
   { key: 'life',          label: '생활' },
 ];
 

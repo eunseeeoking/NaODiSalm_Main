@@ -27,6 +27,7 @@ import type { ChartData, ChartDataset } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
 import type { AptComplex, LstmAnalysis, ArimaAnalysis, ConfidenceDataScope } from '../../../types/region-detail';
 import { useThemeStore } from '../../../stores/useThemeStore';
+import { trendLabel } from '../priceTrend';
 
 // Chart.js 전역 등록 (한 번만)
 Chart.register(
@@ -69,14 +70,6 @@ const SCOPE_META: Record<ConfidenceDataScope, { label: string; cls: string; }> =
   SIGUNGU:      { label: '시군구 평균',   cls: 'bg-amber-500/15 text-amber-600' },
   INSUFFICIENT: { label: '데이터 부족',   cls: 'bg-negative/15 text-negative' },
 };
-
-/** 3년 추세 → 정성 라벨 (수익률 숫자 대신 — 공포 제거·거주 프레임). */
-function trendLabel(ret3y: number): { label: string; hint: string } {
-  if (ret3y >= 5) return { label: '완만한 상승세', hint: '최근 실거래 추세 기준' };
-  if (ret3y > -5) return { label: '안정적', hint: '큰 변동 없음' };
-  if (ret3y > -15) return { label: '완만한 약세', hint: '매매 시 가격 협상 여지' };
-  return { label: '약세 추세', hint: '협상 여지 · 추정 불확실' };
-}
 
 /** 신뢰도 → 정성 라벨 (숫자만으론 뭘 하라는지 모호 → 평어). */
 function confidenceLabel(c: number): string {

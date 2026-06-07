@@ -19,7 +19,7 @@ interface Props {
 const METRICS: ReadonlyArray<{ label: string; key: keyof Pick<RegionRecommendation, 'commuteScore' | 'affordabilityScore' | 'safetyScore' | 'lifeScore'> }> = [
   { label: '통근', key: 'commuteScore' },
   { label: '부담', key: 'affordabilityScore' },
-  { label: '안전', key: 'safetyScore' },
+  { label: '치안', key: 'safetyScore' },
   { label: '생활', key: 'lifeScore' },
 ];
 

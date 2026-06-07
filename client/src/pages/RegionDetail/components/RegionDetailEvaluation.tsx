@@ -18,6 +18,7 @@ import type {
 } from '../../../types/recommendation';
 import { PROPERTY_TYPE_LABELS } from '../../../types/recommendation';
 import type { RegionDetail, AxisLife, CommuteCompareData, AreaTierPrice } from '../../../types/region-detail';
+import { InfoTooltip } from '../../../components/InfoTooltip';
 
 interface Props {
   region: RegionRecommendation;
@@ -193,6 +194,15 @@ export function RegionDetailEvaluation({ region, detail, dealType, propertyTypes
           </p>
         )}
 
+        {/* 전세가율(깡통전세·전세사기 위험도) — 매매·전세 median 둘 다 있을 때만 노출 */}
+        {price?.sale && price?.jeonse && (
+          <JeonseRiskBar
+            saleManwon={price.sale.medianManwon}
+            jeonseManwon={price.jeonse.depositMedianManwon}
+            sampleCount={price.jeonse.sampleCount}
+          />
+        )}
+
         {/* 반전세 비율 — KI-18 P2 #2 (KI-10 후속). 순수 월세 median 이 반전세를 제외함을 안내 */}
         {detail?.semiJeonseRatio && (
           <p className="mt-1.5 text-2xs leading-relaxed text-ink-tertiary dark:text-ink-tertiary-dark">
@@ -243,8 +253,8 @@ export function RegionDetailEvaluation({ region, detail, dealType, propertyTypes
             </div>
           </AxisCard>
 
-          {/* 안전 */}
-          <AxisCard title="안전" score={region.safetyScore} estimated={estimated.has('safety')}>
+          {/* 치안 */}
+          <AxisCard title="치안" score={region.safetyScore} estimated={estimated.has('safety')}>
             {safety ? (
               <div className="flex flex-col gap-1">
                 <MiniBar label="범죄 안전" value={safety.crimeScore} />
@@ -252,7 +262,7 @@ export function RegionDetailEvaluation({ region, detail, dealType, propertyTypes
                 <MiniBar label="CCTV" value={safety.cctvScore} />
               </div>
             ) : (
-              <span className="text-2xs text-ink-tertiary dark:text-ink-tertiary-dark">안전 지표 미집계</span>
+              <span className="text-2xs text-ink-tertiary dark:text-ink-tertiary-dark">치안 지표 미집계</span>
             )}
           </AxisCard>
 
@@ -281,7 +291,7 @@ export function RegionDetailEvaluation({ region, detail, dealType, propertyTypes
         <span className="font-semibold text-ink-secondary dark:text-ink-secondary-dark shrink-0">데이터</span>
         <span>국토부 RTMS</span>
         <span className="w-px h-2.5 bg-line-light dark:bg-line-dark" />
-        <span>경찰청·지자체 안전</span>
+        <span>경찰청·지자체 치안</span>
         <span className="w-px h-2.5 bg-line-light dark:bg-line-dark" />
         <span>카카오 로컬 POI</span>
         <span className="w-px h-2.5 bg-line-light dark:bg-line-dark" />
@@ -315,6 +325,92 @@ function PriceRow({
       <span className="text-2xs font-semibold w-8 shrink-0 text-ink-secondary dark:text-ink-secondary-dark">{label}</span>
       <div className="flex-1 flex items-baseline text-sm text-ink-primary dark:text-ink-primary-dark">{children}</div>
       {chip}
+    </div>
+  );
+}
+
+// ─── 전세가율 = 전세사기·깡통전세 위험도 ─────────────────────────
+//  전세가율 = 전세 보증금 median ÷ 매매가 median × 100.
+//  ▷ 정직 주의: 동 단위 중위값 비교라 면적·매물 구성이 다를 수 있어 개별 매물·단지
+//    판단 도구가 아님(참고 지표). 같은 propertyTypes 풀에서 집계된 두 median 비교.
+//  ▷ 밴드: <80 안전 / 80~89 주의 / ≥90 위험(HUG 전세보증금반환보증 90% 기준선).
+const JEONSE_RISK_TIP =
+  '전세가율 = 전세 보증금 ÷ 매매가. 동 중위값 기준 추정이라 개별 매물·단지와 다를 수 있어요. ' +
+  '80%를 넘으면 시세가 내리거나 경매로 넘어갈 때 보증금을 온전히 돌려받기 어려운 "깡통전세" 주의 구간입니다. ' +
+  '계약 전 등기부등본·선순위 채권·전세보증보험 가입 가능 여부를 꼭 확인하세요.';
+
+function jeonseRiskBand(ratio: number): {
+  label: string;
+  bar: string;
+  text: string;
+  badge: string;
+  desc: string;
+} {
+  if (ratio >= 90)
+    return {
+      label: '위험',
+      bar: 'bg-rose-500',
+      text: 'text-rose-600 dark:text-rose-400',
+      badge: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300',
+      desc: '깡통전세 위험 구간 — 경매 시 보증금 미회수 우려',
+    };
+  if (ratio >= 80)
+    return {
+      label: '주의',
+      bar: 'bg-amber-500',
+      text: 'text-amber-600 dark:text-amber-400',
+      badge: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+      desc: '시세 하락 시 보증금 일부를 못 돌려받을 수 있어요',
+    };
+  return {
+    label: '안전',
+    bar: 'bg-emerald-500',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    badge: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
+    desc: '매매가 대비 보증금에 여유가 있는 편',
+  };
+}
+
+function JeonseRiskBar({
+  saleManwon,
+  jeonseManwon,
+  sampleCount,
+}: {
+  saleManwon: number;
+  jeonseManwon: number;
+  sampleCount: number;
+}) {
+  if (saleManwon <= 0 || jeonseManwon <= 0) return null;
+  const ratio = Math.round((jeonseManwon / saleManwon) * 100);
+  const band = jeonseRiskBand(ratio);
+  // 막대 스케일 0~120%(역전세까지 보이게). 80/90 경계에 눈금.
+  const SCALE = 120;
+  const fillPct = Math.max(0, Math.min(100, (ratio / SCALE) * 100));
+  const lowSample = sampleCount < 10;
+
+  return (
+    <div className="mt-2.5 rounded-card bg-surface dark:bg-surface-dark-elevated-hover px-2.5 py-2">
+      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+        <span className="text-2xs font-bold text-ink-secondary dark:text-ink-secondary-dark">전세가율</span>
+        <InfoTooltip text={JEONSE_RISK_TIP} />
+        <span className={`text-sm font-bold tabular-nums ${band.text}`}>{ratio}%</span>
+        <span className={`text-2xs font-bold px-1.5 py-0.5 rounded ${band.badge}`}>{band.label}</span>
+        <span className="ml-auto text-2xs text-ink-tertiary dark:text-ink-tertiary-dark">전세사기 위험도</span>
+      </div>
+
+      {/* 막대 + 80/90 경계 눈금 */}
+      <div className="relative h-2 rounded-full bg-line-light dark:bg-line-dark overflow-hidden">
+        <div className={`h-full rounded-full ${band.bar}`} style={{ width: `${fillPct}%` }} />
+        {/* 경계선: 80%(주의 시작) · 90%(위험 시작) */}
+        <span className="absolute top-0 bottom-0 w-px bg-ink-tertiary/40 dark:bg-ink-tertiary-dark/40" style={{ left: `${(80 / SCALE) * 100}%` }} />
+        <span className="absolute top-0 bottom-0 w-px bg-ink-tertiary/40 dark:bg-ink-tertiary-dark/40" style={{ left: `${(90 / SCALE) * 100}%` }} />
+      </div>
+
+      <p className={`mt-1 text-2xs ${band.text}`}>{band.desc}</p>
+      <p className="mt-0.5 text-2xs leading-relaxed text-ink-tertiary dark:text-ink-tertiary-dark">
+        동 중위값(매매 {fmtEok(saleManwon)} · 전세 {fmtEok(jeonseManwon)}) 비교 · 전세 표본 {sampleCount.toLocaleString()}건
+        {lowSample ? ' · 표본 적어 참고용' : ''} · 개별 매물 판단용 아님
+      </p>
     </div>
   );
 }
