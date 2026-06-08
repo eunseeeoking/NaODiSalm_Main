@@ -84,33 +84,37 @@ graph TD
     end
 
     subgraph DB["MySQL (TiDB Cloud)"]
-        direction LR
-        TRADE["t_apt_trade\n174만 거래"]
-        COMPLEX["t_apt_complex\n20,589 단지"]
-        CACHE["t_commute_matrix\n캐시"]
-        REB["t_reb_price_index\nR-ONE 지수"]
-        LH["t_lh_youth_housing\nLH 청년주택"]
-        SAFETY["t_safety_index\n안전지표"]
+        RTMS["실거래 · 수도권 4종\nt_apt / t_offi / t_villa / t_sh\n_complex · _trade · _rent"]
+        AGG["시세 사전집계\nt_dong_price_summary\nt_reb_price_index"]
+        REGION["지역 지표\nt_safety_index · t_poi_summary\nt_transit_route_summary · t_income_quintile"]
+        SUPPLY["거시 공변량\nt_macro_rate · t_macro_econ\nt_housing_supply"]
+        LH["청년주택\nt_lh_youth_housing"]
+        CACHE["통근 캐시\nt_commute_matrix"]
+        TRAIN["ML 학습결과\nt_training_result"]
+        AUTH["인증\nt_user · t_user_token"]
     end
 
     subgraph External["외부 API"]
         ODSAY["ODsay LAB\n대중교통 경로"]
-        KAKAO["Kakao Mobility\n자차 실경로"]
+        KAKAO["카카오\n자차 실경로 · 지오코딩 · POI"]
         MOLIT["국토부 RTMS\n실거래가"]
+        ECOS["한국은행 ECOS\n금리 · CPI · M2"]
     end
 
     subgraph ML["ML 파이프라인 (로컬 학습)"]
         ARIMA["ARIMA(2,1,2)\nMAPE 10.16%"]
-        LSTM["LSTM\n보조 모델"]
+        LSTM["LSTM\n보조 · 백테스트"]
     end
 
     UI -->|POST /api/recommendations| API
     UI -->|GET /api/arima/:complexId| API
+    UI -->|GET /api/complexes/:id/trades| API
     API --> SCORE --> REPO --> DB
     API -->|cache miss| ODSAY
-    API -->|자차 실경로| KAKAO
-    ML -->|t_training_result| DB
-    MOLIT -->|ingest| TRADE
+    API -->|자차 실경로 · POI| KAKAO
+    ARIMA -->|upsert| TRAIN
+    MOLIT -->|ingest| RTMS
+    ECOS -->|seed| SUPPLY
 ```
 
 ---
@@ -164,16 +168,20 @@ w₁ + w₂ + w₃ + w₄ = 100  (사용자 직접 조정)
 > 📊 **실시간 적재 현황**: 운영 중인 서비스의 [`/about/data`](https://naodisalm.kr/about/data) 페이지에서
 > `GET /api/meta/data-sources` 응답으로 항상 최신 row 수 확인 가능. (Phase 2-B 도입, 2026-05-27)
 
-| 기관 | 데이터 | 규모 (2026-06-04 스냅샷) |
-|---|---|---|
-| 국토교통부 | RTMS 실거래가 (APT·오피스텔·연립다세대·단독다가구) | ~733만 건 (2006~2026) |
-| 한국부동산원 (R-ONE) | 공동주택 매매·전세 가격지수 | 3,400건 (서울 25구 월별, 2015~2026) |
-| 한국토지주택공사 (LH) | 행복주택·청년매입임대·전세임대 공급 | 49개 단지 (행복 47·전세임대 2 · 33,053세대) |
-| 국가대중교통정보센터 (TAGO) | 정류소 밀도·배차 (서울=국토부 정류소 위치정보) | 1,611개 행정동 |
-| 경찰청·지자체 | 5대범죄·CCTV·가로등 안전지표 | 2,564개 행정동 |
-| 통계청 | 가구소득 분위 (2023) | 5분위 |
+_아래 6개 소스는 [`GET /api/meta/data-sources`](https://naodisalm.kr/about/data) 응답 구조와 1:1 정합합니다. **정확한 적재 row 수는 라이브 엔드포인트에서 항상 최신값으로 확인**하세요 (수도권 실거래는 수백만 건 규모)._
 
-> **+ 민간 API** — **ODsay LAB**(대중교통 경로·환승), **카카오**(자차 실경로·지오코딩·생활편의 POI). 통근 정밀도·생활 점수 산출에 사용하며 결과는 캐시/요약 테이블(`t_commute_matrix`·`t_poi_summary`)로 적재.
+| 소스 (기관) | 데이터셋 | 산출 축 |
+|---|---|---|
+| 국토교통부 (MOLIT) | RTMS 실거래 — **수도권(서울·인천·경기)** 아파트·오피스텔·연립다세대·단독다가구 매매·전월세 | 동 시세 분포 · 단지 ARIMA 시계열 |
+| 한국부동산원 (REB) | R-ONE 공동주택 실거래가지수 (시군구 × 월) | ARIMA(메인)·LSTM 예측 정규화 |
+| 한국토지주택공사 (LH) | 행복주택·청년매입임대·전세임대 공급 (카카오 지오코딩 → 행정동 10자리) | Depth 2 "LH N" 배지·배너 |
+| 통계청 · 경찰청 · 지자체 | 5분위 가처분소득 + 수도권 5대범죄·CCTV·가로등 안전 합성 | affordability(RIR) · safety |
+| ODsay · 카카오 · TAGO · 국토부 | 통근 경로(대중교통·자차) + 대중교통 품질(정류소·배차, 지역별 provider 분기) | commute |
+| 카카오 로컬 | 생활편의 POI 반경 500m (지하철·마트·편의점·카페·음식점·병원·약국·은행) | life |
+
+> **+ 민간 API** — **ODsay LAB**(대중교통 경로·환승), **카카오**(자차 실경로·지오코딩·생활편의 POI). 결과는 캐시/요약 테이블(`t_commute_matrix`·`t_poi_summary`)로 적재해 재호출을 줄입니다.
+>
+> **+ ML 거시 공변량** (사용자 비노출, LSTM 다변량 입력용) — **한국은행 ECOS**(기준금리·주담대금리·CPI·M2·가계대출), **R-ONE/KOSIS**(시군구 미분양·입주물량)를 `t_macro_rate`·`t_macro_econ`·`t_housing_supply`로 적재. _누수 방지: 각 월 값은 그 달 실제 공표값만 저장._
 
 ### Phase 2-B 변경 (2026-05-27)
 
@@ -183,6 +191,17 @@ w₁ + w₂ + w₃ + w₄ = 100  (사용자 직접 조정)
 ✅ /api/meta/data-sources 신규 — 데이터 출처 실시간 적재량 노출
 ✅ /about/data 페이지 신규 — 공모전 채점위원 + 사용자 동시 확인
 ```
+
+### 수도권 MVP & 이후 변경 (2026-05 → 06)
+
+- **수도권 확장** — 서울 → **서울·인천·경기**. 실거래를 아파트 1종에서 **4종**(아파트·오피스텔·연립다세대·단독다가구) 매매·전월세로 보강해 청년 타깃 전월세 재고 확대. (유형별 분리 테이블 `t_{apt,offi,villa,sh}_*`)
+- **추천 엔진 — 예산 재고(inventory) 게이트 (KI-24)** — 예산 필터를 단순 상한이 아닌 "감당 가능 매물 N건" 게이트로 재설계. 동×거래유형×매물조합 median + 보증금 히스토그램을 `t_dong_price_summary`에 **배치 사전집계** → 런타임 시세 조회 ~2.7s → **~10ms**.
+- **통근 정밀도** — ODsay 일일 쿼터 게이트(env 임계값) + **내부 지하철 라우터를 하이브리드 폴백**으로 배선(인천 1·2호선 등 그래프 갭 보강). 통근 매트릭스는 좌표 3자리 cacheKey로 영구 캐시.
+- **생활·안전 축** — 동 반경 500m 카카오 POI로 `life` 점수(`t_poi_summary`), 5대범죄·CCTV·가로등 합성 `safety`(`t_safety_index`), TAGO·국토부 정류소 품질(`t_transit_route_summary`).
+- **ML 다변량 피처 (2026-06-06)** — 한국은행 ECOS 금리·CPI·M2·가계대출 + R-ONE/KOSIS 미분양·입주물량을 거시 공변량으로 적재(`t_macro_*`·`t_housing_supply`), APT 단지 좌표 백필. _LSTM direct multi-horizon 입력용 — 제품 런타임은 아직 비소비._
+- **Depth 3 정직화 (2026-06-07)** — 가짜 LSTM 평면선 제거, 공포 유발 `-22%` → 정성 "가격 흐름", 신뢰도 평어 번역·저신뢰 추정톤. **실거래 원본 모달** 신설(`GET /api/complexes/:id/trades` — 면적·층·거래가 원본 노출, 판단은 사용자에게).
+- **추천 ↔ 상세 정합** — 매매 추천 universe를 상세 표시 범위(APT-only, Phase 3까지)에 맞춰 `['APT']`로 정합 → 빌라 전용 동의 "추천됐는데 단지 없음" 해소.
+- **운영·분석** — GA4(gtag) SPA 추적 단일화, `/about/data` 적재현황 콜드 내성(캐시+retry+stale 가드), prod 부하 테스트 리포트.
 
 ---
 
@@ -227,7 +246,7 @@ curl -X POST http://localhost:4000/api/recommendations \
 | 백엔드 | Express 4, TypeScript, Prisma ORM |
 | DB | MySQL 8 (로컬 Docker) / TiDB Cloud (운영) |
 | ML | TensorFlow.js LSTM, Python statsmodels ARIMA, Node.js 백테스트 파이프라인 |
-| 외부 API | ODsay LAB (대중교통), Kakao Mobility (자차 실경로), 국토부 RTMS, R-ONE, TAGO, LH |
+| 외부 API | ODsay LAB (대중교통), Kakao (자차 실경로·지오코딩·POI), 국토부 RTMS, R-ONE, TAGO, LH, 한국은행 ECOS (거시지표) |
 | 배포 | Vercel (클라이언트), Render (서버) |
 
 ---
@@ -245,8 +264,8 @@ NaODiSalm_Main/
 ├── server/                     # Express API 서버
 │   ├── prisma/schema.prisma        # DB 스키마 (SSOT)
 │   └── src/
-│       ├── routes/domains/         # 도메인별 라우터
-│       ├── services/external/      # ODsay, Kakao, MOLIT, R-ONE 클라이언트
+│       ├── routes/domains/         # 도메인별 라우터 (recommendations·regions·complexes·commute·meta)
+│       ├── services/external/      # ODsay, Kakao, MOLIT, R-ONE, ECOS 클라이언트
 │       ├── services/repositories/  # Prisma 접근 레이어
 │       └── services/ingest/        # 데이터 수집 배치
 ├── render.yaml                 # Render 배포 설정
@@ -274,8 +293,18 @@ npm run seed:reb              # 한국부동산원 R-ONE 매매·전세지수
 npm run seed:lh -- --reset    # LH 청년주택 (Phase 2-B Kakao 지오코딩 통합)
 npm run seed:safety           # 자치구 5대범죄 + CCTV + 가로등 합성
 npm run seed:income           # 통계청 5분위 가처분소득
+npm run seed:transit          # TAGO·국토부 정류소 대중교통 품질
+npm run seed:life             # 카카오 POI 500m 생활편의 점수
+npm run seed:price-summary    # 동×거래유형×매물조합 시세 사전집계 (KI-24 예산 게이트)
 
-# 진단 (read-only)
+# ML 다변량 거시 피처 (ECOS_API_KEY / R-ONE·KOSIS 키 필요)
+npm run seed:macro-rate       # 한국은행 기준금리·주담대금리
+npm run seed:macro-econ       # CPI·M2·가계대출
+npm run seed:housing-supply   # 시군구 미분양·입주물량
+npm run geocode:complexes     # 단지 좌표 백필 (카카오 지오코딩)
+
+# 진단 / 스냅샷 (read-only)
+npm run db:snapshot           # 테이블별 row count → server/doc/db-state.md
 npm run diagnose:depth3       # Depth 3 단지·LSTM 응답 회귀 점검
 npm run diagnose:confidence   # t_training_result.confidence 분포
 

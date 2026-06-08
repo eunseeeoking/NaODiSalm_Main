@@ -4,6 +4,7 @@
  *  - 토스 한국형 톤: Pretendard, 큰 라운드, 친근한 한글
  *  - 컴포넌트 명은 호환을 위해 CommutePatienceSlider 유지 (LeftPanel/index.tsx 호출부 다수)
  */
+import { useState } from 'react';
 import { useRecommendationStore } from '../../../stores/useRecommendationStore';
 import { BUDGET_SLIDER, MONTHLY_RENT_SLIDER } from '../../../types/recommendation';
 
@@ -51,6 +52,26 @@ export function CommutePatienceSlider({ bare = false }: { bare?: boolean }) {
 
   const budgetCfg = BUDGET_SLIDER[dealType];
   const rentCfg = MONTHLY_RENT_SLIDER;
+
+  // 예산 직접 입력 — 슬라이더 step(1000만원)으로 정확히 맞추기 어려워,
+  // 연필 클릭 시 숫자 타이핑(1 = 1000만원). 입력 이벤트마다 즉시 파싱·반영해
+  // '천만원' 같은 헷갈리는 단위 없이 환산 금액(1000만원, 1억 1000만원…)을 라이브로 보여줌.
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetDraft, setBudgetDraft] = useState('');
+
+  // 입력값(1 = 1000만원) → 클램프된 만원 금액. 빈 값/0 이하면 null.
+  const draftToManwon = (raw: string): number | null => {
+    const n = parseFloat(raw);
+    if (Number.isNaN(n) || n <= 0) return null;
+    const manwon = Math.round(n) * 1000; // 입력 1단위 = 1000만원
+    return Math.max(budgetCfg.min, Math.min(manwon, budgetCfg.max));
+  };
+
+  const openBudgetEdit = () => {
+    // 현재 예산(만원)을 입력 단위로 환산해 초기값 채움. 최대(무제한) 상태면 비움.
+    setBudgetDraft(budget >= budgetCfg.max ? '' : String(Math.round(budget / 1000)));
+    setEditingBudget(true);
+  };
 
   return (
     <div
@@ -102,9 +123,64 @@ export function CommutePatienceSlider({ bare = false }: { bare?: boolean }) {
               {BUDGET_CAPTION[dealType] ?? '한도'}
             </span>
           </span>
-          <span className="text-xl font-bold text-ink-primary dark:text-ink-primary-dark tabular-nums shrink-0">
-            {budget >= budgetCfg.max ? '최대' : formatBudget(budget)}
-          </span>
+          {editingBudget ? (
+            // 입력 숫자는 숨기고(투명 input), 그 자리에 환산 결과만 노출.
+            // 사용자가 보는 건 '1억 3천만' 같은 결과뿐 — 타이핑 중인 raw 숫자는 안 보임.
+            <span className="relative shrink-0 inline-flex items-baseline border-b-2 border-brand pb-0.5">
+              <span className="text-xl font-bold text-brand tabular-nums whitespace-nowrap">
+                {(() => {
+                  const manwon = draftToManwon(budgetDraft);
+                  if (manwon === null) return '0원';
+                  return manwon >= budgetCfg.max ? '최대' : formatBudget(manwon);
+                })()}
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={Math.round(budgetCfg.max / 1000)}
+                value={budgetDraft}
+                onChange={(e) => {
+                  setBudgetDraft(e.target.value);
+                  const manwon = draftToManwon(e.target.value);
+                  if (manwon !== null) setBudget(manwon); // 입력 즉시 반영
+                }}
+                onFocus={(e) => e.target.select()}
+                onBlur={() => setEditingBudget(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Escape') setEditingBudget(false);
+                }}
+                autoFocus
+                aria-label="예산 직접 입력 (1 = 1000만원)"
+                className="absolute inset-0 w-full h-full bg-transparent text-transparent caret-transparent border-0 p-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={openBudgetEdit}
+              aria-label="예산 직접 입력"
+              className="group flex items-center gap-1.5 shrink-0 rounded-md px-1 -mr-1 hover:bg-brand/[0.06] transition-colors"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-ink-tertiary dark:text-ink-tertiary-dark group-hover:text-brand transition-colors"
+              >
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              <span className="text-xl font-bold text-ink-primary dark:text-ink-primary-dark tabular-nums">
+                {budget >= budgetCfg.max ? '최대' : formatBudget(budget)}
+              </span>
+            </button>
+          )}
         </div>
         <input
           type="range"
