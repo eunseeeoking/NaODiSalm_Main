@@ -155,8 +155,18 @@ declare global {
 
       interface GeocoderAddressResult {
         address_name: string;
+        address_type?: 'REGION' | 'ROAD' | 'REGION_ADDR' | 'ROAD_ADDR';
         x: string;
         y: string;
+        // 지번 주소 상세 (검색어가 도로명이어도 함께 반환됨)
+        address?: {
+          address_name: string;
+        } | null;
+        // 도로명 주소 상세 — 지번으로 검색하면 null 일 수 있음
+        road_address?: {
+          address_name: string;
+          building_name?: string;
+        } | null;
       }
 
       class Geocoder {

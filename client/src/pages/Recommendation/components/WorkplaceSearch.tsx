@@ -42,15 +42,50 @@ export function WorkplaceSearch() {
     }
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
-      const PlacesCtor = window.kakao?.maps?.services?.Places;
-      if (!PlacesCtor) return;
-      const ps = new PlacesCtor();
+      const services = window.kakao?.maps?.services;
+      if (!services?.Places) return;
       const mySeq = ++seqRef.current;
-      ps.keywordSearch(query, (data: PlaceResult[], statusCode: string) => {
+
+      // ① 장소(POI) 검색 — 회사명·지하철역·랜드마크
+      const keywordP = new Promise<PlaceResult[]>((resolve) => {
+        const ps = new services.Places();
+        ps.keywordSearch(query, (data, statusCode) => {
+          resolve(statusCode === 'OK' ? data : []);
+        });
+      });
+
+      // ② 주소(도로명/지번) 검색 — keywordSearch 는 POI 전용이라
+      //    "충선로 322" 같은 순수 도로명 주소는 못 잡음. Geocoder 로 보완.
+      const addressP = new Promise<PlaceResult[]>((resolve) => {
+        if (!services.Geocoder) return resolve([]);
+        const gc = new services.Geocoder();
+        gc.addressSearch(query, (data, statusCode) => {
+          if (statusCode !== 'OK') return resolve([]);
+          resolve(
+            data.map((d) => ({
+              place_name: d.road_address?.building_name || d.address_name,
+              road_address_name: d.road_address?.address_name,
+              address_name: d.address_name,
+              x: d.x,
+              y: d.y,
+            })),
+          );
+        });
+      });
+
+      Promise.all([keywordP, addressP]).then(([keywordHits, addressHits]) => {
         // 최신 요청의 응답만 반영 (이전 in-flight 응답은 무시)
         if (mySeq !== seqRef.current) return;
-        if (statusCode === 'OK') {
-          setResults(data.slice(0, 5));
+        // 장소 결과를 우선 노출하고 주소 결과를 뒤에 붙임. 좌표 중복은 제거.
+        const seen = new Set<string>();
+        const merged = [...keywordHits, ...addressHits].filter((r) => {
+          const key = `${r.x},${r.y}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        if (merged.length > 0) {
+          setResults(merged.slice(0, 5));
           setOpen(true);
         } else {
           setResults([]);
